@@ -1,10 +1,146 @@
+\chapter{Introduction}
+% uncomment the following line to create an unnumbered chapter
+%\chapter*{Introduction}\addcontentsline{toc}{chapter}{Introduction}\markboth{Introduction}{Introduction}
+%---------------------------------------------------------------
+\setcounter{page}{1}
+
+A few sentences about progressive line of cryptocurrencies and attacks related to them. Tell about security audits and how it is time consuming. Then a bit about LLM, which is developed in parallel. THen tel labout desire to interesct these 2 fields and describe sections of this thesis. 
+
+\chapter*{Objectives}
+
+Tell a bit about what was done and list objectives that were fullfilled:
+
+\begin{itemize}
+    \item Common vulnerability patterns and existing auditing methodologies of Ethereum smart contracts were studied.
+    \item A state of the art review on the integration of Large Language Models for automated reasoning and the development of AI-based auditing agents was conducted.
+    \item A system that integrates an LLM into the security auditing workflow was designed with further implementation, testing and evaluation.
+    \item The obtained results, limitations, and potential improvements of LLM-based auditing systems were discussed in the end.
+\end{itemize}
+
+\chapter{Ethereum}
+This chapter introduces the foundations needed to understand Ethereum and the auditing methodologies developed in later chapters (TODO maybe change). It first explains generic \emph{blockchain} principles (as a technology family), then specializes to Ethereum’s execution model via the \emph{Ethereum Virtual Machine (EVM)} and the \emph{Solidity} language. The chapter closes with a concise taxonomy of common smart-contract vulnerabilities that will be referenced throughout the thesis.
+
+\section{Overview}
+
+Ethereum, formally launched in 2015, represents a significant evolution in blockchain technology. Originally proposed in a white paper by \textsc{Vitalik Buterin} in 2013/14, Ethereum extended the ledger-centric model into a full-fledged application layer offering smart contracts and decentralised applications (dApps) \cite{Buterin2013}. Rather than solely tracking value transfers, Ethereum enables arbitrary programmable logic through the EVM execution environment, while preserving the core blockchain properties of transparency, decentralisation and immutability \cite{wood2014yellow}. By doing so, it transformed the blockchain into a generalised state-transition machine, thereby broadening its applicability far beyond simple currency use-cases.
+
+\subsection{Blockchain}
+
+A blockchain is a distributed ledger maintained by a network of peer-to-peer nodes rather than a single central authority. It grows as a chain of blocks, each block holding a complete list of transaction records and containing a cryptographic link to its predecessor — when enough subsequent blocks accumulate, reversing or altering a transaction becomes infeasible. Participants use addresses instead of real-world identities, allowing transparency while preserving pseudonymity. Because every node holds a copy of the chain and the full history of transactions is publicly verifiable, the system enables auditability: flows of value can be traced, state transitions inspected and the integrity of past operations confirmed. In short, starting from the genesis block and continuing through every appended block, blockchain combines decentralization, tamper-resistance and verifiable history in one architecture \cite{blockchain}.
+
+
+A blockchain offers immutability through cryptographic linking of blocks and the consensus mechanisms that govern their inclusion: once transactions are published and a block is finalised, reversing or deleting such entries becomes exceedingly difficult. Each block typically consists of two parts: a **header** and a **body**. The header contains metadata such as version, timestamp, the hash of the previous block, the Merkle-root of all transactions in the block, a nonce (or other proof field) and difficulty indicator. The body holds the transaction count and the individual transactions themselves \cite{blockchain_diagram_eth}.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=\linewidth]{images/blockchain_diagram_eth.pdf}
+    \caption{Blockchain}
+    \label{fig:blockchain_diagram_eth}
+\end{figure}
+
+ public blockchain, each n-ode could take part in the consensus process. And onlya selected set of nodes are responsible for validating theblock in consortium blockchain. As for private chain, it isfully controlled by one organization and the organizationcould determine the final consensus 
+
+\subsection{Consensus mechanisms}
+
+In a PoW system, network participants (miners) compete to solve computational puzzles (e.g., find a nonce so that the hash of the block header meets a target) and thereby propose the next valid block. :contentReference[oaicite:8]{index=8} In contrast, PoS selects block proposers (validators) based on their stake in the network (i.e., the amount of tokens locked up) rather than raw computing power, thereby altering the incentive, security and energy-profile of the system. :contentReference[oaicite:9]{index=9}
+
+\subsubsection*{Proof of Work}
+Proof-of-work (PoW) is an algorithm that sets the difficulty level and rules governing the activities of miners on PoW-based blockchains. Mining represents
+the ’work’ needed to validate and append legitimate blocks to the blockchain.
+This process is crucial as it directly affects the blockchain’s length, thereby
+helping the network determine the most accurate progression of the chain.
+As miners continue to solve complex mathematical problems, thereby adding
+more blocks, the blockchain grows longer, which improves the network’s confidence in the current state of the ledger. This chain lengthening also increases
+security by making altering any information in previous blocks increasingly
+difficult. This consensus mechanism is used in the most popular blockchain
+implementation, called Bitcoin.
+
+\subsubsection*{Proof of Stake}
+Proof of Stake (PoS) is an essential consensus algorithm that defines the rules
+and mechanisms for participants in PoS-based blockchains. In PoS, the process of ’staking’—rather than mining—serves as the mechanism through which
+validators are chosen to confirm transactions and create new blocks. Validators are selected based on the amount of cryptocurrency they hold and are
+willing to ’stake’ as collateral. This process is critical as it helps ensure the
+security and accuracy of the blockchain by encouraging validators to act honestly to avoid losing their stakes. As more blocks are validated and added to
+the chain, the blockchain becomes longer and more robust, thereby upgrading
+the network’s trust in the current ledger. This method increases the efficiency
+of the validation process and reduces the energy consumption compared to
+proof-of-work systems, making it a more environmentally friendly alternative.
+The most used blockchain that uses the proof-of-stake mechanism is Ethereum
+
+With a solid understanding of how blocks are structured and how consensus mechanisms (whether proof-of-work or proof-of-stake) enable nodes to agree upon the canonical chain, we now turn our attention to the next layer of the architecture: how transactions and smart contract code are actually executed
+
+\section{Ethereum Virtual Machine}
+The Ethereum Virtual Machine (EVM) is a deterministic state machine that executes the bytecode of the smart contract identically on all nodes \cite{wood2014yellow}. However, it is not Turing complete in the classical sense: execution is strictly resource-bounded by gas - every instruction has a metered gas cost, and execution halts once the supplied gas is exhausted. 
+This gas-bounded execution guarantees termination and prevents non-halting or deliberately expensive programs from stalling the network; accordingly, the EVM is often described as \emph{quasi–Turing complete} (computationally universal only under a finite gas budget) \cite{antonopoulos2018mastering}\cite{wood2014yellow}.
+
+\subsection{Gas}
+Gas is the unit of account for computational effort in Ethereum. Each EVM opcode has an associated gas cost, and a transaction specifies an upper bound (gas limit) on how much gas may be consumed during its execution.
+
+Gas serves three core purposes: 
+\begin{itemize}
+    \item \emph{metering} computation and storage, so that the use of the resources is paid for by the initiator of a transaction.
+    \item \emph{DoS resistance} and spam prevention, because excessively resource-intensive executions become economically infeasible \cite{wood2014yellow}\cite{article_1559}.
+    \item \emph{economic prioritization} of limited block space via fees
+\end{itemize}
+
+Since EIP-1559\footnote{\url{https://eips.ethereum.org/EIPS/eip-1559}}, each block includes a dynamically adjusted \emph{base fee} that is burned and a user-specified \emph{priority fee} (tip) paid to the block proposer. 
+Users submit \texttt{maxFeePerGas} and \texttt{maxPriorityFeePerGas}; the effective price paid per gas equals \(\min(\texttt{maxFeePerGas}, \text{base fee} + \texttt{maxPriorityFeePerGas})\). 
+Blocks have an elastic gas target and the base fee increases or decreases depending on recent block gas usage, stabilizing the fee market while preserving incentives.
+
+
+\subsection{Architecture}
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=\linewidth]{images/evm}
+    \caption{Ethereum Virtual Machine illustration TODO REF.}
+    \label{fig:evm}
+\end{figure}
+
+where 
+\begin{itemize}
+    \item Program Counter (PC) - component that tracks the current instruction that it is executing;
+    \item EVM code - immutable compoennt holds the bytecode of the smart contract that is being executed.
+    \item Account Storage - part of the persistent state of the blockchain where the data of smart contracts are stored permanently. There are two types of accounts in the Ethereum environment:\texttt{ (i) }Externally Owned Account (EOA) that is owned by any external entity. Most commonly, it is referred to as a user account; and\texttt{ (ii) }Smart Contract Account that is owned by a smart contract and often controlled by an EOA that interacts with the deployed smart contract \cite{Buterin2013}.
+\end{itemize}
+
+\subsection{Memory}
+
+\begin{itemize}
+    \item \textbf{Stack} - low-level memory structure that operates on a last-in, first-out (LIFO) principle. It stores small local variables and value types that are required for immediate execution. The stack is limited to 1024 elements, each 256 bits wide, and is accessible only through EVM opcodes or inline assembly. Careful management is essential, as exceeding its capacity causes the execution of the contract to fail \cite{evm_storage}.
+    \item \textbf{Memory} - dynamic and expandable storage area allocated for each function execution, which is then discarded once the function has finished. Unlike the stack, which is restricted to temporary data storage, memory allows for more flexible and longer-lived data retention.
+    \item \textbf{Storage} - persistent storage is associated with every smart contract and holds its state. Read and write operations in storage are relatively more expensive than those performed in memory. The data in storage are maintained as key-value pairs \cite{evm_storage_arxiv}.
+    \item \textbf{Calldata} - read-only and immutable storage that holds function arguments and transaction data for the duration of a transaction call.
+\end{itemize}
+
+\section{Smart Contracts}
+
+\subsection{Solidity}
+
+\section{Ethereum Vulnerabilities Taxonomy}
+
+\chapter{Foundations of LLMs for Code Analysis}
+
+\chapter{State of the Art}
+\section{Wake-AI}
+\subsection{Wake framework}
+
+\chapter{Proposed Methodology}
+
+\chapter{Testing and Results}
+
+\chapter{Conclusion}
+
+
+
+
+
 % Do not forget to include Introduction
 %---------------------------------------------------------------
 \chapter{Introduction}
 % uncomment the following line to create an unnumbered chapter
 %\chapter*{Introduction}\addcontentsline{toc}{chapter}{Introduction}\markboth{Introduction}{Introduction}
 %---------------------------------------------------------------
-\setcounter{page}{1}
 
 % The following environment can be used as a mini-introduction for a chapter. Use that any way it pleases you (or comment it out). It can contain, for instance, a summary of the chapter. Or, there can be a quotation.
 \begin{chapterabstract}
