@@ -1,10 +1,57 @@
-\chapter{Introduction}
+
 % uncomment the following line to create an unnumbered chapter
-%\chapter*{Introduction}\addcontentsline{toc}{chapter}{Introduction}\markboth{Introduction}{Introduction}
+\chapter*{Introduction}\addcontentsline{toc}{chapter}{Introduction}\markboth{Introduction}{Introduction}
 %---------------------------------------------------------------
 \setcounter{page}{1}
 
-A few sentences about progressive line of cryptocurrencies and attacks related to them. Tell about security audits and how it is time consuming. Then a bit about LLM, which is developed in parallel. THen tel labout desire to interesct these 2 fields and describe sections of this thesis. 
+Problem, motivation, goal, contributions, and thesis roadmap.
+Why smart contract bugs are high impact (immutability, financial incentives) and why existing audits/tools still miss logical flaws. Tell about security audits and how it is time consuming. Then a bit about LLM, which is developed in parallel.
+State your contribution precisely: extending Wake-AI with MCP-based RAG + building KB from Solidity vulns/audit knowledge.
+One paragraph explaining what each chapter delivers and how it connects. (ethereum, code analysis, large language models, wake framework, proposes methododology, implementation, evaluation, conclusion)
+
+In June 2016, an attacker exploited a reentrancy vulnerability in The DAO smart contract, draining approximately \$60 million worth of Ether in a matter of hours \cite{mehar2019understanding}. The technical flaw was subtle—a recursive call that allowed withdrawals before balance updates—but the consequences were catastrophic. This incident, along with numerous subsequent exploits in decentralized finance (DeFi) protocols, highlights a fundamental challenge in blockchain development: once deployed, smart contracts are immutable, and vulnerabilities cannot be easily patched. Unlike traditional software where bugs might cause inconvenience or data corruption, smart contract vulnerabilities directly translate to financial losses, often measured in millions of dollars \cite{atzei2017survey, perez2021smart}.
+
+The immutability of blockchain systems creates a paradox for security. While immutability is precisely what makes smart contracts trustworthy—users can verify that contract logic won't change arbitrarily—it also means that any security flaw becomes permanent. An attacker who discovers a vulnerability can exploit it with confidence, knowing the code cannot be modified to prevent the attack. Moreover, the financial nature of most smart contract applications creates strong economic incentives for exploitation. When a DeFi protocol manages hundreds of millions in assets, even sophisticated attackers invest significant resources in finding vulnerabilities. This high-stakes environment has driven the development of increasingly rigorous security audit practices, yet critical vulnerabilities continue to slip through.
+
+Current smart contract security relies heavily on manual code audits supplemented by automated analysis tools. Professional audit firms employ expert security researchers who spend weeks examining contract code, looking for common vulnerability patterns, reasoning about edge cases, and attempting to violate protocol invariants \cite{perez2021smart}. Static analysis tools like Slither \cite{feist2019slither} and Mythril \cite{mueller2018mythril} automate detection of known vulnerability patterns such as reentrancy, unchecked external calls, and integer overflows. Fuzz testing tools like Echidna \cite{grieco2020echidna} explore program state spaces to find invariant violations. Despite these sophisticated techniques, significant vulnerabilities continue to evade detection until they are exploited in production.
+
+The fundamental limitation is that many critical vulnerabilities are not simple pattern matches but rather logical flaws that emerge from complex interactions between contract components or violations of implicit business logic assumptions. For example, a flash loan attack might exploit the interaction between a pricing oracle, a lending pool, and a liquidation mechanism in ways that are individually correct but collectively create arbitrage opportunities. Detecting such vulnerabilities requires understanding not just what the code does syntactically, but what it means semantically in the context of the broader protocol design. This type of reasoning has historically required human expertise, making audits time-consuming and expensive—typically taking 2-4 weeks and costing \$50,000-\$200,000 for a medium-sized protocol \cite{consensys2023audit}.
+
+Recent advances in Large Language Models (LLMs) have demonstrated remarkable capabilities in understanding and reasoning about code. Models trained on vast corpora of source code, like GPT-4 \cite{openai2023gpt4} and Claude \cite{anthropic2024claude}, can explain code functionality, identify potential bugs, and even generate secure implementations when properly prompted. However, applying LLMs directly to smart contract security faces several challenges. First, LLMs have limited context windows—even models with 200,000 token contexts cannot process entire DeFi protocols with their complex interdependencies and imported libraries. Second, LLMs lack access to the structured analysis results produced by static analysis tools, which provide precise information about control flow, data dependencies, and detected patterns. Third, effective vulnerability analysis requires domain-specific knowledge about Solidity-specific pitfalls, common attack vectors, and audit best practices that may not be well-represented in general code training data.
+
+This thesis addresses these challenges by developing an integrated system that combines the static analysis capabilities of the Wake framework with the reasoning abilities of LLMs through a Model Context Protocol (MCP)-based architecture. Wake is an advanced Python-based framework for Solidity analysis that provides rich programmatic access to abstract syntax trees, control flow graphs, and custom vulnerability detectors \cite{wake2023documentation}. By augmenting Wake with LLM-based analysis through MCP—a protocol that enables structured tool use by language models—we create a system where the LLM can request specific analysis results, retrieve relevant code segments, and access domain knowledge as needed, rather than requiring all context upfront.
+
+% \section*{Contributions}
+
+% This thesis makes the following contributions:
+
+% \textbf{1. MCP-based RAG Architecture for Code Analysis:} We design and implement a Retrieval-Augmented Generation system that enables LLMs to effectively analyze large smart contract codebases despite context window limitations. Our architecture uses the Model Context Protocol to provide the LLM with structured access to code segments, static analysis results, and domain knowledge. Unlike naive approaches that attempt to fit entire contracts into context, our system allows the LLM to iteratively retrieve relevant information based on its analysis needs, enabling it to handle real-world DeFi protocols that span dozens of contracts and tens of thousands of lines of code.
+
+% \textbf{2. Domain-Specific Knowledge Base:} We construct a curated knowledge base of Solidity vulnerability patterns, audit methodologies, and security best practices drawn from public audit reports, vulnerability databases like the Smart Contract Weakness Classification (SWC), and documentation of historical exploits. This knowledge base is structured to support efficient retrieval and provides the LLM with specialized information about blockchain-specific attack vectors that may not be adequately represented in its pre-training data. We develop embedding strategies and retrieval mechanisms specifically tuned for technical security content.
+
+% \textbf{3. Wake Framework Integration:} We extend the Wake-AI project with MCP server implementations that expose Wake's analysis capabilities to LLM agents. This integration allows the language model to request specific analysis operations—such as computing data flow for a variable, identifying all functions that modify a particular state variable, or retrieving functions that match specific structural patterns—and receive structured results that inform its reasoning. The MCP-based design ensures that the integration remains modular and extensible to additional analysis tools.
+
+% \textbf{4. Empirical Evaluation:} We evaluate our system on a dataset of real smart contracts with known vulnerabilities, measuring both detection accuracy and the quality of vulnerability explanations. Our evaluation examines how effectively the RAG-augmented LLM identifies different vulnerability classes compared to baseline static analyzers and explores the system's ability to explain detected issues in ways useful to human auditors. We also analyze failure modes to understand the limitations of the LLM-based approach.
+
+The first chapter provides the necessary background on blockchain technology, the Ethereum platform, and smart contract development. It also establishes the domain context and security challenges that motivate this work.
+
+The second chapter surveys existing approaches to code analysis like static analysis, dynamic testing and formal verification.
+
+The third chapter explores the application of LLMs to code understanding and security analysis. We explain the transformer architecture that underlies modern language models, discuss how these models are adapted for code through pre-training and fine-tuning, and examine their capabilities and limitations for vulnerability detection. 
+
+The remainder of the chapters focus on the design of the methodology proposed that was described above, its implementation and evaluation.
+
+% \textbf{Chapter 5: Retrieval-Augmented Generation and Tool Use} introduces the key techniques that enable LLMs to work effectively with large codebases and specialized tools. We explain Retrieval-Augmented Generation (RAG) architectures, embedding strategies for code, and the Model Context Protocol that allows LLMs to orchestrate external tools. This chapter provides the conceptual framework for our system design.
+
+% \textbf{Chapter 6: Methodology} presents our approach in detail. We describe the architecture of our MCP-based RAG system, the design of our domain knowledge base, the integration with Wake's analysis capabilities, and the retrieval strategies we employ. This chapter explains the key design decisions and trade-offs in building a practical LLM-augmented audit system.
+
+% \textbf{Chapter 7: Implementation} details the concrete realization of our design. We discuss the software architecture, MCP server implementations, database schemas, and integration points between components. This chapter provides sufficient detail for replication and extension of our work.
+
+% \textbf{Chapter 8: Evaluation} presents our experimental results. We describe our dataset of vulnerable contracts, evaluation metrics, baseline comparisons, and analysis of system performance across different vulnerability classes. We examine both quantitative metrics like precision and recall as well as qualitative aspects like explanation quality and practical utility for auditors.
+
+The last chapter summarizes contributions of this work, discusses limitations and results of the proposed approach, and outlines directions for future work.
+
+The goal of this thesis is not to replace human auditors with automated systems—the creative reasoning and contextual understanding required for comprehensive security analysis remains a fundamentally human capability. Rather, we aim to augment auditors with intelligent tools that handle the mechanical aspects of information retrieval and pattern recognition, allowing human expertise to focus on the complex reasoning tasks where it adds the most value. By combining the precision of static analysis, the knowledge retrieval of RAG systems, and the pattern recognition of LLMs, we take a step toward making smart contract security more accessible and effective.
 
 \chapter*{Objectives}
 
@@ -18,52 +65,50 @@ Tell a bit about what was done and list objectives that were fullfilled:
 \end{itemize}
 
 
-\chapter{Introduction}
-% 1–2 pages. Problem, motivation, goal, contributions, and thesis roadmap.
-\section{Motivation and Problem Statement}
-% Why smart contract bugs are high impact (immutability, financial incentives) and why existing audits/tools still miss logical flaws.
-\section{Research Objectives and Contributions}
-% State your contribution precisely: extending Wake-AI with MCP-based RAG + building KB from Solidity vulns/audit knowledge.
-\section{Thesis Structure}
-% One paragraph explaining what each chapter delivers and how it connects.
-
 \chapter{Ethereum}
-This chapter introduces the foundations needed to understand Ethereum and the auditing methodologies developed in later chapters (TODO maybe change). It first explains generic \emph{blockchain} principles (as a technology family), then specializes to Ethereum’s execution model via the \emph{Ethereum Virtual Machine (EVM)} and the \emph{Solidity} language. The chapter closes with a concise taxonomy of common smart-contract vulnerabilities that will be referenced throughout the thesis.
-
+This chapter introduces the foundations needed to understand Ethereum and its components, as this work is closely tied to that platform. It first outlines the general principles of blockchain, then specializes to Ethereum’s execution model via the Ethereum Virtual Machine (EVM) and the Solidity language. The chapter concludes with a concise taxonomy of common smart-contract vulnerabilities and issues. (TODO maybe change)
 
 \section{Overview}
-Ethereum, formally launched in 2015, represents a significant evolution in blockchain technology. Originally proposed in a white paper by \textsc{Vitalik Buterin} in 2013/14, Ethereum extended the ledger-centric model into a full-fledged application layer offering smart contracts and decentralised applications (dApps) \cite{Buterin2013}. Rather than solely tracking value transfers, Ethereum enables arbitrary programmable logic through the EVM execution environment, while preserving the core blockchain properties of transparency, decentralisation and immutability \cite{wood2014yellow}. By doing so, it transformed the blockchain into a generalised state-transition machine, thereby broadening its applicability far beyond simple currency use-cases.
-
+Ethereum, launched in 2015, marked a significant evolution in blockchain technology. First proposed by \texttt{Vitalik Buterin} in a 2013 white paper, Ethereum extends the ledger-centric model into a full application platform supporting smart contracts and decentralized applications (dApps) \cite{Buterin2013}. Rather than simply recording value transfers, it enables general-purpose programmable logic through the EVM while preserving the core properties of transparency, decentralization,and immutability \cite{wood2014yellow}. In effect, Ethereum transformed the blockchain as a generalized state-transition machine, broadening its applicability well beyond simple currency use cases.
 
 \subsection{Blockchain}
-% Blocks/transactions/state; keep it tight and oriented toward contract execution.
-\subsection{Accounts and Transactions}
-% EOAs vs contract accounts; call semantics at high level (sets up msg.sender, msg.value, calldata).
+A blockchain is a distributed ledger maintained by a network of peer-to-peer nodes rather than a single central authority. It grows as a chain of blocks, each block holding a complete list of transaction records and containing a cryptographic link to its predecessor --- when enough subsequent blocks accumulate, reversing or altering a transaction becomes infeasible. Participants use addresses instead of real-world identities, allowing transparency while preserving pseudonymity. Because every node holds a copy of the chain and the full history of transactions is publicly verifiable, the system enables auditability: flows of value can be traced, state transitions inspected and the integrity of past operations confirmed. In short, starting from the genesis block and continuing through every appended block, the blockchain combines decentralization, tamper-resistance, and verifiable history in one architecture \cite{blockchain}.
+
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=10cm, height=9cm]{images/blockchain_diagram_eth.pdf}
+    \caption{Structure of an Ethereum blockchain node.}
+    \label{fig:blockchain_diagram_eth}
+\end{figure}
+
+In Figure \ref{fig:blockchain_diagram_eth}, a blockchain block is shown linking to its predecessor and successor by storing the header hash of the previous block in its own header, forming an immutable chain; the header also includes the Merkle root, a timestamp and a nonce. The lower portion expands the block transaction set into a binary Merkle tree: individual transactions are hashed, then combined pairwise and re-hashed level by level until a single root hash remains. That root inserted in the block header acts as a compact commitment to every transaction in the block, so any alteration to a transaction propagates through the tree and changes the root, invalidating the header. This design allows nodes to verify the inclusion of specific transactions efficiently without reprocessing the entire block, while the previous-hash pointer secures block ordering \cite{blockchain_diagram_eth}.
+
+\subsubsection*{Merkle Tree}
+A Merkle tree (hash tree) is a binary tree in which each leaf holds the cryptographic hash of a data element and each internal node holds the hash of the concatenation of its two children. Starting from a set of items (e.g., transactions), we hash each item to form the leaves, then iteratively hash pairs of nodes until a single value remains: the \emph{Merkle root}. Because each internal label is a hash of its children, any change to any leaf propagates upward and deterministically alters the root. Under standard collision- and preimage-resistance assumptions for the hash function, the root acts as a binding, compact commitment to the entire dataset \cite{merkle1987,nakamoto2008}.
+
+Merkle trees are used in public blockchains to commit to all transactions in a block using only the root in the block header. This design enables efficient \emph{inclusion proofs} (also called \emph{Merkle proofs}) of size $O(\log n)$ for a block with $n$ transactions: to prove that a transaction is part of a block, a verifier only needs the transaction, the header (containing the root), and the minimal set of sibling hashes along the path from the leaf to the root, rather than the entire block. Such proofs underpin ``light'' or SPV clients that validate inclusion without reprocessing all transactions, saving bandwidth and storage while preserving data integrity \cite{nakamoto2008}.
+
+
+ public blockchain, each n-ode could take part in the consensus process. And onlya selected set of nodes are responsible for validating theblock in consortium blockchain. As for private chain, it isfully controlled by one organization and the organizationcould determine the final consensus mechanism. The two dominant families are proof-of-work (PoW), which selects leaders in proportion to computational power expended, and proof-of-stake (PoS), which selects leaders in proportion to economic stake locked as collateral
+
 \subsection{Consensus mechanisms}
-In a PoW system, network participants (miners) compete to solve computational puzzles (e.g., find a nonce so that the hash of the block header meets a target) and thereby propose the next valid block. :contentReference[oaicite:8]{index=8} In contrast, PoS selects block proposers (validators) based on their stake in the network (i.e., the amount of tokens locked up) rather than raw computing power, thereby altering the incentive, security and energy-profile of the system. :contentReference[oaicite:9]{index=9}
+In a PoW system, network participants (miners) compete to solve computational puzzles (e.g., find a nonce so that the hash of the block header meets a target) and thereby propose the next valid block. In contrast, PoS selects block proposers (validators) based on their stake in the network (i.e., the amount of tokens locked up) rather than raw computing power, thereby altering the incentive, security and energy-profile of the system.
 
 \subsubsection*{Proof of Work}
-Proof-of-work (PoW) is an algorithm that sets the difficulty level and rules governing the activities of miners on PoW-based blockchains. Mining represents
-the ’work’ needed to validate and append legitimate blocks to the blockchain.
-This process is crucial as it directly affects the blockchain’s length, thereby
-helping the network determine the most accurate progression of the chain.
-As miners continue to solve complex mathematical problems, thereby adding
-more blocks, the blockchain grows longer, which improves the network’s confidence in the current state of the ledger. This chain lengthening also increases
-security by making altering any information in previous blocks increasingly
-difficult. This consensus mechanism is used in the most popular blockchain
-implementation, called Bitcoin.
+The first concept/method used by blockchains. Generally, the nodes in a PoW-based blockchain network reach consensus by participating in a solution searching process, where each node must find a nonce for its proposed new block. Due to the property of the hash function, the nonce can only be found by repeatedly trying different nonce values until the output is within the target range. When a participant finds the nonce, it will broadcast the block along with the transactions to other nodes. Then, if the new block is verified and determined to be the first block mined after the last block in the chain, it will be integrated into the current chain and become the latest block in the chain. This solution searching procedure can be considered to be a weighted random coin-tossing process where a participant with a higher hash rate(computational power) might have higher chances to be the block winner (leader) who can receive the reward. his computa-tion leads to the large amount of energy consumption forblockchains using PoW consensus mechanisms, as the par-ticipants try to increase their hash rates to have a higherchance to be the leader and receive rewards. Moreover, sinceparticipants with low hash rates have very low chances towin a block and receive rewards, they often join miningpools to have more opportunities to get revenues. A miningpool consists of participants who want to collaborate by con-tributing their computing resources to the pool. In this way,mining tasks will be distributed to the miners, and due to hugecomputing resources, mining pools often get much higher op-portunities to win a new block than individuals. While joininga mining pool provides more stable incomes, the nodes inthe pool often do not contribute to the transaction validationand propagation since they only perform the nonce searchprocess in a specific range. Thus, mining pools have beendominating processes making new blocks in most of currentblockchain networks. For example, the top five mining poolscontrol up to 62.7\% total hash rate of the Bitcoin network [3].This is the most serious issue of PoW-based blockchainnetworks because it is against the decentralized spirit ofblockchain technology. Another issue of PoW protocols isdelay. In a PoW-based blockchain network, when a block isadded to the chain, there is still a possibility that this blockwill not be included in the main chain for several reasons,e.g., network delay causing several versions of the chainor two participants finding two blocks simultaneously. Thispossibility decreases exponentially as the block is deeper inthe chain. Therefore, a block is considered to be finalizedonly when it is a certain k, usually six blocks deep in thechain. This delays the transaction confirmation significantly.Moreover, PoW mechanism is also vulnerable to 51\% attack.In particular, if a single party controls more than 51\% of thenetwork’s total computational power, they can spend theircoins multiple times (in cryptocurrency networks) or preventother transactions by adding conflicting blocks to the chain.While 51\% attacks might not be a serious problem for largeblockchain networks, the newly established networks withsmall and limited total computational power are especiallyvulnerable 
+
 
 \subsubsection*{Proof of Stake}
-Proof of Stake (PoS) is an essential consensus algorithm that defines the rules
-and mechanisms for participants in PoS-based blockchains. In PoS, the process of ’staking’—rather than mining—serves as the mechanism through which
-validators are chosen to confirm transactions and create new blocks. Validators are selected based on the amount of cryptocurrency they hold and are
-willing to ’stake’ as collateral. This process is critical as it helps ensure the
-security and accuracy of the blockchain by encouraging validators to act honestly to avoid losing their stakes. As more blocks are validated and added to
-the chain, the blockchain becomes longer and more robust, thereby upgrading
-the network’s trust in the current ledger. This method increases the efficiency
-of the validation process and reduces the energy consumption compared to
-proof-of-work systems, making it a more environmentally friendly alternative.
-The most used blockchain that uses the proof-of-stake mechanism is Ethereum
+The first Proof-of-Stakes (PoS) network, Peercoin [16], wasdeveloped as a PoX consensus mechanism with the aim toreduce the computational requirements of PoW. Participantswith higher coin age, i.e., product of network tokens and theirholding time, have higher chances to be selected. Specifi-cally, each node in Peercoin solves a PoW puzzle with itsown difficulty, which can be reduced by consuming coin age.In the more recent PoS networks, the solution searching iscompletely removed, and the block leaders are no longerselected by computational power. Instead, they are selectedbased on the stakes that they are holding.With the stake-based leader selection process, a node’schance to be selected to be a leader no longer depends on itscomputational power, and thus energy consumption of PoS mechanisms is significantly reduced compared with that ofPoW. Moreover, the block generation and transaction con-firmation speeds are kept at relatively low constant rates bythe PoW networks to ensure security because there are manydifferent blocks proposed by the miners. In contrast, sinceonly one block is made in each round of PoS mechanisms,the block generation and transaction confirmation speedsare usually much faster, and thus PoS mechanism starts tobecome popular recently. 
+
+PoS (Proof of stake) is an energy-saving alternative to PoW.Miners in PoS have to prove the ownership of the amountof currency. It is believed that people with more currencieswould be less likely to attack the network. The selectionbased on account balance is quite unfair because the singlerichest person is bound to be dominant in the network. As aresult, many solutions are proposed with the combination ofthe stake size to decide which one to forge the next block.In particular, Blackcoin [26] uses randomization to predict thenext generator. It uses a formula that looks for the lowesthash value in combination with the size of the stake. Peercoin[21] favors coin age based selection. In Peercoin, older andlarger sets of coins have a greater probability of mining thenext block. Compared to PoW, PoS saves more energy andis more effective. Unfortunately, as the mining cost is nearlyzero, attacks might come as a consequence. Many blockchainsadopt PoW at the beginning and transform to PoS gradually.For instance, ethereum is planing to move from Ethash ( 
+
+
+
+
+
+With a solid understanding of how blocks are structured and how consensus mechanisms (whether proof-of-work or proof-of-stake) enable nodes to agree upon the canonical chain, we now turn our attention to the next layer of the architecture: how transactions and smart contract code are actually executed
 
 \section{Ethereum Virtual Machine}
 The Ethereum Virtual Machine (EVM) is a deterministic state machine that executes the bytecode of the smart contract identically on all nodes \cite{wood2014yellow}. However, it is not Turing complete in the classical sense: execution is strictly resource-bounded by gas - every instruction has a metered gas cost, and execution halts once the supplied gas is exhausted. 
@@ -89,7 +134,7 @@ Blocks have an elastic gas target and the base fee increases or decreases depend
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=\linewidth]{images/evm}
-    \caption{Ethereum Virtual Machine illustration TODO REF.}
+    \caption[Ethereum Virtual Machine illustration]{Ethereum Virtual Machine illustration\footnote{\url{https://ethereum.org/developers/docs/evm/}}.}
     \label{fig:evm}
 \end{figure}
 
@@ -217,37 +262,176 @@ Rather than viewing automation as competing with human auditors, we see it as ex
 
 The code analysis approaches we examine next build on the audit methodology foundations established here. We explore how static analysis frameworks like Wake provide structured access to code properties, how retrieval systems can surface relevant code segments for LLM analysis, and how agent architectures can orchestrate multiple tools to tackle complex analysis tasks. The goal is not to replace the auditor workflows described in this chapter, but to make them more efficient and effective by automating the retrieval and synthesis steps that currently consume significant auditor time.
 
-\chapter{Code analysis}
-% Goal: describe analysis methods you’ll reference when positioning Wake/Wake-AI and your RAG design.
-\section{Static analysis}
-% “Analysis without execution”: representations + algorithms.
-\subsection{Abstract syntax tree}
-% Structure, why good for pattern matching and feature extraction.
-\subsection{Intermediate representation}
-% Why IR helps normalize Solidity constructs; connect to Wake’s internal model later.
-\subsection{Control flow analysis}
-% Paths, reachability, call graph; key for reentrancy/authorization flows.
-\subsection{Data flow analysis}
-% Def-use, taint sources/sinks; explain limitations with aliasing/solidity specifics.
-\subsection{Inter-procedural analysis}
-% Cross-function reasoning, summaries, scalability tradeoffs.
+\chapter{Code Analysis}
+\label{ch:code-analysis}
 
-\section{Dynamic analysis}
-% “During execution”: what you can observe that static misses.
-\subsection{TODO}
-% Transaction traces, revert reasons, state diffs (keep conceptual).
-\subsection{Fuzz testing}
-% Stateful fuzzing, invariants, corpus guidance; connect to Wake fuzzing later.
+% Goal: describe analysis methods you'll reference when positioning Wake/Wake-AI and your RAG design.
 
-\section{Formal verification}
-% Position it as strongest guarantees but costly; relevant as future work / complementary checks.
-\subsection{Symbolic execution}
-% Path explosion, environment modeling; mention common tools as examples (no long tool survey).
-\subsection{Model checking}
-% Properties/invariants, finite abstraction.
-\subsection{Theorem proving}
-% Very brief, mainly to contextualize “verification” as a baseline you don’t fully implement.
+The security analysis of software systems, particularly smart contracts deployed on blockchain platforms, relies on a diverse set of analytical techniques that have evolved over decades of programming language research. This chapter provides a comprehensive overview of the foundational methods for code analysis, establishing the theoretical and practical groundwork necessary for understanding how modern tools—including Wake and its AI-augmented extensions—approach vulnerability detection in Solidity smart contracts. We organise our discussion around three complementary paradigms: static analysis, which reasons about program behaviour without execution; dynamic analysis, which observes actual runtime behaviour; and formal verification, which provides mathematical guarantees about program correctness.
+
+\section{Static Analysis}
+\label{sec:static-analysis}
+
+Static analysis encompasses techniques that examine source code, bytecode, or other program representations to infer properties about all possible executions without actually running the program~\cite{nielson1999principles}. The appeal of static analysis lies in its soundness guarantees—a sound static analyser will never miss a bug of the class it is designed to detect—and its ability to reason about infinite execution paths. However, this power comes at the cost of precision: static analysers may report false positives, flagging code as potentially buggy when no actual vulnerability exists~\cite{rice1953classes}.
+
+In the context of smart contract security, static analysis has become the predominant first line of defence. Tools such as Slither~\cite{feist2019slither}, Securify~\cite{tsankov2018securify}, and Mythril~\cite{mueller2018smashing} employ various static techniques to detect common vulnerability patterns including reentrancy, integer overflow, and access control violations. The effectiveness of these tools depends critically on the program representations they employ and the algorithms they execute over those representations.
+
+\subsection{Abstract Syntax Tree}
+\label{subsec:ast}
+
+The abstract syntax tree (AST) serves as the foundational representation for most static analysis techniques. An AST is a hierarchical tree structure that captures the syntactic structure of source code while abstracting away concrete details such as whitespace, comments, and parentheses that do not affect program semantics~\cite{aho2006compilers}. Each node in the tree corresponds to a syntactic construct—a function declaration, an assignment statement, a binary expression—and the tree's structure reflects the nesting and composition of these constructs.
+
+For Solidity smart contracts, the AST provides a natural representation for pattern matching and feature extraction. Consider the detection of unchecked external calls, a prerequisite for reentrancy vulnerabilities. An analyser can traverse the AST to identify \texttt{call} expressions, examine their surrounding context to determine whether return values are checked, and flag instances where failures are silently ignored. This pattern-based approach, while conceptually simple, proves remarkably effective for detecting many common vulnerability classes~\cite{feist2019slither}.
+
+The AST also serves as the basis for computing syntactic metrics and extracting features for machine learning approaches. Metrics such as cyclomatic complexity, function length, and nesting depth can be computed directly from AST traversal~\cite{mccabe1976complexity}. More sophisticated feature extraction might identify the presence of specific syntactic patterns—loops containing external calls, state modifications after external calls, or complex inheritance hierarchies—that correlate with vulnerability presence~\cite{zhuang2020smart}.
+
+However, the AST has significant limitations for semantic analysis. Because it captures only syntactic structure, it cannot directly represent the flow of data through a program or the possible paths of control flow. Two syntactically similar code fragments may exhibit vastly different runtime behaviours depending on the values of variables and the paths taken through conditional statements. These limitations motivate the use of more semantically rich representations.
+
+\subsection{Intermediate Representation}
+\label{subsec:ir}
+
+Intermediate representations (IRs) bridge the gap between source-level syntax and low-level execution semantics by normalising diverse syntactic constructs into a uniform format amenable to analysis~\cite{muchnick1997advanced}. A well-designed IR strips away syntactic sugar, resolves implicit operations, and exposes the underlying computational structure of the program.
+
+In the context of Solidity analysis, IRs play a crucial role in normalising the language's many idiosyncrasies. Solidity supports multiple ways to perform external calls (\texttt{call}, \texttt{delegatecall}, \texttt{transfer}, \texttt{send}), various forms of type coercion, and complex inheritance semantics with function overriding. An IR can normalise these constructs into a smaller set of primitive operations, simplifying subsequent analysis~\cite{grech2018madmax}.
+
+The Ethereum Virtual Machine (EVM) bytecode itself serves as a form of IR, but it presents significant challenges for analysis. EVM bytecode uses a stack-based execution model with dynamic jump destinations, making control flow recovery difficult~\cite{brent2018vandal}. Higher-level IRs that preserve source-level information while normalising semantics—such as the Yul intermediate language used by the Solidity compiler—often provide a more tractable analysis target.
+
+Wake's internal model employs a custom IR that preserves source mapping information while normalising Solidity constructs for analysis. This design choice enables Wake to perform sophisticated cross-function analysis while maintaining the ability to report findings at the source level, a crucial requirement for actionable security reports. The IR serves as the foundation upon which control flow and data flow analyses are constructed.
+
+\subsection{Control Flow Analysis}
+\label{subsec:control-flow}
+
+Control flow analysis (CFA) determines the possible paths of execution through a program, representing this information as a control flow graph (CFG) where nodes represent basic blocks—sequences of instructions with no internal branching—and edges represent possible transfers of control~\cite{allen1970control}. The CFG provides the structural backbone for many subsequent analyses, enabling reasoning about path reachability, loop structure, and the ordering of operations.
+
+For smart contract security, control flow analysis enables the detection of vulnerabilities that depend on execution ordering. Reentrancy vulnerabilities, for example, occur when an external call can transfer control to an attacker who then re-enters the vulnerable contract before the original invocation completes. Detecting this pattern requires understanding that certain paths through the CFG place external calls before state updates, violating the checks-effects-interactions pattern~\cite{consensys2023reentrancy}.
+
+The call graph, a related structure that captures the calling relationships between functions, extends control flow analysis to the interprocedural level. Each node in the call graph represents a function, and edges represent potential call relationships. In the presence of dynamic dispatch—common in object-oriented languages and in Solidity's inheritance system—call graph construction becomes challenging, as the target of a call may depend on runtime type information~\cite{grove2001framework}.
+
+For Solidity, the call graph must account for both internal function calls and external message calls to other contracts. External calls introduce additional complexity because the target contract's code may not be available for analysis, and even when available, the call may be dispatched through a proxy pattern that obscures the actual implementation~\cite{chen2020defining}. Sound analysis requires conservative approximation of possible call targets, potentially leading to precision loss.
+
+Reachability analysis over the CFG determines which program points can potentially be reached from a given starting point. This analysis is fundamental for pruning infeasible paths from consideration and for establishing preconditions under which vulnerabilities can be triggered. If a vulnerable code pattern exists only on unreachable paths, it poses no actual security risk.
+
+\subsection{Data Flow Analysis}
+\label{subsec:data-flow}
+
+Data flow analysis tracks how values flow through a program, determining at each program point which values may be produced and consumed~\cite{kildall1973unified}. The classic formulation employs the monotone framework, which computes fixed points over the lattice of possible data flow facts by iteratively propagating information along CFG edges until no further changes occur~\cite{kam1977monotone}.
+
+The reaching definitions analysis, a foundational data flow analysis, determines for each use of a variable which definitions (assignments) might reach that use. This information enables detection of uninitialised variables, dead code, and various forms of data dependency. For smart contract security, reaching definitions help establish whether user-controlled input can influence security-critical operations~\cite{yamaguchi2014modeling}.
+
+Taint analysis, a specialisation of data flow analysis, tracks the flow of untrusted data from sources (such as transaction parameters) to security-sensitive sinks (such as external calls or state modifications)~\cite{schwartz2010all}. In the smart contract domain, taint sources include \texttt{msg.sender}, \texttt{msg.value}, \texttt{calldata}, and return values from external calls. Sinks include operations that transfer value, modify access control state, or perform external calls. A taint flow from source to sink without proper sanitisation indicates a potential vulnerability.
+
+Data flow analysis faces particular challenges in Solidity due to storage aliasing. Solidity's storage model maps state variables to 256-bit storage slots according to complex packing rules, and dynamic data structures such as mappings and arrays use hash-based slot computation~\cite{antonopoulos2018mastering}. Two syntactically distinct storage references may alias to the same slot, creating data flow paths invisible to na\"ive analysis. Precise handling of storage aliasing requires modelling Solidity's storage layout rules and potentially employing alias analysis techniques~\cite{andersen1994program}.
+
+Additionally, the transactional semantics of smart contracts—where each transaction executes atomically and state persists between transactions—creates data flow paths that span multiple invocations. A value written in one transaction may be read in a subsequent transaction, creating cross-transaction data dependencies that single-invocation analysis cannot capture.
+
+\subsection{Inter-procedural Analysis}
+\label{subsec:inter-procedural}
+
+While intraprocedural analysis examines individual functions in isolation, many vulnerability patterns require reasoning across function boundaries. Interprocedural analysis extends data flow and control flow analyses to operate over entire programs, tracking how values and control flow cross function boundaries~\cite{reps1995precise}.
+
+The fundamental challenge of interprocedural analysis is maintaining both precision and scalability. A fully context-sensitive analysis that distinguishes between different call sites can provide precise results but scales poorly, as the number of contexts may grow exponentially with call depth. Context-insensitive analysis, which merges information from all call sites, scales better but may produce imprecise results that manifest as false positives~\cite{sharir1981two}.
+
+Function summaries provide a middle ground, capturing the input-output behaviour of functions in a form that can be instantiated at call sites without re-analysing the function body~\cite{reps1995precise}. For security analysis, a summary might capture which parameters can influence which return values, which state variables are read or written, and which external calls may be performed. Pre-computed summaries enable modular analysis where each function is analysed once, and the summaries are composed to reason about whole-program behaviour.
+
+In the smart contract domain, interprocedural analysis is essential for detecting vulnerabilities that span multiple functions. Access control vulnerabilities often manifest as public functions that, through a chain of internal calls, perform privileged operations without adequate authorisation checks. Detecting such vulnerabilities requires tracing control and data flow from public entry points through internal function calls to security-sensitive operations~\cite{brent2020ethainter}.
+
+Cross-contract analysis presents additional challenges. Smart contracts frequently interact with other contracts, and vulnerabilities may arise from the composition of individually secure contracts. Analysis of cross-contract interactions requires either whole-system analysis—which may be impossible when contract source is unavailable—or the use of conservative assumptions about external contract behaviour~\cite{grech2018madmax}.
+
+
+\section{Dynamic Analysis}
+\label{sec:dynamic-analysis}
+
+While static analysis reasons about all possible executions, dynamic analysis observes actual program behaviour during concrete executions~\cite{ball1999concept}. This complementary approach sacrifices soundness—a dynamic analysis can only observe the executions it actually runs—in exchange for precision: the behaviours observed during dynamic analysis represent actual, not merely potential, program behaviour.
+
+Dynamic analysis proves particularly valuable for smart contract security because the blockchain environment involves complex interactions with external state, other contracts, and economic mechanisms that are difficult to model statically. Observing actual transaction execution can reveal behaviours that static analysis either misses or conservatively overapproximates.
+
+\subsection{Transaction Trace Analysis}
+\label{subsec:transaction-traces}
+
+Transaction traces provide a detailed record of smart contract execution, capturing the sequence of operations performed, the values of variables at each step, and the outcomes of external interactions. On Ethereum and compatible networks, traces can be obtained from archive nodes that preserve historical state, enabling retrospective analysis of past transactions~\cite{chen2019dataether}.
+
+A transaction trace typically includes the sequence of internal and external calls, the input data and return values for each call, state changes (storage writes), event emissions, and any revert conditions encountered. This information enables reconstruction of the precise execution path taken, facilitating debugging and forensic analysis of security incidents.
+
+State differentials, computed by comparing contract state before and after transaction execution, reveal the net effect of a transaction on persistent storage. For security analysis, state differentials help identify transactions that modify access control state, transfer ownership, or manipulate balances in unexpected ways. Anomaly detection techniques can identify transactions whose state differentials deviate significantly from historical patterns, potentially indicating exploitation~\cite{zhou2020ever}.
+
+Revert reason analysis examines transactions that failed, extracting information about the cause of failure from revert strings and custom errors. Patterns in reverted transactions can reveal attempted attacks that were blocked by existing checks, informing defensive analysis. A sudden spike in reverts from a particular function might indicate an ongoing attack probe.
+
+\subsection{Fuzz Testing}
+\label{subsec:fuzz-testing}
+
+Fuzz testing (fuzzing) is a dynamic testing technique that automatically generates test inputs to explore program behaviour and discover bugs~\cite{miller1990empirical}. Modern fuzzing has evolved significantly from its origins in random input generation, incorporating coverage guidance, constraint solving, and domain-specific knowledge to systematically explore program state space~\cite{manes2019art}.
+
+For smart contract security, fuzzing must account for the stateful nature of contract execution. A single transaction rarely suffices to reach deep contract states; rather, sequences of transactions are required to manipulate contract state into configurations where vulnerabilities manifest. Stateful fuzzing maintains contract state across transaction sequences, enabling exploration of states reachable only through specific transaction orderings~\cite{grieco2020echidna}.
+
+Invariant-based fuzzing provides properties that should hold across all reachable states. The fuzzer then attempts to generate transaction sequences that violate these invariants. Common invariants include balance conservation (total value in should equal total value out), access control consistency (only authorised addresses can perform privileged operations), and state machine integrity (the contract should only be in valid states)~\cite{wustholz2020harvey}.
+
+Coverage-guided fuzzing uses feedback from previous executions to guide input generation toward unexplored program regions. By instrumenting the contract to track which code paths are exercised, the fuzzer can prioritise inputs that reach new coverage, systematically expanding the explored state space~\cite{nguyen2020sfuzz}. The combination of coverage guidance with property-based testing provides a powerful technique for discovering subtle vulnerabilities that escape both manual review and pattern-based static analysis.
+
+Corpus generation and management play crucial roles in fuzzing effectiveness. The corpus—the set of seed inputs from which the fuzzer generates new inputs—significantly influences exploration efficiency. Techniques such as corpus distillation, which removes redundant inputs that do not contribute new coverage, and corpus scheduling, which prioritises inputs likely to lead to new discoveries, improve fuzzing throughput~\cite{rebert2014optimizing}.
+
+Wake includes an integrated fuzzing framework that supports stateful property-based testing of Solidity contracts. By providing a Python-based test harness with coverage instrumentation and property specification capabilities, Wake enables developers and auditors to systematically explore contract behaviour. This dynamic analysis capability complements Wake's static analysis features, providing a more comprehensive security assessment.
+
+
+\section{Formal Verification}
+\label{sec:formal-verification}
+
+Formal verification employs mathematical techniques to prove that programs satisfy specified properties with certainty, not merely with high probability as testing provides~\cite{clarke2018model}. While static analysis and testing may miss vulnerabilities or report false positives, formal verification can provide guarantees: if verification succeeds, the property provably holds; if it fails, a concrete counterexample demonstrates the violation.
+
+The appeal of formal verification for smart contract security is evident. Smart contracts manage significant financial value and, once deployed, cannot easily be patched. Vulnerabilities can lead to irreversible losses, as demonstrated by numerous high-profile exploits~\cite{atzei2017survey}. Formal verification offers the prospect of eliminating entire classes of bugs with mathematical certainty.
+
+However, formal verification faces significant practical challenges. The techniques are computationally expensive, often requiring substantial manual effort to specify properties and guide the verification process. Scalability limitations restrict application to smaller codebases or require abstraction that may introduce imprecision. Additionally, verification establishes conformance to specification, but specifications themselves may be incomplete or incorrect, leaving gaps in security coverage.
+
+\subsection{Symbolic Execution}
+\label{subsec:symbolic-execution}
+
+Symbolic execution executes programs with symbolic rather than concrete values, representing program state as logical constraints over symbolic variables~\cite{king1976symbolic}. Rather than computing specific outputs for specific inputs, symbolic execution computes expressions over symbolic inputs that characterise the relationship between inputs and outputs. At branch points, execution forks to explore both paths, accumulating path conditions that constrain the symbolic inputs consistent with each path.
+
+For vulnerability detection, symbolic execution enables systematic exploration of program paths and automatic generation of inputs that trigger specific behaviours. Given a property to check—such as the absence of integer overflow—symbolic execution explores paths, collects constraints under which the property is violated, and queries a satisfiability modulo theories (SMT) solver to determine whether satisfying inputs exist. If the solver finds a satisfying assignment, it provides a concrete exploit input; if the constraints are unsatisfiable, the property holds on that path~\cite{cadar2008exe}.
+
+Symbolic execution faces the path explosion problem: the number of paths through a program grows exponentially with the number of branch points. Loops and recursive calls exacerbate this problem, potentially creating infinite paths. Practical symbolic execution engines employ various strategies to manage path explosion, including bounded exploration, state merging, and prioritised search~\cite{cadar2013symbolic}.
+
+In the smart contract domain, tools such as Mythril~\cite{mueller2018smashing} and Manticore~\cite{mossberg2019manticore} employ symbolic execution to detect vulnerabilities. These tools symbolically execute EVM bytecode, modelling the Ethereum execution environment including storage, message calls, and environmental variables. When a path reaches a potentially vulnerable state—an external call with user-controlled destination, an arithmetic operation that may overflow—the tool checks whether the path is feasible and, if so, reports the vulnerability with a triggering input.
+
+Environment modelling presents particular challenges for smart contract symbolic execution. The blockchain environment includes not just the contract under analysis but the entire ecosystem of other contracts, the block context, and the transaction parameters. Accurate modelling requires assumptions about what external contracts might do, what values environmental variables might take, and how transactions might be sequenced. Conservative assumptions lead to false positives; optimistic assumptions may miss real vulnerabilities~\cite{luu2016making}.
+
+\subsection{Model Checking}
+\label{subsec:model-checking}
+
+Model checking exhaustively explores the state space of a finite-state system to verify that specified properties hold in all reachable states~\cite{clarke1999model}. Given a model of the system and a property expressed in temporal logic, a model checker either confirms that the property holds or produces a counterexample trace demonstrating a violation.
+
+For smart contracts, model checking can verify properties that span multiple transactions and involve temporal ordering. Properties such as ``whenever a withdrawal is requested, funds are eventually transferred'' or ``the contract never enters a state from which funds cannot be recovered'' require reasoning about sequences of states, which temporal logics naturally express~\cite{mavridou2018designing}.
+
+The state explosion problem—the exponential growth of state space with the number of state variables—limits direct model checking to relatively small systems. Abstraction techniques address this limitation by constructing simplified models that preserve relevant properties while reducing state space. Predicate abstraction, for example, tracks only the truth values of specified predicates rather than full variable values, potentially reducing an infinite state space to a finite one~\cite{graf1997construction}.
+
+Bounded model checking (BMC) offers a pragmatic compromise, exploring executions up to a fixed depth rather than exhaustively checking all reachable states~\cite{biere1999symbolic}. While BMC cannot prove that properties hold universally, it can efficiently find bugs that manifest within the bound and provides coverage guarantees up to the specified depth. For smart contracts, where most vulnerabilities manifest within a small number of transactions, bounded model checking provides practical value.
+
+\subsection{Theorem Proving}
+\label{subsec:theorem-proving}
+
+Theorem proving represents the most powerful—and most demanding—approach to formal verification. Rather than exhaustively exploring state space, theorem proving directly constructs mathematical proofs that programs satisfy specifications. Interactive theorem provers such as Coq~\cite{bertot2013interactive}, Isabelle~\cite{nipkow2002isabelle}, and Lean~\cite{moura2021lean} provide frameworks for developing machine-checked proofs with human guidance.
+
+The expressiveness of theorem proving is unmatched: any mathematically statable property can, in principle, be proven. This includes properties beyond the reach of model checking and symbolic execution, such as correctness relative to complex mathematical specifications or security properties involving cryptographic assumptions. Projects such as the Ethereum Foundation's formal specification efforts demonstrate the application of theorem proving to blockchain protocol verification~\cite{hirai2017defining}.
+
+However, the cost of theorem proving is substantial. Proofs require significant human expertise to construct, often taking person-months of effort for non-trivial systems. The proof development process requires not just programming skill but mathematical sophistication and familiarity with the proof assistant's logic and tactics. For most smart contract development contexts, this cost-benefit trade-off renders full theorem proving impractical.
+
+Nonetheless, theorem proving plays an important role in the broader smart contract security ecosystem. Proofs of foundational libraries, such as safe arithmetic operations or standard token implementations, can be developed once and reused widely. High-value contracts managing billions of dollars may justify the investment in formal proofs. The verification of compiler correctness ensures that properties proven at the source level are preserved through compilation~\cite{leroy2009formal}.
+
+
 \section{Summary and Transition to LLM-based Analysis}
+\label{sec:summary-transition}
+
+This chapter has surveyed the foundational techniques for program analysis as applied to smart contract security. Static analysis, operating on representations from abstract syntax trees to interprocedural data flow, provides scalable vulnerability detection with soundness guarantees but may produce false positives. Dynamic analysis, through transaction tracing and fuzz testing, observes actual behaviours with precision but cannot guarantee absence of vulnerabilities. Formal verification offers mathematical certainty but at significant computational and human cost.
+
+Each technique occupies a distinct point in the trade-off space between soundness, completeness, scalability, and automation. In practice, effective security analysis combines multiple techniques: static analysis for broad coverage and early detection, dynamic analysis for validation and edge case discovery, and selective formal verification for highest-assurance components. This defence-in-depth approach acknowledges that no single technique suffices for comprehensive security assessment.
+
+Despite the sophistication of these techniques, significant challenges remain. The semantic gap between source code and natural language makes it difficult for automated tools to understand programmer intent, leading to both false positives (flagging intended behaviour as bugs) and false negatives (missing bugs that violate unstated invariants). The evolving landscape of smart contract patterns, from novel DeFi primitives to cross-chain bridges, continuously introduces new vulnerability classes that existing detectors may not recognise~\cite{werner2022sok}.
+
+Recent advances in large language models (LLMs) offer a promising complementary approach. LLMs trained on vast corpora of code and natural language have demonstrated remarkable capabilities in code understanding, generation, and analysis~\cite{chen2021evaluating}. Their ability to process natural language specifications, understand contextual patterns, and generalise from examples positions them as potential contributors to security analysis workflows.
+
+However, LLMs also exhibit significant limitations for security-critical applications. They may hallucinate non-existent vulnerabilities, miss subtle bugs, or provide confident but incorrect assessments~\cite{pearce2022asleep}. Their probabilistic nature provides no formal guarantees, and their sensitivity to prompt formulation introduces variability in outputs. Integrating LLMs into security analysis requires careful consideration of their strengths and limitations.
+
+The subsequent chapters explore how LLM capabilities can augment traditional analysis techniques. We examine retrieval-augmented generation (RAG) architectures that ground LLM outputs in verified knowledge bases, reducing hallucination while preserving the flexibility and natural language understanding that LLMs provide. Wake-AI, our proposed system, demonstrates this integration, combining Wake's precise static analysis with LLM-based contextual understanding and explanation generation. This hybrid approach seeks to leverage the complementary strengths of symbolic and neural methods, advancing toward more effective, accessible, and reliable smart contract security analysis.
+
 
 \chapter{Large Language Models}
 
@@ -489,400 +673,3 @@ Understanding these architectural components is essential for effectively applyi
 % Where it fails: KB gaps, retrieval noise, complex protocol logic, environment assumptions.
 \section{Future Work}
 % Strong future directions: tighter static/IR-guided retrieval, symbolic checks, richer audit KB, standardized benchmarks.
-
-
-\chapter{Ethereum}
-This chapter introduces the foundations needed to understand Ethereum and its components, as this work is closely tied to that platform. It first outlines the general principles of blockchain, then specializes to Ethereum’s execution model via the Ethereum Virtual Machine (EVM) and the Solidity language. The chapter concludes with a concise taxonomy of common smart-contract vulnerabilities and issues. (TODO maybe change)
-
-\section{Overview}
-Ethereum, launched in 2015, marked a significant evolution in blockchain technology. First proposed by \texttt{Vitalik Buterin} in a 2013 white paper, Ethereum extends the ledger-centric model into a full application platform supporting smart contracts and decentralized applications (dApps) \cite{Buterin2013}. Rather than simply recording value transfers, it enables general-purpose programmable logic through the EVM while preserving the core properties of transparency, decentralization,and immutability \cite{wood2014yellow}. In effect, Ethereum transformed the blockchain as a generalized state-transition machine, broadening its applicability well beyond simple currency use cases.
-
-\subsection{Blockchain}
-A blockchain is a distributed ledger maintained by a network of peer-to-peer nodes rather than a single central authority. It grows as a chain of blocks, each block holding a complete list of transaction records and containing a cryptographic link to its predecessor --- when enough subsequent blocks accumulate, reversing or altering a transaction becomes infeasible. Participants use addresses instead of real-world identities, allowing transparency while preserving pseudonymity. Because every node holds a copy of the chain and the full history of transactions is publicly verifiable, the system enables auditability: flows of value can be traced, state transitions inspected and the integrity of past operations confirmed. In short, starting from the genesis block and continuing through every appended block, the blockchain combines decentralization, tamper-resistance, and verifiable history in one architecture \cite{blockchain}.
-
-
-\begin{figure}[!h]
-    \centering
-    \includegraphics[width=10cm, height=9cm]{images/blockchain_diagram_eth.pdf}
-    \caption{Structure of an Ethereum blockchain node.}
-    \label{fig:blockchain_diagram_eth}
-\end{figure}
-
-In Figure \ref{fig:blockchain_diagram_eth}, a blockchain block is shown linking to its predecessor and successor by storing the header hash of the previous block in its own header, forming an immutable chain; the header also includes the Merkle root, a timestamp and a nonce. The lower portion expands the block transaction set into a binary Merkle tree: individual transactions are hashed, then combined pairwise and re-hashed level by level until a single root hash remains. That root inserted in the block header acts as a compact commitment to every transaction in the block, so any alteration to a transaction propagates through the tree and changes the root, invalidating the header. This design allows nodes to verify the inclusion of specific transactions efficiently without reprocessing the entire block, while the previous-hash pointer secures block ordering \cite{blockchain_diagram_eth}.
-
-\subsubsection*{Merkle Tree}
-A Merkle tree (hash tree) is a binary tree in which each leaf holds the cryptographic hash of a data element and each internal node holds the hash of the concatenation of its two children. Starting from a set of items (e.g., transactions), we hash each item to form the leaves, then iteratively hash pairs of nodes until a single value remains: the \emph{Merkle root}. Because each internal label is a hash of its children, any change to any leaf propagates upward and deterministically alters the root. Under standard collision- and preimage-resistance assumptions for the hash function, the root acts as a binding, compact commitment to the entire dataset \cite{merkle1987,nakamoto2008}.
-
-Merkle trees are used in public blockchains to commit to all transactions in a block using only the root in the block header. This design enables efficient \emph{inclusion proofs} (also called \emph{Merkle proofs}) of size $O(\log n)$ for a block with $n$ transactions: to prove that a transaction is part of a block, a verifier only needs the transaction, the header (containing the root), and the minimal set of sibling hashes along the path from the leaf to the root, rather than the entire block. Such proofs underpin ``light'' or SPV clients that validate inclusion without reprocessing all transactions, saving bandwidth and storage while preserving data integrity \cite{nakamoto2008}.
-
-
- public blockchain, each n-ode could take part in the consensus process. And onlya selected set of nodes are responsible for validating theblock in consortium blockchain. As for private chain, it isfully controlled by one organization and the organizationcould determine the final consensus mechanism. The two dominant families are proof-of-work (PoW), which selects leaders in proportion to computational power expended, and proof-of-stake (PoS), which selects leaders in proportion to economic stake locked as collateral
-
-\subsection{Consensus mechanisms}
-In a PoW system, network participants (miners) compete to solve computational puzzles (e.g., find a nonce so that the hash of the block header meets a target) and thereby propose the next valid block. In contrast, PoS selects block proposers (validators) based on their stake in the network (i.e., the amount of tokens locked up) rather than raw computing power, thereby altering the incentive, security and energy-profile of the system.
-
-\subsubsection*{Proof of Work}
-The first concept/method used by blockchains. Generally, the nodes in a PoW-based blockchain network reach consensus by participating in a solution searching process, where each node must find a nonce for its proposed new block. Due to the property of the hash function, the nonce can only be found by repeatedly trying different nonce values until the output is within the target range. When a participant finds the nonce, it will broadcast the block along with the transactions to other nodes. Then, if the new block is verified and determined to be the first block mined after the last block in the chain, it will be integrated into the current chain and become the latest block in the chain. This solution searching procedure can be considered to be a weighted random coin-tossing process where a participant with a higher hash rate(computational power) might have higher chances to be the block winner (leader) who can receive the reward. his computa-tion leads to the large amount of energy consumption forblockchains using PoW consensus mechanisms, as the par-ticipants try to increase their hash rates to have a higherchance to be the leader and receive rewards. Moreover, sinceparticipants with low hash rates have very low chances towin a block and receive rewards, they often join miningpools to have more opportunities to get revenues. A miningpool consists of participants who want to collaborate by con-tributing their computing resources to the pool. In this way,mining tasks will be distributed to the miners, and due to hugecomputing resources, mining pools often get much higher op-portunities to win a new block than individuals. While joininga mining pool provides more stable incomes, the nodes inthe pool often do not contribute to the transaction validationand propagation since they only perform the nonce searchprocess in a specific range. Thus, mining pools have beendominating processes making new blocks in most of currentblockchain networks. For example, the top five mining poolscontrol up to 62.7\% total hash rate of the Bitcoin network [3].This is the most serious issue of PoW-based blockchainnetworks because it is against the decentralized spirit ofblockchain technology. Another issue of PoW protocols isdelay. In a PoW-based blockchain network, when a block isadded to the chain, there is still a possibility that this blockwill not be included in the main chain for several reasons,e.g., network delay causing several versions of the chainor two participants finding two blocks simultaneously. Thispossibility decreases exponentially as the block is deeper inthe chain. Therefore, a block is considered to be finalizedonly when it is a certain k, usually six blocks deep in thechain. This delays the transaction confirmation significantly.Moreover, PoW mechanism is also vulnerable to 51\% attack.In particular, if a single party controls more than 51\% of thenetwork’s total computational power, they can spend theircoins multiple times (in cryptocurrency networks) or preventother transactions by adding conflicting blocks to the chain.While 51\% attacks might not be a serious problem for largeblockchain networks, the newly established networks withsmall and limited total computational power are especiallyvulnerable 
-
-
-\subsubsection*{Proof of Stake}
-The first Proof-of-Stakes (PoS) network, Peercoin [16], wasdeveloped as a PoX consensus mechanism with the aim toreduce the computational requirements of PoW. Participantswith higher coin age, i.e., product of network tokens and theirholding time, have higher chances to be selected. Specifi-cally, each node in Peercoin solves a PoW puzzle with itsown difficulty, which can be reduced by consuming coin age.In the more recent PoS networks, the solution searching iscompletely removed, and the block leaders are no longerselected by computational power. Instead, they are selectedbased on the stakes that they are holding.With the stake-based leader selection process, a node’schance to be selected to be a leader no longer depends on itscomputational power, and thus energy consumption of PoS mechanisms is significantly reduced compared with that ofPoW. Moreover, the block generation and transaction con-firmation speeds are kept at relatively low constant rates bythe PoW networks to ensure security because there are manydifferent blocks proposed by the miners. In contrast, sinceonly one block is made in each round of PoS mechanisms,the block generation and transaction confirmation speedsare usually much faster, and thus PoS mechanism starts tobecome popular recently. 
-
-PoS (Proof of stake) is an energy-saving alternative to PoW.Miners in PoS have to prove the ownership of the amountof currency. It is believed that people with more currencieswould be less likely to attack the network. The selectionbased on account balance is quite unfair because the singlerichest person is bound to be dominant in the network. As aresult, many solutions are proposed with the combination ofthe stake size to decide which one to forge the next block.In particular, Blackcoin [26] uses randomization to predict thenext generator. It uses a formula that looks for the lowesthash value in combination with the size of the stake. Peercoin[21] favors coin age based selection. In Peercoin, older andlarger sets of coins have a greater probability of mining thenext block. Compared to PoW, PoS saves more energy andis more effective. Unfortunately, as the mining cost is nearlyzero, attacks might come as a consequence. Many blockchainsadopt PoW at the beginning and transform to PoS gradually.For instance, ethereum is planing to move from Ethash ( 
-
-
-
-
-
-With a solid understanding of how blocks are structured and how consensus mechanisms (whether proof-of-work or proof-of-stake) enable nodes to agree upon the canonical chain, we now turn our attention to the next layer of the architecture: how transactions and smart contract code are actually executed
-
-\section{Ethereum Virtual Machine}
-The Ethereum Virtual Machine (EVM) is a deterministic state machine that executes the bytecode of the smart contract identically on all nodes \cite{wood2014yellow}. However, it is not Turing complete in the classical sense: execution is strictly resource-bounded by gas - every instruction has a metered gas cost, and execution halts once the supplied gas is exhausted. 
-This gas-bounded execution guarantees termination and prevents non-halting or deliberately expensive programs from stalling the network; accordingly, the EVM is often described as \emph{quasi–Turing complete} (computationally universal only under a finite gas budget) \cite{antonopoulos2018mastering}\cite{wood2014yellow}.
-
-\subsection{Gas}
-Gas is the unit of account for computational effort in Ethereum. Each EVM opcode has an associated gas cost, and a transaction specifies an upper bound (gas limit) on how much gas may be consumed during its execution.
-
-Gas serves three core purposes: 
-\begin{itemize}
-    \item \emph{metering} computation and storage, so that the use of the resources is paid for by the initiator of a transaction.
-    \item \emph{DoS resistance} and spam prevention, because excessively resource-intensive executions become economically infeasible \cite{wood2014yellow}\cite{article_1559}.
-    \item \emph{economic prioritization} of limited block space via fees
-\end{itemize}
-
-Since EIP-1559\footnote{\url{https://eips.ethereum.org/EIPS/eip-1559}}, each block includes a dynamically adjusted \emph{base fee} that is burned and a user-specified \emph{priority fee} (tip) paid to the block proposer. 
-Users submit \texttt{maxFeePerGas} and \texttt{maxPriorityFeePerGas}; the effective price paid per gas equals \(\min(\texttt{maxFeePerGas}, \text{base fee} + \texttt{maxPriorityFeePerGas})\). 
-Blocks have an elastic gas target and the base fee increases or decreases depending on recent block gas usage, stabilizing the fee market while preserving incentives.
-
-
-\subsection{Architecture}
-
-\begin{figure}[!htbp]
-    \centering
-    \includegraphics[width=\linewidth]{images/evm}
-    \caption{Ethereum Virtual Machine illustration\footnote{\url{https://ethereum.org/developers/docs/evm/}}.}
-    \label{fig:evm}
-\end{figure}
-
-where 
-\begin{itemize}
-    \item Program Counter (PC) - component that tracks the current instruction that it is executing;
-    \item EVM code - immutable compoennt holds the bytecode of the smart contract that is being executed.
-    \item Account Storage - part of the persistent state of the blockchain where the data of smart contracts are stored permanently. There are two types of accounts in the Ethereum environment:\texttt{ (i) }Externally Owned Account (EOA) that is owned by any external entity. Most commonly, it is referred to as a user account; and\texttt{ (ii) }Smart Contract Account that is owned by a smart contract and often controlled by an EOA that interacts with the deployed smart contract \cite{Buterin2013}.
-\end{itemize}
-
-\subsection{Memory}
-
-\begin{itemize}
-    \item \textbf{Stack} - low-level memory structure that operates on a last-in, first-out (LIFO) principle. It stores small local variables and value types that are required for immediate execution. The stack is limited to 1024 elements, each 256 bits wide, and is accessible only through EVM opcodes or inline assembly. Careful management is essential, as exceeding its capacity causes the execution of the contract to fail \cite{evm_storage}.
-    \item \textbf{Memory} - dynamic and expandable storage area allocated for each function execution, which is then discarded once the function has finished. Unlike the stack, which is restricted to temporary data storage, memory allows for more flexible and longer-lived data retention.
-    \item \textbf{Storage} - persistent storage is associated with every smart contract and holds its state. Read and write operations in storage are relatively more expensive than those performed in memory. The data in storage are maintained as key-value pairs \cite{evm_storage_arxiv}.
-    \item \textbf{Calldata} - read-only and immutable storage that holds function arguments and transaction data for the duration of a transaction call.
-\end{itemize}
-
-
-
-
-
-
-% Do not forget to include Introduction
-%---------------------------------------------------------------
-\chapter{Introduction}
-% uncomment the following line to create an unnumbered chapter
-%\chapter*{Introduction}\addcontentsline{toc}{chapter}{Introduction}\markboth{Introduction}{Introduction}
-%---------------------------------------------------------------
-
-% The following environment can be used as a mini-introduction for a chapter. Use that any way it pleases you (or comment it out). It can contain, for instance, a summary of the chapter. Or, there can be a quotation.
-\begin{chapterabstract}
-	\lipsum[1]
-\end{chapterabstract}
-
-\lipsum[2][1-4]{} [1]
-
-\lipsum[4]
-
-%---------------------------------------------------------------
-\section{Ut enim ad minim veniam}
-%---------------------------------------------------------------
-
-\lipsum[6-8]
-
-\begin{figure}
-\centering
-%\includegraphics[scale=0.4]{pic/index}
-\resizebox{\textwidth}{!}{
-\begin{tikzpicture}[level/.style={sibling distance=60mm/#1}]
-\node [circle,draw] (z){$n$}
-  child {node [circle,draw] (a) {$\frac{n}{2}$}
-    child {node [circle,draw] (b) {$\frac{n}{2^2}$}
-      child {node {$\vdots$}
-        child {node [circle,draw] (d) {$\frac{n}{2^k}$}}
-        child {node [circle,draw] (e) {$\frac{n}{2^k}$}}
-      } 
-      child {node {$\vdots$}}
-    }
-    child {node [circle,draw] (g) {$\frac{n}{2^2}$}
-      child {node {$\vdots$}}
-      child {node {$\vdots$}}
-    }
-  }
-  child {node [circle,draw] (j) {$\frac{n}{2}$}
-    child {node [circle,draw] (k) {$\frac{n}{2^2}$}
-      child {node {$\vdots$}}
-      child {node {$\vdots$}}
-    }
-  child {node [circle,draw] (l) {$\frac{n}{2^2}$}
-    child {node {$\vdots$}}
-    child {node (c){$\vdots$}
-      child {node [circle,draw] (o) {$\frac{n}{2^k}$}}
-      child {node [circle,draw] (p) {$\frac{n}{2^k}$}
-          child [grow=right] {node (q) {$ = O_{k = \lg n}(n)$} edge from parent[draw=none]
-            child [grow=up] {node (r) {$\vdots$} edge from parent[draw=none]
-              child [grow=up] {node (s) {$O_2(n)$} edge from parent[draw=none]
-                child [grow=up] {node (t) {$O_1(n)$} edge from parent[draw=none]
-                  child [grow=up] {node (u) {$O_0(n)$} edge from parent[draw=none]}
-                }
-              }
-            }
-            child [grow=down] {node (v) {$O(n \cdot \lg n)$}edge from parent[draw=none]}
-        }
-      }
-    }
-  }
-};
-\path (a) -- (j) node [midway] {+};
-\path (b) -- (g) node [midway] {+};
-\path (k) -- (l) node [midway] {+};
-\path (k) -- (g) node [midway] {+};
-\path (d) -- (e) node [midway] {+};
-\path (o) -- (p) node [midway] {+};
-\path (o) -- (e) node (x) [midway] {$\cdots$}
-  child [grow=down] {
-    node (y) {$O\left(\displaystyle\sum_{i = 0}^k 2^i \cdot \frac{n}{2^i}\right)$}
-    edge from parent[draw=none]
-  };
-\path (q) -- (r) node [midway] {+};
-\path (s) -- (r) node [midway] {+};
-\path (s) -- (t) node [midway] {+};
-\path (s) -- (l) node [midway] {=};
-\path (t) -- (u) node [midway] {+};
-\path (z) -- (u) node [midway] {=};
-\path (j) -- (t) node [midway] {=};
-\path (y) -- (x) node [midway] {$\Downarrow$};
-\path (v) -- (y)
-  node (w) [midway] {$O\left(\displaystyle\sum_{i = 0}^k n\right) = O(k \cdot n)$};
-\path (q) -- (v) node [midway] {=};
-\path (e) -- (x) node [midway] {+};
-\path (o) -- (x) node [midway] {+};
-\path (y) -- (w) node [midway] {$=$};
-\path (v) -- (w) node [midway] {$\Leftrightarrow$};
-\path (r) -- (c) node [midway] {$\cdots$};
-\end{tikzpicture}}
-\caption{Lorem ipsum dolor sit amet}\label{img:index}
-\end{figure}
-
-%---------------------------------------------------------------
-\section{Ut enim ad minim veniam}
-%---------------------------------------------------------------
-
-\lipsum[2-4]
-
-%---------------------------------------------------------------
-\subsection{Ut enim ad minim veniam}
-%---------------------------------------------------------------
-
-Curabitur ligula sapien, pulvinar a vestibulum quis, facilisis vel sapien. Duis condimentum augue id magna semper rutrum. Aliquam ornare wisi eu metus. Fusce aliquam vestibulum ipsum. Vivamus ac leo pretium faucibus~\ref{img:index}.
-
-\begin{itemize}
-    \item Ut enim ad minim veniam, quis nostrud
-    \item Ut enim ad minim 
-    \item Ut enim ad minim veniam, quis 
-    \begin{itemize}
-        \item Ut enim ad
-        \item Ut enim ad
-        \begin{itemize}
-            \item Ut enim 
-            \item Ut enim 
-            \begin{itemize}
-            \item Ut enim 
-            \item Ut enim 
-        \end{itemize}
-        \end{itemize}
-    \end{itemize}
-\end{itemize}
-
-\section{Class aptent taciti}
-
-
-Even though dark mode can be very nice for websites and apps, it does not look good when printed. Consider using white mode when print-screening dark-moded content. The contrast with the white page is too big, as seen in Figure~\ref{fig:Darkmode}.
-
-\begin{figure}[!htbp]
-    \centering
-    \includegraphics[width=\linewidth]{images/darkmode}
-    \caption{White and dark mode comparison.~\cite{darkMode}}
-    \label{fig:Darkmode}
-\end{figure}
-
-
-\subsection{Class aptent taciti}
-
-\lipsum[6-7]
-
-\begin{enumerate}
-    \item Ut enim ad minim veniam, quis nostrud
-    \item Ut enim ad minim 
-    \item Ut enim ad minim veniam, quis 
-    \begin{enumerate}
-        \item Ut enim ad
-        \item Ut enim ad
-        \begin{enumerate}
-            \item Ut enim 
-            \item Ut enim 
-            \begin{enumerate}
-            \item Ut enim 
-            \item Ut enim 
-        \end{enumerate}
-        \end{enumerate}
-    \end{enumerate}
-\end{enumerate}
-
-
-%---------------------------------------------------------------
-\section{Ut enim ad minim veniam, quis nostrud}
-%---------------------------------------------------------------
-
-Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Nulla non arcu lacinia neque faucibus fringilla. Vestibulum erat nulla, ullamcorper nec, rutrum non, nonummy ac, erat. Aliquam erat volutpat. Proin pede metus, vulputate nec, fermentum fringilla, vehicula vitae, justo.\footnote{Ut enim ad minim veniam, quis nostrud exercitation.} Etiam dictum tincidunt diam. In laoreet, magna id viverra tincidunt, sem odio bibendum justo, vel imperdiet sapien wisi sed libero. Nulla est. Maecenas fermentum, sem in pharetra pellentesque, velit turpis volutpat ante, in pharetra metus odio a lectus. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. 
-
-\begin{lstlisting}[caption={Zbytečný kód},label=list:8-6,captionpos=b,float,abovecaptionskip=-\medskipamount,abovecaptionskip=\medskipamount,language=C]
-    #include<stdio.h>
-    #include<iostream>
-    // A comment
-    int main(void)
-    {
-        printf("Hello World\n");
-        return 0;
-    }
-\end{lstlisting}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% alternative using package minted for source highlighting
-% package minted requires execution with `-shell-escape'
-% e.g., `xelatex -shell-escape ctufit-thesis.tex'
-% \begin{listing}
-% \begin{minted}{C}
-%     #include<stdio.h>
-%     #include<iostream>
-%     // A comment
-%     int main(void)
-%     {
-%         printf("Hello World\n");
-%         return 0;
-%     }
-% \end{minted}
-% \caption{Zbytečný kód}\label{list:8-6}
-% \end{listing}
-% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-Nullam feugiat, turpis at pulvinar vulputate, erat libero tristique tellus, nec bibendum odio risus sit amet ante. Aenean id metus id velit ullamcorper pulvinar. Fusce wisi. Integer lacinia. Aliquam id dolor. Pellentesque pretium lectus id turpis. Suspendisse sagittis ultrices augue. In laoreet, magna id viverra tincidunt, sem odio bibendum justo, vel imperdiet sapien wisi sed libero. Sed ac dolor sit amet purus malesuada congue.~\cite{Crochemore2002}
-
-Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos hymenaeos. Fusce suscipit libero eget elit. Etiam dui sem, fermentum vitae, sagittis id, malesuada in, quam. Aliquam id dolor. Curabitur bibendum justo non orci. Duis viverra diam non justo. Curabitur ligula sapien, pulvinar a vestibulum quis, facilisis vel sapien. Duis condimentum augue id magna semper rutrum. Aliquam ornare wisi eu metus. Fusce aliquam vestibulum ipsum. Vivamus ac leo pretium faucibus.~\cite{Motwani2014}
-
-%---------------------------------------------------------------
-\subsection{Ut enim ad minim veniam, quis nostrud}
-%---------------------------------------------------------------
-
-Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Nulla non arcu lacinia neque faucibus fringilla. Vestibulum erat nulla, ullamcorper nec, rutrum non, nonummy ac, erat. Aliquam erat volutpat. Proin pede metus, vulputate nec, fermentum fringilla, vehicula vitae, justo. Etiam dictum tincidunt diam. In laoreet, magna id viverra tincidunt, sem odio bibendum justo.~\cite{Sestakova2018} 
-
-% \begin{table}\centering
-% \begin{tabular}{l|l|c|c}
-% 	Typ		& Prostředí		& \LaTeX{}ovská zkratka	& \TeX{}ovská zkratka	\tabularnewline \hline 
-%  	Text		& \verb|math|		& \verb|\(...\)|	& \verb|$...$|	\tabularnewline \hline
-%  	Displayed	& \verb|displaymath|	& \verb|\[...\]|	& \verb|$$...$$|	\tabularnewline 
-% \end{tabular}
-% \caption[Příklad tabulky]{Zadávání matematiky}
-% \label{tab:matematika}
-% \end{table}
-
-
-Nulla est. Maecenas fermentum, sem in pharetra pellentesque, velit turpis volutpat ante, in pharetra metus odio a lectus. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Nullam feugiat, turpis at pulvinar vulputate, erat libero tristique tellus, nec bibendum odio risus sit amet ante. Aenean id metus id velit ullamcorper pulvinar. 
-
-\subsubsection{Class aptent taciti}
-
-\begin{definition}[Optional label]
-Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos hymenaeos. Fusce suscipit libero eget elit. Etiam dui sem, fermentum vitae, sagittis id, malesuada in, quam. Aliquam id dolor. Curabitur bibendum justo non orci.
-\end{definition}
-
-\begin{example}
-Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos hymenaeos. Fusce suscipit libero eget elit. Etiam dui sem, fermentum vitae, sagittis id, malesuada in, quam. Aliquam id dolor. Curabitur bibendum justo non orci.
-\end{example}
-
-\paragraph{Nadpis 5. úrovně}
-
-\begin{theorem}
-Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos hymenaeos. Fusce suscipit libero eget elit. Etiam dui sem, fermentum vitae, sagittis id, malesuada in, quam. Aliquam id dolor. Curabitur bibendum justo non orci.
-\end{theorem}
-
-\begin{proof}
-Fusce suscipit libero eget elit. Etiam dui sem, fermentum vitae, sagittis id, malesuada in, quam. Aliquam id dolor. Curabitur bibendum justo non orci.
-\end{proof}
-
-\paragraph{Level 5 heading}
-
-\begin{corollary}
-Fusce suscipit libero eget elit. Etiam dui sem, fermentum vitae, sagittis id, malesuada in, quam. Aliquam id dolor. Curabitur bibendum justo non orci.
-\end{corollary}
-
-\begin{proposition}
-Fusce suscipit libero eget elit. Etiam dui sem, fermentum vitae, sagittis id, malesuada in, quam. Aliquam id dolor. Curabitur bibendum justo non orci.
-\end{proposition}
-
-\begin{note}
-Fusce suscipit libero eget elit. Etiam dui sem, fermentum vitae, sagittis id, malesuada in, quam. Aliquam id dolor. Curabitur bibendum justo non orci.
-\end{note}
-
-\begin{remark}
-Fusce suscipit libero eget elit. Etiam dui sem, fermentum vitae, sagittis id, malesuada in, quam. Aliquam id dolor. Curabitur bibendum justo non orci.
-\end{remark}
-
-\begin{lemma}
-Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos hymenaeos. Fusce suscipit libero eget elit. Etiam dui sem, fermentum vitae, sagittis id, malesuada in, quam. Aliquam id dolor. Curabitur bibendum justo non orci.
-\end{lemma}
-
-\lipsum[1-2]
-
-% \subsection{Class aptent taciti sociosqu}
-% 
-% \lipsum[4-5]
-
-%---------------------------------------------------------------
-\chapter{Lorem ipsum}
-%---------------------------------------------------------------
-
-\begin{chapterabstract}
-	Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Curabitur sagittis hendrerit ante. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos hymenaeos. Cras pede libero, dapibus nec, pretium sit amet, tempor quis. Sed vel lectus. Donec odio tempus molestie, porttitor ut, iaculis quis, sem. Cras pede libero, dapibus nec, pretium sit amet, tempor quis. Sed vel lectus. 
-\end{chapterabstract}
-
-Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Curabitur sagittis hendrerit ante. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos hymenaeos. Cras pede libero, dapibus nec, pretium sit amet, tempor quis. Sed vel lectus. Donec odio tempus molestie, porttitor ut, iaculis quis, sem. Suspendisse sagittis ultrices augue. Donec ipsum massa, ullamcorper in, auctor et, scelerisque sed, est. In sem justo, commodo ut, suscipit at, pharetra vitae, orci. Pellentesque pretium lectus id turpis.~\cite{Kopka2004}
-
-\section{Donec odio tempus molestie}
-
-\lipsum[2]~\cite{def:1, def:2}
-
-\subsection{Class aptent taciti}
-
-\lipsum[2-3]
-
-\begin{description}
-\item[Kapitola 1] Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Curabitur sagittis hendrerit ante. Class aptent taciti sociosqu ad litora tor\-quent per conubia nostra, per inceptos hymenaeos. Cras pede libero, dapibus nec, pretium sit amet, tempor quis.
-
-\item[Kapitola 2] Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Curabitur sagittis hendrerit ante. Class aptent taciti sociosqu ad litora tor\-quent per conubia nostra, per inceptos hymenaeos. Cras pede libero, dapibus nec, pretium sit amet, tempor quis.
-
-\item[Kapitola 3] Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Curabitur sagittis hendrerit ante. Class aptent taciti sociosqu ad litora tor\-quent per conubia nostra, per inceptos hymenaeos. Cras pede libero, dapibus nec, pretium sit amet, tempor quis.
-
-\item[Kapitola 4] Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Curabitur sagittis hendrerit ante. Class aptent taciti sociosqu ad litora tor\-quent per conubia nostra, per inceptos hymenaeos. Cras pede libero, dapibus nec, pretium sit amet, tempor quis.~\cite{jakZiskatAcko}
-\end{description}
-
-\lipsum[2]
-
-\section{Lorem ipsum dolor sit amet}
-
-\lipsum[3-5]
