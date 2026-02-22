@@ -310,40 +310,35 @@ The security analysis of software systems, particularly smart contracts deployed
 
 Static analysis encompasses techniques that examine source code, bytecode, or other program representations to infer properties about all possible executions without actually running the program~\cite{nielson1999principles}. The appeal of static analysis lies in its soundness guarantees—a sound static analyser will never miss a bug of the class it is designed to detect—and its ability to reason about infinite execution paths. However, this power comes at the cost of precision: static analysers may report false positives, flagging code as potentially buggy when no actual vulnerability exists~\cite{rice1953classes}.
 
-In the context of smart contract security, static analysis has become the predominant first line of defence. Tools such as Slither~\cite{feist2019slither}, Securify~\cite{tsankov2018securify}, and Mythril~\cite{mueller2018smashing} employ various static techniques to detect common vulnerability patterns including reentrancy, integer overflow, and access control violations. The effectiveness of these tools depends critically on the program representations they employ and the algorithms they execute over those representations.
 
 \subsection{Abstract Syntax Tree}
 \label{subsec:ast}
 
 The abstract syntax tree (AST) serves as the foundational representation for most static analysis techniques. An AST is a hierarchical tree structure that captures the syntactic structure of source code while abstracting away concrete details such as whitespace, comments, and parentheses that do not affect program semantics~\cite{aho2006compilers}. Each node in the tree corresponds to a syntactic construct—a function declaration, an assignment statement, a binary expression—and the tree's structure reflects the nesting and composition of these constructs.
 
-For Solidity smart contracts, the AST provides a natural representation for pattern matching and feature extraction. Consider the detection of unchecked external calls, a prerequisite for reentrancy vulnerabilities. An analyser can traverse the AST to identify \texttt{call} expressions, examine their surrounding context to determine whether return values are checked, and flag instances where failures are silently ignored. This pattern-based approach, while conceptually simple, proves remarkably effective for detecting many common vulnerability classes~\cite{feist2019slither}.
-
-The AST also serves as the basis for computing syntactic metrics and extracting features for machine learning approaches. Metrics such as cyclomatic complexity, function length, and nesting depth can be computed directly from AST traversal~\cite{mccabe1976complexity}. More sophisticated feature extraction might identify the presence of specific syntactic patterns—loops containing external calls, state modifications after external calls, or complex inheritance hierarchies—that correlate with vulnerability presence~\cite{zhuang2020smart}.
+[TODO describe AST maps to code]
 
 However, the AST has significant limitations for semantic analysis. Because it captures only syntactic structure, it cannot directly represent the flow of data through a program or the possible paths of control flow. Two syntactically similar code fragments may exhibit vastly different runtime behaviours depending on the values of variables and the paths taken through conditional statements. These limitations motivate the use of more semantically rich representations.
 
 \subsection{Intermediate Representation}
 \label{subsec:ir}
 
-Intermediate representations (IRs) bridge the gap between source-level syntax and low-level execution semantics by normalising diverse syntactic constructs into a uniform format amenable to analysis~\cite{muchnick1997advanced}. A well-designed IR strips away syntactic sugar, resolves implicit operations, and exposes the underlying computational structure of the program.
+Intermediate representations (IRs) bridge the gap between source-level syntax and low-level execution semantics by normalizing diverse syntactic constructs into a uniform format amenable to analysis~\cite{muchnick1997advanced}. A well-designed IR strips away syntactic sugar, resolves implicit operations, and exposes the underlying computational structure of the program. {FIX OLD CITE}
 
-In the context of Solidity analysis, IRs play a crucial role in normalising the language's many idiosyncrasies. Solidity supports multiple ways to perform external calls (\texttt{call}, \texttt{delegatecall}, \texttt{transfer}, \texttt{send}), various forms of type coercion, and complex inheritance semantics with function overriding. An IR can normalise these constructs into a smaller set of primitive operations, simplifying subsequent analysis~\cite{grech2018madmax}.
-
-The Ethereum Virtual Machine (EVM) bytecode itself serves as a form of IR, but it presents significant challenges for analysis. EVM bytecode uses a stack-based execution model with dynamic jump destinations, making control flow recovery difficult~\cite{brent2018vandal}. Higher-level IRs that preserve source-level information while normalising semantics—such as the Yul intermediate language used by the Solidity compiler—often provide a more tractable analysis target.
-
-Wake's internal model employs a custom IR that preserves source mapping information while normalising Solidity constructs for analysis. This design choice enables Wake to perform sophisticated cross-function analysis while maintaining the ability to report findings at the source level, a crucial requirement for actionable security reports. The IR serves as the foundation upon which control flow and data flow analyses are constructed.
+[TODO smth interesting in general related to code]
 
 \subsection{Control Flow Analysis}
 \label{subsec:control-flow}
 
 Control flow analysis (CFA) determines the possible paths of execution through a program, representing this information as a control flow graph (CFG) where nodes represent basic blocks—sequences of instructions with no internal branching—and edges represent possible transfers of control~\cite{allen1970control}. The CFG provides the structural backbone for many subsequent analyses, enabling reasoning about path reachability, loop structure, and the ordering of operations.
 
-For smart contract security, control flow analysis enables the detection of vulnerabilities that depend on execution ordering. Reentrancy vulnerabilities, for example, occur when an external call can transfer control to an attacker who then re-enters the vulnerable contract before the original invocation completes. Detecting this pattern requires understanding that certain paths through the CFG place external calls before state updates, violating the checks-effects-interactions pattern~\cite{consensys2023reentrancy}.
+[Again old cite, if you cite ,you can directly copy text from book or web page]
+
 
 The call graph, a related structure that captures the calling relationships between functions, extends control flow analysis to the interprocedural level. Each node in the call graph represents a function, and edges represent potential call relationships. In the presence of dynamic dispatch—common in object-oriented languages and in Solidity's inheritance system—call graph construction becomes challenging, as the target of a call may depend on runtime type information~\cite{grove2001framework}.
+entially leading to precision loss.
 
-For Solidity, the call graph must account for both internal function calls and external message calls to other contracts. External calls introduce additional complexity because the target contract's code may not be available for analysis, and even when available, the call may be dispatched through a proxy pattern that obscures the actual implementation~\cite{chen2020defining}. Sound analysis requires conservative approximation of possible call targets, potentially leading to precision loss.
+[TODO some grapth with explanation, image]
 
 Reachability analysis over the CFG determines which program points can potentially be reached from a given starting point. This analysis is fundamental for pruning infeasible paths from consideration and for establishing preconditions under which vulnerabilities can be triggered. If a vulnerable code pattern exists only on unreachable paths, it poses no actual security risk.
 
@@ -358,46 +353,17 @@ Taint analysis, a specialisation of data flow analysis, tracks the flow of untru
 
 Data flow analysis faces particular challenges in Solidity due to storage aliasing. Solidity's storage model maps state variables to 256-bit storage slots according to complex packing rules, and dynamic data structures such as mappings and arrays use hash-based slot computation~\cite{antonopoulos2018mastering}. Two syntactically distinct storage references may alias to the same slot, creating data flow paths invisible to na\"ive analysis. Precise handling of storage aliasing requires modelling Solidity's storage layout rules and potentially employing alias analysis techniques~\cite{andersen1994program}.
 
-Additionally, the transactional semantics of smart contracts—where each transaction executes atomically and state persists between transactions—creates data flow paths that span multiple invocations. A value written in one transaction may be read in a subsequent transaction, creating cross-transaction data dependencies that single-invocation analysis cannot capture.
-
-\subsection{Inter-procedural Analysis}
-\label{subsec:inter-procedural}
-
-While intraprocedural analysis examines individual functions in isolation, many vulnerability patterns require reasoning across function boundaries. Interprocedural analysis extends data flow and control flow analyses to operate over entire programs, tracking how values and control flow cross function boundaries~\cite{reps1995precise}.
-
-The fundamental challenge of interprocedural analysis is maintaining both precision and scalability. A fully context-sensitive analysis that distinguishes between different call sites can provide precise results but scales poorly, as the number of contexts may grow exponentially with call depth. Context-insensitive analysis, which merges information from all call sites, scales better but may produce imprecise results that manifest as false positives~\cite{sharir1981two}.
-
-Function summaries provide a middle ground, capturing the input-output behaviour of functions in a form that can be instantiated at call sites without re-analysing the function body~\cite{reps1995precise}. For security analysis, a summary might capture which parameters can influence which return values, which state variables are read or written, and which external calls may be performed. Pre-computed summaries enable modular analysis where each function is analysed once, and the summaries are composed to reason about whole-program behaviour.
-
-In the smart contract domain, interprocedural analysis is essential for detecting vulnerabilities that span multiple functions. Access control vulnerabilities often manifest as public functions that, through a chain of internal calls, perform privileged operations without adequate authorisation checks. Detecting such vulnerabilities requires tracing control and data flow from public entry points through internal function calls to security-sensitive operations~\cite{brent2020ethainter}.
-
-Cross-contract analysis presents additional challenges. Smart contracts frequently interact with other contracts, and vulnerabilities may arise from the composition of individually secure contracts. Analysis of cross-contract interactions requires either whole-system analysis—which may be impossible when contract source is unavailable—or the use of conservative assumptions about external contract behaviour~\cite{grech2018madmax}.
-
-
 \section{Dynamic Analysis}
 \label{sec:dynamic-analysis}
 
-While static analysis reasons about all possible executions, dynamic analysis observes actual program behaviour during concrete executions~\cite{ball1999concept}. This complementary approach sacrifices soundness—a dynamic analysis can only observe the executions it actually runs—in exchange for precision: the behaviours observed during dynamic analysis represent actual, not merely potential, program behaviour.
-
-Dynamic analysis proves particularly valuable for smart contract security because the blockchain environment involves complex interactions with external state, other contracts, and economic mechanisms that are difficult to model statically. Observing actual transaction execution can reveal behaviours that static analysis either misses or conservatively overapproximates.
-
-\subsection{Transaction Trace Analysis}
-\label{subsec:transaction-traces}
-
-Transaction traces provide a detailed record of smart contract execution, capturing the sequence of operations performed, the values of variables at each step, and the outcomes of external interactions. On Ethereum and compatible networks, traces can be obtained from archive nodes that preserve historical state, enabling retrospective analysis of past transactions~\cite{chen2019dataether}.
-
-A transaction trace typically includes the sequence of internal and external calls, the input data and return values for each call, state changes (storage writes), event emissions, and any revert conditions encountered. This information enables reconstruction of the precise execution path taken, facilitating debugging and forensic analysis of security incidents.
-
-State differentials, computed by comparing contract state before and after transaction execution, reveal the net effect of a transaction on persistent storage. For security analysis, state differentials help identify transactions that modify access control state, transfer ownership, or manipulate balances in unexpected ways. Anomaly detection techniques can identify transactions whose state differentials deviate significantly from historical patterns, potentially indicating exploitation~\cite{zhou2020ever}.
-
-Revert reason analysis examines transactions that failed, extracting information about the cause of failure from revert strings and custom errors. Patterns in reverted transactions can reveal attempted attacks that were blocked by existing checks, informing defensive analysis. A sudden spike in reverts from a particular function might indicate an ongoing attack probe.
+While static analysis reasons about all possible executions, dynamic analysis observes actual program behaviour during concrete executions. This complementary approach sacrifices soundness—a dynamic analysis can only observe the executions it actually runs—in exchange for precision: the behaviours observed during dynamic analysis represent actual, not merely potential, program behaviour. [TODO cite]
 
 \subsection{Fuzz Testing}
 \label{subsec:fuzz-testing}
 
-Fuzz testing (fuzzing) is a dynamic testing technique that automatically generates test inputs to explore program behaviour and discover bugs~\cite{miller1990empirical}. Modern fuzzing has evolved significantly from its origins in random input generation, incorporating coverage guidance, constraint solving, and domain-specific knowledge to systematically explore program state space~\cite{manes2019art}.
+Fuzz testing (fuzzing) is a dynamic testing technique that automatically generates test inputs to explore program behaviour and discover bugs [TODO cite smth normal related to text and fuzzing, not book from 1980 year]. Modern fuzzing has evolved significantly from its origins in random input generation, incorporating coverage guidance, constraint solving, and domain-specific knowledge to systematically explore program state space~\cite{manes2019art}.
 
-For smart contract security, fuzzing must account for the stateful nature of contract execution. A single transaction rarely suffices to reach deep contract states; rather, sequences of transactions are required to manipulate contract state into configurations where vulnerabilities manifest. Stateful fuzzing maintains contract state across transaction sequences, enabling exploration of states reachable only through specific transaction orderings~\cite{grieco2020echidna}.
+[TODO maybe a table with some stats interesting, then refernece and small discussion about it]
 
 Invariant-based fuzzing provides properties that should hold across all reachable states. The fuzzer then attempts to generate transaction sequences that violate these invariants. Common invariants include balance conservation (total value in should equal total value out), access control consistency (only authorised addresses can perform privileged operations), and state machine integrity (the contract should only be in valid states)~\cite{wustholz2020harvey}.
 
@@ -405,17 +371,14 @@ Coverage-guided fuzzing uses feedback from previous executions to guide input ge
 
 Corpus generation and management play crucial roles in fuzzing effectiveness. The corpus—the set of seed inputs from which the fuzzer generates new inputs—significantly influences exploration efficiency. Techniques such as corpus distillation, which removes redundant inputs that do not contribute new coverage, and corpus scheduling, which prioritises inputs likely to lead to new discoveries, improve fuzzing throughput~\cite{rebert2014optimizing}.
 
-Wake includes an integrated fuzzing framework that supports stateful property-based testing of Solidity contracts. By providing a Python-based test harness with coverage instrumentation and property specification capabilities, Wake enables developers and auditors to systematically explore contract behaviour. This dynamic analysis capability complements Wake's static analysis features, providing a more comprehensive security assessment.
-
-
 \section{Formal Verification}
 \label{sec:formal-verification}
 
 Formal verification employs mathematical techniques to prove that programs satisfy specified properties with certainty, not merely with high probability as testing provides~\cite{clarke2018model}. While static analysis and testing may miss vulnerabilities or report false positives, formal verification can provide guarantees: if verification succeeds, the property provably holds; if it fails, a concrete counterexample demonstrates the violation.
 
-The appeal of formal verification for smart contract security is evident. Smart contracts manage significant financial value and, once deployed, cannot easily be patched. Vulnerabilities can lead to irreversible losses, as demonstrated by numerous high-profile exploits~\cite{atzei2017survey}. Formal verification offers the prospect of eliminating entire classes of bugs with mathematical certainty.
-
 However, formal verification faces significant practical challenges. The techniques are computationally expensive, often requiring substantial manual effort to specify properties and guide the verification process. Scalability limitations restrict application to smaller codebases or require abstraction that may introduce imprecision. Additionally, verification establishes conformance to specification, but specifications themselves may be incomplete or incorrect, leaving gaps in security coverage.
+
+[TODO mention, that even itis well known existed technique for dynami analysis, it has very weak application in Ehereum and smart contracts]
 
 \subsection{Symbolic Execution}
 \label{subsec:symbolic-execution}
@@ -430,16 +393,7 @@ In the smart contract domain, tools such as Mythril~\cite{mueller2018smashing} a
 
 Environment modelling presents particular challenges for smart contract symbolic execution. The blockchain environment includes not just the contract under analysis but the entire ecosystem of other contracts, the block context, and the transaction parameters. Accurate modelling requires assumptions about what external contracts might do, what values environmental variables might take, and how transactions might be sequenced. Conservative assumptions lead to false positives; optimistic assumptions may miss real vulnerabilities~\cite{luu2016making}.
 
-\subsection{Model Checking}
-\label{subsec:model-checking}
-
-Model checking exhaustively explores the state space of a finite-state system to verify that specified properties hold in all reachable states~\cite{clarke1999model}. Given a model of the system and a property expressed in temporal logic, a model checker either confirms that the property holds or produces a counterexample trace demonstrating a violation.
-
-For smart contracts, model checking can verify properties that span multiple transactions and involve temporal ordering. Properties such as ``whenever a withdrawal is requested, funds are eventually transferred'' or ``the contract never enters a state from which funds cannot be recovered'' require reasoning about sequences of states, which temporal logics naturally express~\cite{mavridou2018designing}.
-
-The state explosion problem—the exponential growth of state space with the number of state variables—limits direct model checking to relatively small systems. Abstraction techniques address this limitation by constructing simplified models that preserve relevant properties while reducing state space. Predicate abstraction, for example, tracks only the truth values of specified predicates rather than full variable values, potentially reducing an infinite state space to a finite one~\cite{graf1997construction}.
-
-Bounded model checking (BMC) offers a pragmatic compromise, exploring executions up to a fixed depth rather than exhaustively checking all reachable states~\cite{biere1999symbolic}. While BMC cannot prove that properties hold universally, it can efficiently find bugs that manifest within the bound and provides coverage guarantees up to the specified depth. For smart contracts, where most vulnerabilities manifest within a small number of transactions, bounded model checking provides practical value.
+[https://www.cyfrin.io/blog/solidity-smart-contract-formal-verification-symbolic-execution#layer-4-or-formal-verification]
 
 \subsection{Theorem Proving}
 \label{subsec:theorem-proving}
@@ -689,24 +643,13 @@ Building upon the internal model, Wake provides a comprehensive infrastructure f
 \subsubsection*{Detectors}
 \label{subsubsec:wake-detectors}
 
-Wake's static analysis framework enables the implementation of custom vulnerability detectors. Each detector is a Python class that:
+Wake's static analysis framework enables the implementation of custom vulnerability detectors. It already covers patterns like reentrancy, unsafe ERC-20 call, unused constructions and many others\footnote{\url{https://ackee.xyz/wake/docs/latest/static-analysis/using-detectors/}}. Each detector is a Python class that:
 
 \begin{enumerate}
-    \item Receives access to the compiled IR and associated graphs (CFG, DDG, call graph)
-    \item Traverses relevant code structures to identify potential issues
-    \item Reports findings with precise source locations and severity classifications
+    \item Receives access to the compiled IR and associated graphs (CFG, DDG).
+    \item Traverses relevant code structures to identify potential issues.
+    \item Reports findings with precise source locations and severity classifications.
 \end{enumerate}
-
-The framework includes over 30 built-in detectors covering patterns such as:
-
-\begin{itemize}
-    \item \textbf{Reentrancy patterns}: Detecting state changes after external calls
-    \item \textbf{Arithmetic issues}: Assembly overflow detection, divide-before-multiply patterns
-    \item \textbf{Access control}: Locked ether, unsafe send/transfer usage
-    \item \textbf{ERC compliance}: EIP-712 typehash mismatches, ERC-4337 compliance
-    \item \textbf{Code quality}: Dead code, unused errors/events, write-after-write redundancy
-    \item \textbf{Integration issues}: Chainlink deprecated function usage, proxy selector clashes
-\end{itemize}
 
 \subsubsection*{Fuzz Testing}
 \label{subsubsec:wake-fuzzing}
