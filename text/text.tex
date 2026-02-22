@@ -54,7 +54,7 @@ The last chapter summarizes contributions of this work, discusses limitations an
 The goal of this thesis is not to replace human auditors with automated systems—the creative reasoning and contextual understanding required for comprehensive security analysis remains a fundamentally human capability. Rather, we aim to augment auditors with intelligent tools that handle the mechanical aspects of information retrieval and pattern recognition, allowing human expertise to focus on the complex reasoning tasks where it adds the most value. By combining the precision of static analysis, the knowledge retrieval of RAG systems, and the pattern recognition of LLMs, we take a step toward making smart contract security more accessible and effective.
 
 \chapter*{Objectives}
-
+\label{ch:objetives}
 Tell a bit about what was done and list objectives that were fullfilled:
 
 \begin{itemize}
@@ -66,13 +66,18 @@ Tell a bit about what was done and list objectives that were fullfilled:
 
 
 \chapter{Ethereum}
-This chapter introduces the foundations needed to understand Ethereum and its components, as this work is closely tied to that platform. It first outlines the general principles of blockchain, then specializes to Ethereum’s execution model via the Ethereum Virtual Machine (EVM) and the Solidity language. The chapter concludes with a concise taxonomy of common smart-contract vulnerabilities and issues. (TODO maybe change)
+\label{ch:ethereum}
+This chapter introduces the foundations needed to understand Ethereum and its components, as this work is closely related to that platform. It first outlines the general principles of blockchain, then specializes in the Ethereum execution model through the Ethereum Virtual Machine (EVM) and the Solidity programming language. Finally, it summarizes common smart-contract vulnerability categories that repeatedly appear in practical audits and will later inform the knowledge base
+
 
 \section{Overview}
-Ethereum, launched in 2015, marked a significant evolution in blockchain technology. First proposed by \texttt{Vitalik Buterin} in a 2013 white paper, Ethereum extends the ledger-centric model into a full application platform supporting smart contracts and decentralized applications (dApps) \cite{Buterin2013}. Rather than simply recording value transfers, it enables general-purpose programmable logic through the EVM while preserving the core properties of transparency, decentralization,and immutability \cite{wood2014yellow}. In effect, Ethereum transformed the blockchain as a generalized state-transition machine, broadening its applicability well beyond simple currency use cases.
+\label{se:overview}
+Ethereum, launched in 2015, marked a significant evolution in blockchain technology. First proposed by \texttt{Vitalik Buterin} in a 2013 white paper, Ethereum extends the ledger-centric model to a full application platform that supports smart contracts and decentralized applications (dApps) \cite{Buterin2013}. Rather than simply recording value transfers, it enables general-purpose programmable logic through the EVM while preserving the core properties of transparency, decentralization,and immutability \cite{wood2014yellow}. In effect, Ethereum transformed the blockchain as a generalized state-transition machine, broadening its applicability well beyond simple currency use cases.
+
 
 \subsection{Blockchain}
-A blockchain is a distributed ledger maintained by a network of peer-to-peer nodes rather than a single central authority. It grows as a chain of blocks, each block holding a complete list of transaction records and containing a cryptographic link to its predecessor --- when enough subsequent blocks accumulate, reversing or altering a transaction becomes infeasible. Participants use addresses instead of real-world identities, allowing transparency while preserving pseudonymity. Because every node holds a copy of the chain and the full history of transactions is publicly verifiable, the system enables auditability: flows of value can be traced, state transitions inspected and the integrity of past operations confirmed. In short, starting from the genesis block and continuing through every appended block, the blockchain combines decentralization, tamper-resistance, and verifiable history in one architecture \cite{blockchain}.
+\label{sabse:blockchain}
+To understand Ethereum’s role as a programmable state-transition system, it is useful to begin with the blockchain foundation on which it operates. A blockchain is a distributed ledger maintained by a network of peer-to-peer nodes rather than a single central authority. It grows as an ordered sequence of blocks, beginning with an initial block (commonly called the \emph{genesis block}), where each subsequent block contains a complete list of transaction records and a cryptographic link to its predecessor. As additional blocks are appended, reversing or altering earlier transactions becomes computationally infeasible. Participants interact through addresses instead of real-world identities, enabling transparency while preserving pseudonymity. Because every node stores a copy of the chain and the full transaction history is publicly verifiable, the system provides strong transparency: value flows can be traced, state transitions inspected, and the integrity of past operations independently confirmed. In short, from the initial genesis block through every appended block, blockchain architecture combines decentralization, tamper-resistance, and verifiable history in a single framework \cite{blockchain}.
 
 
 \begin{figure}[!h]
@@ -85,7 +90,7 @@ A blockchain is a distributed ledger maintained by a network of peer-to-peer nod
 In Figure \ref{fig:blockchain_diagram_eth}, a blockchain block is shown linking to its predecessor and successor by storing the header hash of the previous block in its own header, forming an immutable chain; the header also includes the Merkle root, a timestamp and a nonce. The lower portion expands the block transaction set into a binary Merkle tree: individual transactions are hashed, then combined pairwise and re-hashed level by level until a single root hash remains. That root inserted in the block header acts as a compact commitment to every transaction in the block, so any alteration to a transaction propagates through the tree and changes the root, invalidating the header. This design allows nodes to verify the inclusion of specific transactions efficiently without reprocessing the entire block, while the previous-hash pointer secures block ordering \cite{blockchain_diagram_eth}.
 
 \subsubsection*{Merkle Tree}
-A Merkle tree (hash tree) is a binary tree in which each leaf holds the cryptographic hash of a data element and each internal node holds the hash of the concatenation of its two children. Starting from a set of items (e.g., transactions), we hash each item to form the leaves, then iteratively hash pairs of nodes until a single value remains: the \emph{Merkle root}. Because each internal label is a hash of its children, any change to any leaf propagates upward and deterministically alters the root. Under standard collision- and preimage-resistance assumptions for the hash function, the root acts as a binding, compact commitment to the entire dataset \cite{merkle1987,nakamoto2008}.
+A Merkle tree (hash tree), mentioned in Figure \ref{fig:blockchain_diagram_eth}, is a binary tree in which each leaf holds the cryptographic hash of a data element and each internal node holds the hash of the concatenation of its two children. Starting from a set of items (e.g., transactions), we hash each item to form the leaves, then iteratively hash pairs of nodes until a single value remains: the \emph{Merkle root}. Because each internal label is a hash of its children, any change to any leaf propagates upward and deterministically alters the root. Under standard collision- and preimage-resistance assumptions for the hash function, the root acts as a binding, compact commitment to the entire dataset \cite{merkle1987,nakamoto2008}.
 
 Merkle trees are used in public blockchains to commit to all transactions in a block using only the root in the block header. This design enables efficient \emph{inclusion proofs} (also called \emph{Merkle proofs}) of size $O(\log n)$ for a block with $n$ transactions: to prove that a transaction is part of a block, a verifier only needs the transaction, the header (containing the root), and the minimal set of sibling hashes along the path from the leaf to the root, rather than the entire block. Such proofs underpin ``light'' or SPV clients that validate inclusion without reprocessing all transactions, saving bandwidth and storage while preserving data integrity \cite{nakamoto2008}.
 
@@ -155,112 +160,143 @@ where
 \end{itemize}
 
 \section{Smart Contracts}
-% Solidity only to the extent necessary for your later vulnerability patterns + tool parsing.
-\subsection{Solidity}
+Building on the blockchain foundation introduced in Section~\ref{se:overview}, Ethereum extends the ledger model with \emph{smart contracts}: programs stored on-chain and executed by all nodes under the same consensus rules \cite{wood2014yellow}. In practice, this means contract execution is deterministic and publicly verifiable: anyone can inspect the code, replay transactions, and validate resulting state changes.
 
+A contract is deployed through a transaction, receives its own on-chain address, and can then be called by externally owned accounts or by other contracts. This execution model reduces reliance on intermediaries and enables composable decentralized applications, where protocols interact as reusable building blocks.
+
+\subsection{Solidity}
+Solidity is Ethereum’s dominant high-level, statically typed, contract-oriented language, compiled into EVM bytecode \cite{soliditydocs}. Several language concepts are especially important from a security perspective:
+
+\begin{itemize}
+    \item \textbf{Visibility and interfaces} (\texttt{public}, \texttt{external}, \texttt{internal}, \texttt{private}) define which functions are callable and from where.
+    \item \textbf{Data locations} (\texttt{storage}, \texttt{memory}, \texttt{calldata}) influence both correctness and gas usage.
+    \item \textbf{External call primitives} (\texttt{call}, \texttt{delegatecall}, \texttt{staticcall}) shape trust boundaries and control flow.
+    \item \textbf{Failure semantics} (\texttt{require}, \texttt{revert}, \texttt{assert}) determine how safely the contract handles unexpected states.
+\end{itemize}
+
+A common drawback of Solidity development is that subtle semantic errors can produce severe vulnerabilities. For example, performing an external call before updating the internal state or careless use of \texttt{delegatecall} may execute foreign code in the caller’s storage context.
+
+\paragraph{Conceptual example}
+\begin{minted}[fontsize=\small,breaklines]{solidity}
+contract Counter {
+    uint256 public value;
+
+    function inc() external {
+        value += 1; // persistent on-chain state update
+    }
+}
+\end{minted}
+
+Even this trivial piece of code captures the core model, where a transaction triggers EVM execution, the state is updated, and the transition becomes part of the verifiable blockchain history.
 
 \section{Security}
-% Introduce security mindset: assets, adversary model, invariants, threat boundaries.
+In Ethereum, security follows directly from the execution model rather than from a separate component: transparent code, immutable state transitions, and adversarially accessible interfaces mean every design decision can become an attack surface. The next section therefore focuses on how vulnerabilities emerge in real Solidity/EVM workflows and how they can be systematically prevented.
+
 \subsection{Vulnerability Taxonomies}
-% Use OWASP SC Top 10 + SWC as your naming backbone (consistent labels throughout thesis).
-% Cite OWASP + SWC. :contentReference[oaicite:12]{index=12}
-\subsection{Vulnerability Patterns (Practical)}
+Smart contract security research and industry practice have converged on a set of recurring vulnerability categories. Two widely used resources are the Smart Contract Weakness Classification (SWC) registry and the OWASP Smart Contract Top 10, both of which provide structured names, short descriptions, and representative examples for common classes of issues \cite{swc_registry,owasp_sc_top10}. Using a shared taxonomy is not merely a reporting convenience: it enables consistent labeling across audit reports, static analyzers, and vulnerability datasets, and it makes retrieval-based systems (such as the knowledge base used later in this thesis) easier to query and evaluate.
+
+That said, taxonomies are imperfect abstractions. Many real incidents do not map cleanly to a single label: an exploit may combine oracle manipulation with reentrancy, or rely on an access control mistake that only becomes exploitable due to an accounting bug. For this reason, we treat taxonomies as an organizational tool rather than a complete explanation of risk, and we emphasize concrete vulnerability \emph{patterns} that are actionable during analysis \cite{atzei2017survey,perez2021smart}.
+
+\subsection{Common Vulnerability Types}
 % Your “working set” of patterns referenced later by the KB.
 \subsubsection*{Reentrancy and External Call Hazards}
+\emph{Reentrancy} occurs when a contract makes an external call before it has fully updated its own state, allowing the callee to re-enter and observe or manipulate intermediate state \cite{luu2016making,atzei2017survey}. In practice, the underlying hazard is broader than classic reentrancy: any external call can revert unexpectedly, consume unbounded gas, or execute arbitrary code in the callee, so call ordering and error handling are security-critical \cite{consensys_best_practices}. A common mitigation is the checks-effects-interactions pattern, complemented by explicit reentrancy guards where appropriate \cite{consensys_best_practices}.
 \subsubsection*{Access Control and Authorization Bugs}
-\subsubsection*{Arithmetic / Precision / Accounting Errors}
+\emph{Access control} issues arise when privileged operations are callable by unintended parties, or when authorization checks are missing, inconsistent, or based on manipulable state \cite{atzei2017survey,consensys_best_practices}. Typical examples include unprotected administrative functions, incorrect role checks, and unsafe assumptions about \texttt{msg.sender} in proxy and meta-transaction settings. Because Solidity and the EVM do not provide built-in role management, secure authorization is largely a matter of correct application logic and disciplined use of vetted libraries \cite{consensys_best_practices}.
 \subsubsection*{DoS and Gas Griefing}
+\emph{Denial of service} in Ethereum often takes the form of making a critical operation prohibitively expensive or consistently reverting. Examples include iterating over unbounded lists, relying on external calls that can be forced to revert, or designs where a single malicious participant can block progress by refusing to cooperate \cite{atzei2017survey}. Because gas imposes a hard resource budget, some failures are not ``bugs'' in the conventional sense but brittleness in protocol design under adversarial conditions. Defensive patterns include bounded iteration, pull-based payments, and explicit fail-open/fail-closed decisions with documented assumptions \cite{consensys_best_practices}.
 \subsubsection*{Front-running / MEV-related Issues (when relevant)}
-\subsubsection*{Upgradeability and Initialization Bugs}
+Ethereum transactions are visible in the mempool before inclusion, and block producers can influence ordering within a block. This creates opportunities for \emph{front-running} and broader Maximal Extractable Value (MEV) strategies, where adversaries profit from reordering or inserting transactions around a victim transaction \cite{daian2020flash}. In protocol design, this shows up as price manipulation during trades, sandwich attacks, and liquidation races. Mitigations depend heavily on the application and often require mechanism design choices (e.g., commit-reveal, batch auctions, or oracle design) rather than purely local code changes \cite{daian2020flash}.
+
 % For each: 2–5 sentences + 1 tiny example later in Implementation/Eval if needed.
 
-\section{Audit Methodology}
+% \section{Audit Methodology}
 
-Smart contract auditing has evolved into a specialized discipline that combines elements of traditional software security review with domain-specific knowledge about blockchain systems and economic attack vectors. Unlike conventional software where bugs might cause crashes or data corruption, smart contract vulnerabilities can lead directly to financial losses, often measured in millions of dollars TODO(\cite{some_link/footnote}).
+% Smart contract auditing has evolved into a specialized discipline that combines elements of traditional software security review with domain-specific knowledge about blockchain systems and economic attack vectors. Unlike conventional software where bugs might cause crashes or data corruption, smart contract vulnerabilities can lead directly to financial losses, often measured in millions of dollars TODO(\cite{some_link/footnote}).
 
-Auditors begin by establishing what the system is supposed to do and identifying potential threat vectors, then systematically examine the implementation through a combination of manual review and automated tools. While human expertise remains central to catching subtle logic bugs and business logic flaws, automation has become increasingly important for handling the scale and complexity of modern DeFi protocols \cite{perez2021smart}. 
+% Auditors begin by establishing what the system is supposed to do and identifying potential threat vectors, then systematically examine the implementation through a combination of manual review and automated tools. While human expertise remains central to catching subtle logic bugs and business logic flaws, automation has become increasingly important for handling the scale and complexity of modern DeFi protocols \cite{perez2021smart}. 
 
-\subsubsection*{System overview}
+% \subsubsection*{System overview}
 
-\subsubsection*{Trust model}
+% \subsubsection*{Trust model}
 
-Before examining a single line of code, effective audits begin with understanding what the system is designed to do and what could go wrong. This specification and threat modeling phase establishes the foundation for all subsequent analysis. Auditors work with the development team to document the intended behavior of the protocol, including state invariants that should always hold, access control assumptions about who can perform which actions, and economic mechanisms that should remain balanced under all circumstances \cite{groce2018echidna}.
+% Before examining a single line of code, effective audits begin with understanding what the system is designed to do and what could go wrong. This specification and threat modeling phase establishes the foundation for all subsequent analysis. Auditors work with the development team to document the intended behavior of the protocol, including state invariants that should always hold, access control assumptions about who can perform which actions, and economic mechanisms that should remain balanced under all circumstances \cite{groce2018echidna}.
 
-State invariants are particularly critical in DeFi protocols. For example, an automated market maker (AMM) might have an invariant that the product of token reserves remains constant except during fee accrual, or a lending protocol might require that total collateral always exceeds total debt by some minimum margin. Documenting these invariants explicitly serves multiple purposes: it guides manual review by clarifying what properties to verify, it provides targets for property-based fuzzing tools, and it establishes success criteria for testing. When invariants are violated, it often indicates either a vulnerability in the code or a gap in the original specification that needs addressing.
+% State invariants are particularly critical in DeFi protocols. For example, an automated market maker (AMM) might have an invariant that the product of token reserves remains constant except during fee accrual, or a lending protocol might require that total collateral always exceeds total debt by some minimum margin. Documenting these invariants explicitly serves multiple purposes: it guides manual review by clarifying what properties to verify, it provides targets for property-based fuzzing tools, and it establishes success criteria for testing. When invariants are violated, it often indicates either a vulnerability in the code or a gap in the original specification that needs addressing.
 
-Trust assumptions define the threat model—which actors are assumed to be honest, which might be malicious, and what capabilities each has. A typical DeFi protocol might trust its governance multi-sig to upgrade contracts responsibly while assuming that all regular users will act to maximize their own economic benefit, including front-running transactions and exploiting any profitable vulnerabilities. External dependencies also factor into the trust model: does the protocol rely on specific oracle providers, and what happens if those oracles are compromised or manipulated? These assumptions directly influence what the auditor looks for in the code.
+% Trust assumptions define the threat model—which actors are assumed to be honest, which might be malicious, and what capabilities each has. A typical DeFi protocol might trust its governance multi-sig to upgrade contracts responsibly while assuming that all regular users will act to maximize their own economic benefit, including front-running transactions and exploiting any profitable vulnerabilities. External dependencies also factor into the trust model: does the protocol rely on specific oracle providers, and what happens if those oracles are compromised or manipulated? These assumptions directly influence what the auditor looks for in the code.
 
-This phase also identifies high-value targets—the functions and state variables most critical to protocol security and most likely to be attacked. In a lending protocol, this might be functions that calculate collateralization ratios or trigger liquidations. In a bridge, it could be the validation logic for cross-chain messages. By explicitly mapping out these critical components and their security requirements up front, auditors can allocate their limited time more effectively and ensure comprehensive coverage of the attack surface. This specification work also sets up what an LLM-based agent should retrieve when analyzing code: knowing the declared invariants and trust assumptions allows the agent to focus its limited context window on retrieving code segments most relevant to verifying those properties.
+% This phase also identifies high-value targets—the functions and state variables most critical to protocol security and most likely to be attacked. In a lending protocol, this might be functions that calculate collateralization ratios or trigger liquidations. In a bridge, it could be the validation logic for cross-chain messages. By explicitly mapping out these critical components and their security requirements up front, auditors can allocate their limited time more effectively and ensure comprehensive coverage of the attack surface. This specification work also sets up what an LLM-based agent should retrieve when analyzing code: knowing the declared invariants and trust assumptions allows the agent to focus its limited context window on retrieving code segments most relevant to verifying those properties.
 
-\subsubsection{Manual Code Review}
+% \subsubsection{Manual Code Review}
 
-Manual code review remains the cornerstone of smart contract auditing despite advances in automation. Experienced auditors develop intuition about common vulnerability patterns, but more importantly, they can reason about complex interactions, business logic edge cases, and economic attack vectors that current tools struggle to identify. The review process typically proceeds through several phases, each with a different focus and level of detail.
+% Manual code review remains the cornerstone of smart contract auditing despite advances in automation. Experienced auditors develop intuition about common vulnerability patterns, but more importantly, they can reason about complex interactions, business logic edge cases, and economic attack vectors that current tools struggle to identify. The review process typically proceeds through several phases, each with a different focus and level of detail.
 
-The review begins with architectural analysis—understanding how contracts interact, what external systems they depend on, and how data flows through the protocol. Auditors construct mental models (and often diagrams) of the system's components and their relationships. For example, in a yield aggregation protocol, they map out how user deposits flow into various strategies, how yield is calculated and distributed, and what happens during rebalancing or emergency withdrawals. This high-level understanding helps identify architectural vulnerabilities like dangerous centralization points, circular dependencies that could create reentrancy opportunities, or reliance on external systems that could fail.
+% The review begins with architectural analysis—understanding how contracts interact, what external systems they depend on, and how data flows through the protocol. Auditors construct mental models (and often diagrams) of the system's components and their relationships. For example, in a yield aggregation protocol, they map out how user deposits flow into various strategies, how yield is calculated and distributed, and what happens during rebalancing or emergency withdrawals. This high-level understanding helps identify architectural vulnerabilities like dangerous centralization points, circular dependencies that could create reentrancy opportunities, or reliance on external systems that could fail.
 
-With the architecture clear, auditors move to examining critical execution paths. They trace through key user interactions step by step: what happens when Alice deposits tokens, when Bob triggers a liquidation, when governance proposes a parameter change? This path analysis helps identify missing checks, incorrect sequencing, or edge cases where the code behaves unexpectedly. Auditors pay special attention to paths involving external calls, token transfers, and state changes—the operations most likely to introduce vulnerabilities.
+% With the architecture clear, auditors move to examining critical execution paths. They trace through key user interactions step by step: what happens when Alice deposits tokens, when Bob triggers a liquidation, when governance proposes a parameter change? This path analysis helps identify missing checks, incorrect sequencing, or edge cases where the code behaves unexpectedly. Auditors pay special attention to paths involving external calls, token transfers, and state changes—the operations most likely to introduce vulnerabilities.
 
-Invariant verification forms another crucial part of manual review. Armed with the invariants documented during threat modeling, auditors examine whether the code actually maintains these properties under all possible executions. This often involves reasoning about potential sequences of function calls and state transitions. For instance, if a protocol claims that "users can always withdraw their proportional share of pooled assets," the auditor checks whether there are any code paths where this could fail—perhaps during contract upgrades, when certain functions are paused, or in response to specific market conditions.
+% Invariant verification forms another crucial part of manual review. Armed with the invariants documented during threat modeling, auditors examine whether the code actually maintains these properties under all possible executions. This often involves reasoning about potential sequences of function calls and state transitions. For instance, if a protocol claims that "users can always withdraw their proportional share of pooled assets," the auditor checks whether there are any code paths where this could fail—perhaps during contract upgrades, when certain functions are paused, or in response to specific market conditions.
 
-Edge case analysis requires creativity and experience. Auditors consider boundary conditions: what happens with zero values, maximum values, or just-below-overflow values? They think about timing issues: what if a transaction is front-run, what if the block timestamp is manipulated slightly, what if multiple operations happen in the same block? They examine error handling: are all failure modes properly addressed, or are there paths where errors could leave the system in an inconsistent state? This type of reasoning is difficult to automate because it requires understanding both the code's literal behavior and the protocol's semantic intent.
+% Edge case analysis requires creativity and experience. Auditors consider boundary conditions: what happens with zero values, maximum values, or just-below-overflow values? They think about timing issues: what if a transaction is front-run, what if the block timestamp is manipulated slightly, what if multiple operations happen in the same block? They examine error handling: are all failure modes properly addressed, or are there paths where errors could leave the system in an inconsistent state? This type of reasoning is difficult to automate because it requires understanding both the code's literal behavior and the protocol's semantic intent.
 
-The manual review process is inherently limited by human cognitive constraints. An auditor can only hold so much context in working memory at once, and complex protocols might span dozens of contracts with thousands of lines of code. This is where tool-assisted workflows become valuable—not to replace human judgment, but to help auditors manage complexity by automating context retrieval, flagging potential issues for human investigation, and maintaining consistency in coverage across a large codebase. The goal of integrating LLMs into this workflow is to augment human auditors with better information retrieval and pattern recognition, allowing them to focus their expertise on the creative reasoning tasks that machines still cannot perform.
+% The manual review process is inherently limited by human cognitive constraints. An auditor can only hold so much context in working memory at once, and complex protocols might span dozens of contracts with thousands of lines of code. This is where tool-assisted workflows become valuable—not to replace human judgment, but to help auditors manage complexity by automating context retrieval, flagging potential issues for human investigation, and maintaining consistency in coverage across a large codebase. The goal of integrating LLMs into this workflow is to augment human auditors with better information retrieval and pattern recognition, allowing them to focus their expertise on the creative reasoning tasks that machines still cannot perform.
 
-\subsubsection*{Static analysis}
+% \subsubsection*{Static analysis}
 
-\subsubsection*{Local deployment}
+% \subsubsection*{Local deployment}
 
-\subsubsection*{Tool-Based Analysis}
+% \subsubsection*{Tool-Based Analysis}
 
-Automated analysis tools have become an essential part of the smart contract audit workflow, complementing manual review by efficiently checking for known vulnerability patterns and coding errors. These tools vary in their approaches—from lightweight pattern matching to sophisticated symbolic execution—and each brings different strengths and limitations to the audit process.
+% Automated analysis tools have become an essential part of the smart contract audit workflow, complementing manual review by efficiently checking for known vulnerability patterns and coding errors. These tools vary in their approaches—from lightweight pattern matching to sophisticated symbolic execution—and each brings different strengths and limitations to the audit process.
 
-Static analysis tools examine code without executing it, using techniques ranging from simple syntactic pattern matching to complex abstract interpretation. Slither, developed by Trail of Bits, has emerged as one of the most widely adopted static analyzers for Solidity \cite{feist2019slither}. It operates on Solidity's intermediate representation (IR) and includes over 70 built-in detectors for common issues like reentrancy vulnerabilities, unprotected ether withdrawals, incorrect ERC-20 implementations, and dangerous delegatecalls. Slither's strength lies in its speed and comprehensive coverage—it can analyze a medium-sized project in seconds and rarely produces false negatives for the patterns it targets.
+% Static analysis tools examine code without executing it, using techniques ranging from simple syntactic pattern matching to complex abstract interpretation. Slither, developed by Trail of Bits, has emerged as one of the most widely adopted static analyzers for Solidity \cite{feist2019slither}. It operates on Solidity's intermediate representation (IR) and includes over 70 built-in detectors for common issues like reentrancy vulnerabilities, unprotected ether withdrawals, incorrect ERC-20 implementations, and dangerous delegatecalls. Slither's strength lies in its speed and comprehensive coverage—it can analyze a medium-sized project in seconds and rarely produces false negatives for the patterns it targets.
 
-However, static analyzers face fundamental limitations. They must over-approximate program behavior to be sound, which often leads to false positives—flagging code as potentially vulnerable when it's actually safe. For example, Slither might flag a reentrancy warning for any external call followed by a state change, even when the specific call cannot actually re-enter the contract. Auditors must manually review these warnings to separate real issues from noise. More critically, pattern-based detectors can only find vulnerabilities they were explicitly programmed to recognize. Novel vulnerability classes or complex logic bugs that don't match known patterns slip through entirely.
+% However, static analyzers face fundamental limitations. They must over-approximate program behavior to be sound, which often leads to false positives—flagging code as potentially vulnerable when it's actually safe. For example, Slither might flag a reentrancy warning for any external call followed by a state change, even when the specific call cannot actually re-enter the contract. Auditors must manually review these warnings to separate real issues from noise. More critically, pattern-based detectors can only find vulnerabilities they were explicitly programmed to recognize. Novel vulnerability classes or complex logic bugs that don't match known patterns slip through entirely.
 
-Other static analysis tools take different approaches. Mythril employs symbolic execution and SMT solving to explore possible execution paths and find states that violate security properties \cite{mueller2018mythril}. This can uncover deeper issues than pattern matching, but symbolic execution doesn't scale well to large contracts or complex path conditions—the number of possible paths grows exponentially with program size and branching. Securify uses a dataflow analysis framework and security patterns specified in a domain-specific language \cite{tsankov2018securify}, offering more flexibility in specifying what to look for but requiring expertise to write effective patterns.
+% Other static analysis tools take different approaches. Mythril employs symbolic execution and SMT solving to explore possible execution paths and find states that violate security properties \cite{mueller2018mythril}. This can uncover deeper issues than pattern matching, but symbolic execution doesn't scale well to large contracts or complex path conditions—the number of possible paths grows exponentially with program size and branching. Securify uses a dataflow analysis framework and security patterns specified in a domain-specific language \cite{tsankov2018securify}, offering more flexibility in specifying what to look for but requiring expertise to write effective patterns.
 
-Linters like Solhint and Ethlint catch style violations and potential code quality issues rather than security vulnerabilities per se. While less critical than security-focused analyzers, they help maintain code quality that makes contracts easier to audit. They flag issues like missing visibility specifiers, unused variables, overly complex functions, and deviations from best practice patterns like checks-effects-interactions.
+% Linters like Solhint and Ethlint catch style violations and potential code quality issues rather than security vulnerabilities per se. While less critical than security-focused analyzers, they help maintain code quality that makes contracts easier to audit. They flag issues like missing visibility specifiers, unused variables, overly complex functions, and deviations from best practice patterns like checks-effects-interactions.
 
-Integration of multiple tools provides better coverage than relying on any single analyzer. A typical audit workflow might run Slither for quick pattern detection, Mythril for deeper analysis of critical functions, and various linters for code quality checks. However, this multi-tool approach creates new challenges: each tool has its own output format, overlapping detections need deduplication, and the auditor must triage dozens or hundreds of findings to identify which require attention.
+% Integration of multiple tools provides better coverage than relying on any single analyzer. A typical audit workflow might run Slither for quick pattern detection, Mythril for deeper analysis of critical functions, and various linters for code quality checks. However, this multi-tool approach creates new challenges: each tool has its own output format, overlapping detections need deduplication, and the auditor must triage dozens or hundreds of findings to identify which require attention.
 
-This is where the Wake framework becomes relevant to our work. Wake provides a Python-based infrastructure for building custom detectors and integrating various analysis tools in a unified workflow \cite{wake2023documentation}. Unlike standalone tools that operate in isolation, Wake allows auditors to write detectors that combine insights from multiple sources—for example, using both AST pattern matching and data flow analysis to reduce false positives. Wake's Python ecosystem also makes it a natural bridge to LLM-based analysis: we can extract rich context from Wake's analysis passes and feed it to language models that can reason about patterns too complex for rule-based systems.
+% This is where the Wake framework becomes relevant to our work. Wake provides a Python-based infrastructure for building custom detectors and integrating various analysis tools in a unified workflow \cite{wake2023documentation}. Unlike standalone tools that operate in isolation, Wake allows auditors to write detectors that combine insights from multiple sources—for example, using both AST pattern matching and data flow analysis to reduce false positives. Wake's Python ecosystem also makes it a natural bridge to LLM-based analysis: we can extract rich context from Wake's analysis passes and feed it to language models that can reason about patterns too complex for rule-based systems.
 
-The key insight for our work is that automated tools excel at scalable, repeatable pattern matching but struggle with novel vulnerabilities and contextual reasoning. Meanwhile, LLMs demonstrate strong pattern recognition on code they've seen during training and can generate natural language explanations, but they lack the precision and soundness guarantees of formal methods. By combining static analysis tools with LLM reasoning in an agent-based architecture—using tools like Wake to extract structured information and RAG to provide relevant context—we aim to get closer to the best of both approaches.
+% The key insight for our work is that automated tools excel at scalable, repeatable pattern matching but struggle with novel vulnerabilities and contextual reasoning. Meanwhile, LLMs demonstrate strong pattern recognition on code they've seen during training and can generate natural language explanations, but they lack the precision and soundness guarantees of formal methods. By combining static analysis tools with LLM reasoning in an agent-based architecture—using tools like Wake to extract structured information and RAG to provide relevant context—we aim to get closer to the best of both approaches.
 
-\subsubsection*{Local deployment}
+% \subsubsection*{Local deployment}
 
-Testing smart contracts in realistic conditions requires deploying them to a local blockchain environment where their behavior can be observed without risking real funds or incurring transaction costs. Modern development frameworks like Hardhat, Foundry, and Wake provide robust local testing infrastructure that has become standard in the audit workflow \cite{hardhat2023, foundry2023}.
+% Testing smart contracts in realistic conditions requires deploying them to a local blockchain environment where their behavior can be observed without risking real funds or incurring transaction costs. Modern development frameworks like Hardhat, Foundry, and Wake provide robust local testing infrastructure that has become standard in the audit workflow \cite{hardhat2023, foundry2023}.
 
-Unit tests verify individual functions in isolation, checking that they produce expected outputs for given inputs and properly handle error conditions. Integration tests examine how multiple contracts interact, ensuring that complex workflows execute correctly end-to-end. For example, testing a lending protocol might involve simulating a sequence of deposits, borrows, interest accrual, and liquidations to verify that all state transitions occur correctly and invariants are maintained. Well-written test suites serve both as verification of correct behavior and as documentation of intended functionality.
+% Unit tests verify individual functions in isolation, checking that they produce expected outputs for given inputs and properly handle error conditions. Integration tests examine how multiple contracts interact, ensuring that complex workflows execute correctly end-to-end. For example, testing a lending protocol might involve simulating a sequence of deposits, borrows, interest accrual, and liquidations to verify that all state transitions occur correctly and invariants are maintained. Well-written test suites serve both as verification of correct behavior and as documentation of intended functionality.
 
-Fork testing represents a particularly powerful technique for smart contract auditing. Rather than testing in isolation, fork testing deploys the contract under audit to a local blockchain that has copied the state of mainnet at a specific block. This allows the contract to interact with real deployed protocols—actual DEXes, oracles, tokens—without requiring the auditor to mock these complex systems. For example, when auditing a yield optimization strategy, fork testing can verify that the strategy actually generates yield when deployed against real DeFi protocols, that it handles real market conditions correctly, and that it responds appropriately to real oracle updates.
+% Fork testing represents a particularly powerful technique for smart contract auditing. Rather than testing in isolation, fork testing deploys the contract under audit to a local blockchain that has copied the state of mainnet at a specific block. This allows the contract to interact with real deployed protocols—actual DEXes, oracles, tokens—without requiring the auditor to mock these complex systems. For example, when auditing a yield optimization strategy, fork testing can verify that the strategy actually generates yield when deployed against real DeFi protocols, that it handles real market conditions correctly, and that it responds appropriately to real oracle updates.
 
-Fork testing also enables reproduction and investigation of historical exploits. By forking at a block just before a known attack, auditors can replay the attack transaction to understand exactly how it worked, then test whether proposed fixes would have prevented it. This forensic capability helps validate that audit recommendations actually address the vulnerabilities they target. Wake's testing framework includes sophisticated fork testing capabilities, allowing tests to manipulate fork state, impersonate arbitrary accounts, and observe detailed execution traces.
+% Fork testing also enables reproduction and investigation of historical exploits. By forking at a block just before a known attack, auditors can replay the attack transaction to understand exactly how it worked, then test whether proposed fixes would have prevented it. This forensic capability helps validate that audit recommendations actually address the vulnerabilities they target. Wake's testing framework includes sophisticated fork testing capabilities, allowing tests to manipulate fork state, impersonate arbitrary accounts, and observe detailed execution traces.
 
-Despite their value, tests have inherent limitations. Test coverage is only as good as the test cases written—they can demonstrate the presence of bugs but never prove their absence. Auditors who rely too heavily on "the tests pass" as evidence of security may miss edge cases that weren't considered when writing tests. Additionally, tests typically focus on expected usage patterns, while attackers deliberately seek unexpected input combinations and state transitions that developers didn't anticipate.
+% Despite their value, tests have inherent limitations. Test coverage is only as good as the test cases written—they can demonstrate the presence of bugs but never prove their absence. Auditors who rely too heavily on "the tests pass" as evidence of security may miss edge cases that weren't considered when writing tests. Additionally, tests typically focus on expected usage patterns, while attackers deliberately seek unexpected input combinations and state transitions that developers didn't anticipate.
 
-This limitation motivates property-based testing approaches, where instead of writing individual test cases, auditors specify properties that should always hold and let the testing framework automatically generate inputs trying to violate those properties. This bridges to our next topic: fuzz testing, which takes this idea even further by using randomization and evolutionary algorithms to explore the state space more thoroughly than human-written tests ever could.
+% This limitation motivates property-based testing approaches, where instead of writing individual test cases, auditors specify properties that should always hold and let the testing framework automatically generate inputs trying to violate those properties. This bridges to our next topic: fuzz testing, which takes this idea even further by using randomization and evolutionary algorithms to explore the state space more thoroughly than human-written tests ever could.
 
-\subsubsection*{Fuzz testing}
+% \subsubsection*{Fuzz testing}
 
-Fuzzing has emerged as one of the most effective techniques for uncovering subtle bugs in smart contracts, particularly logic errors that evade static analysis and aren't covered by manual test cases. Unlike traditional testing where humans specify input values, fuzzing automatically generates large numbers of random or semi-random inputs to explore program behavior across a wide range of scenarios \cite{trail2023fuzz}.
+% Fuzzing has emerged as one of the most effective techniques for uncovering subtle bugs in smart contracts, particularly logic errors that evade static analysis and aren't covered by manual test cases. Unlike traditional testing where humans specify input values, fuzzing automatically generates large numbers of random or semi-random inputs to explore program behavior across a wide range of scenarios \cite{trail2023fuzz}.
 
-The simplest form of fuzzing, random input generation, feeds functions with arbitrary values and checks whether they crash, revert unexpectedly, or violate assertions. While naive, this approach can quickly find boundary condition bugs—what happens with zero values, maximum uint256 values, or unexpected combinations? More sophisticated fuzzers use coverage-guided generation, tracking which code paths have been executed and favoring inputs that reach new branches. This evolutionary approach efficiently explores the state space, focusing computational effort on finding inputs that trigger novel behaviors.
+% The simplest form of fuzzing, random input generation, feeds functions with arbitrary values and checks whether they crash, revert unexpectedly, or violate assertions. While naive, this approach can quickly find boundary condition bugs—what happens with zero values, maximum uint256 values, or unexpected combinations? More sophisticated fuzzers use coverage-guided generation, tracking which code paths have been executed and favoring inputs that reach new branches. This evolutionary approach efficiently explores the state space, focusing computational effort on finding inputs that trigger novel behaviors.
 
-Property-based fuzzing, exemplified by tools like Echidna \cite{grieco2020echidna} and Foundry's fuzzer \cite{foundry2023}, takes this further by allowing auditors to specify invariants that should always hold. The fuzzer then attempts to find any sequence of function calls and inputs that violates these invariants. For example, an auditor might specify that "total shares times share price should equal total assets" for a vault contract. The fuzzer will generate thousands of random deposit, withdraw, and transfer operations, checking after each whether this invariant still holds. When it finds a violation, it automatically minimizes the test case to the simplest sequence that reproduces the issue.
+% Property-based fuzzing, exemplified by tools like Echidna \cite{grieco2020echidna} and Foundry's fuzzer \cite{foundry2023}, takes this further by allowing auditors to specify invariants that should always hold. The fuzzer then attempts to find any sequence of function calls and inputs that violates these invariants. For example, an auditor might specify that "total shares times share price should equal total assets" for a vault contract. The fuzzer will generate thousands of random deposit, withdraw, and transfer operations, checking after each whether this invariant still holds. When it finds a violation, it automatically minimizes the test case to the simplest sequence that reproduces the issue.
 
-Stateful fuzzing considers sequences of operations rather than isolated function calls. Many vulnerabilities only emerge through specific state transitions—for example, a reentrancy bug that requires calling function A to set up state, then reentering during a call to function B to exploit that state. Echidna maintains a model of contract state and generates sequences of transactions that explore different state transition paths. This catches bugs that unit tests miss because the test writer didn't consider that particular sequence of operations.
+% Stateful fuzzing considers sequences of operations rather than isolated function calls. Many vulnerabilities only emerge through specific state transitions—for example, a reentrancy bug that requires calling function A to set up state, then reentering during a call to function B to exploit that state. Echidna maintains a model of contract state and generates sequences of transactions that explore different state transition paths. This catches bugs that unit tests miss because the test writer didn't consider that particular sequence of operations.
 
-Fuzzing excels at finding logic bugs—violations of business rules or implicit assumptions that static analyzers can't detect because they aren't simple pattern matches. For instance, fuzzing might discover that a specific sequence of deposits and withdrawals allows a user to extract more funds than they deposited, or that under certain market conditions a pricing oracle can be manipulated. These are precisely the high-impact bugs that make auditing challenging: they're correct in terms of type safety and basic invariants, but incorrect in terms of the protocol's economic logic.
+% Fuzzing excels at finding logic bugs—violations of business rules or implicit assumptions that static analyzers can't detect because they aren't simple pattern matches. For instance, fuzzing might discover that a specific sequence of deposits and withdrawals allows a user to extract more funds than they deposited, or that under certain market conditions a pricing oracle can be manipulated. These are precisely the high-impact bugs that make auditing challenging: they're correct in terms of type safety and basic invariants, but incorrect in terms of the protocol's economic logic.
 
-However, fuzzing has limitations. It's probabilistic rather than exhaustive—finding a bug depends on the fuzzer happening to generate the right sequence of inputs, which might be a tiny fraction of the total input space. Complex bugs requiring specific state setups might be missed if the fuzzer doesn't happen to explore that path. Additionally, writing good invariant specifications requires expertise—if the auditor doesn't correctly specify what should always be true, the fuzzer won't detect violations.
+% However, fuzzing has limitations. It's probabilistic rather than exhaustive—finding a bug depends on the fuzzer happening to generate the right sequence of inputs, which might be a tiny fraction of the total input space. Complex bugs requiring specific state setups might be missed if the fuzzer doesn't happen to explore that path. Additionally, writing good invariant specifications requires expertise—if the auditor doesn't correctly specify what should always be true, the fuzzer won't detect violations.
 
-The integration of fuzzing into the audit workflow has become standard practice. Auditors typically run fuzzers overnight or over weekends, generating millions of test cases to explore state spaces too large for manual testing. When combined with static analysis (which finds known patterns quickly) and manual review (which applies human reasoning about business logic), fuzzing provides a powerful third pillar in the defense against vulnerabilities. For our work with LLM-based agents, fuzzing results provide valuable signal: when a fuzzer finds an invariant violation, the LLM can analyze the failing sequence to explain why it violates the invariant and suggest fixes.
+% The integration of fuzzing into the audit workflow has become standard practice. Auditors typically run fuzzers overnight or over weekends, generating millions of test cases to explore state spaces too large for manual testing. When combined with static analysis (which finds known patterns quickly) and manual review (which applies human reasoning about business logic), fuzzing provides a powerful third pillar in the defense against vulnerabilities. For our work with LLM-based agents, fuzzing results provide valuable signal: when a fuzzer finds an invariant violation, the LLM can analyze the failing sequence to explain why it violates the invariant and suggest fixes.
 
-Rather than viewing automation as competing with human auditors, we see it as extending their capabilities. The techniques we've discussed generate vast amounts of information: static analyzers flag hundreds of potential issues, tests exercise thousands of state transitions, fuzzers generate millions of inputs. Making effective use of this information requires systems that can retrieve relevant context, synthesize insights across tools, and present findings in ways that augment human reasoning.
+% Rather than viewing automation as competing with human auditors, we see it as extending their capabilities. The techniques we've discussed generate vast amounts of information: static analyzers flag hundreds of potential issues, tests exercise thousands of state transitions, fuzzers generate millions of inputs. Making effective use of this information requires systems that can retrieve relevant context, synthesize insights across tools, and present findings in ways that augment human reasoning.
 
-The code analysis approaches we examine next build on the audit methodology foundations established here. We explore how static analysis frameworks like Wake provide structured access to code properties, how retrieval systems can surface relevant code segments for LLM analysis, and how agent architectures can orchestrate multiple tools to tackle complex analysis tasks. The goal is not to replace the auditor workflows described in this chapter, but to make them more efficient and effective by automating the retrieval and synthesis steps that currently consume significant auditor time.
+% The code analysis approaches we examine next build on the audit methodology foundations established here. We explore how static analysis frameworks like Wake provide structured access to code properties, how retrieval systems can surface relevant code segments for LLM analysis, and how agent architectures can orchestrate multiple tools to tackle complex analysis tasks. The goal is not to replace the auditor workflows described in this chapter, but to make them more efficient and effective by automating the retrieval and synthesis steps that currently consume significant auditor time.
 
 \chapter{Code Analysis}
 \label{ch:code-analysis}
@@ -522,8 +558,23 @@ Understanding these architectural components is essential for effectively applyi
 
 \section{Training paradigms}
 \subsection{Pre-training}
+\label{subsec:llm-pretraining}
+Most LLMs are first \emph{pre-trained} on large corpora using self-supervised objectives that require no manual labeling. In decoder-only models, the dominant objective is next-token prediction: given a prefix, the model learns to predict the distribution of the next token. In encoder-only models such as BERT, masked language modeling instead trains the model to recover randomly masked tokens from surrounding context \cite{devlin2019bert}. Although the objectives differ, both encourage the model to build internal representations that capture statistical regularities in language and code.
+
+For code, pre-training has two important implications. First, it teaches models syntax and idioms that are shared across many repositories, which helps with code comprehension and generation. Second, it also absorbs common-but-not-necessarily-correct patterns from open-source code, including insecure practices. This matters in security contexts: an LLM's familiarity with typical code can help it spot deviations or suspicious constructs, but pre-training alone does not provide guarantees that its conclusions are correct.
+
 \subsection{Fine-tuning}
+\label{subsec:llm-finetuning}
+After pre-training, models are often adapted to downstream tasks via \emph{fine-tuning}. A common approach is supervised fine-tuning on instruction-response pairs so the model follows user intent more reliably. Many production models also incorporate alignment techniques such as reinforcement learning from human feedback (RLHF), which optimizes model outputs toward human preference judgments \cite{ouyang2022training}.
+
+In security auditing, fine-tuning can improve usefulness in two ways. It can bias the model toward structured reporting (clear findings, evidence, remediation steps), and it can improve adherence to constraints (e.g., ``only claim what you can justify''). However, fine-tuning also risks overfitting to narrow datasets or encoding dataset-specific biases. For this thesis, we therefore treat fine-tuning as complementary rather than required: grounding and tool integration can improve reliability even when using general-purpose models.
+
 \subsection{Prompting}
+\label{subsec:llm-prompting}
+\emph{Prompting} refers to shaping model behavior by providing instructions, context, and examples at inference time rather than changing model weights. Few-shot prompting, popularized by large-scale decoder-only models, demonstrates that including a small number of input-output examples can elicit task behavior without explicit fine-tuning \cite{brown2020language}. For code auditing, prompts often include: (i) a description of the vulnerability class to look for, (ii) the relevant code snippets, and (iii) an expected output format such as a checklist or a structured report.
+
+Prompting is powerful but fragile. Small changes in wording can lead to different conclusions, and prompts that include large amounts of irrelevant context can degrade output quality. These realities motivate the later design of retrieval-augmented prompting: instead of relying on a single large prompt, we programmatically retrieve and assemble focused evidence that the model can cite and reason over.
+
 
 \section{Code-Specialized Models and Embeddings}
 % Explain why code models/embeddings help retrieval + similarity search (ties directly to your KB).
@@ -543,46 +594,209 @@ Understanding these architectural components is essential for effectively applyi
 % (This directly motivates your “RAG inside Wake-AI” choice.)
 
 \section{Prompting strategies}
+\label{sec:prompting-strategies}
+
 \subsection{Task decomposition}
+\label{subsec:task-decomposition}
+Complex auditing questions are rarely solved in one step. Task decomposition breaks an analysis into smaller sub-tasks such as ``summarize the contract's assets and trust boundaries'', ``identify external calls and state updates'', and ``check whether updates happen before interactions''. Decomposition improves reliability because each sub-task has narrower scope and clearer success criteria, and it naturally aligns with tool usage: static analysis can enumerate call sites, while the LLM focuses on explaining why a pattern is risky and what remediation looks like.
+
 \subsection{Chain-of-thought}
+\label{subsec:cot}
 % Describe conceptually; do not dump long CoT traces. Cite original Transformer-based reasoning work if needed.
+Chain-of-thought prompting elicits intermediate reasoning steps and can improve performance on multi-step tasks by encouraging the model to keep track of assumptions and partial conclusions \cite{wei2022chain}. In security settings, however, the goal is not to obtain long informal traces, but to obtain \emph{checkable} reasoning: claims should be tied to specific code locations or retrieved evidence. In later chapters, we therefore structure outputs around findings, evidence, and remediation rather than relying on free-form reasoning traces.
+
 \subsection{Few-shot learning}
+\label{subsec:few-shot}
+Few-shot examples can calibrate what ``good'' output looks like. In auditing, examples are most valuable when they mirror the desired report structure (severity, impact, evidence, remediation) and when they demonstrate the level of conservatism expected: the model should prefer ``uncertain, needs evidence'' over confident speculation. This style is compatible with retrieval: retrieved examples become dynamic few-shot demonstrations that are tailored to the code under analysis rather than static prompt templates.
 
 \section{Challenges and Limitations}
-\subsection{Hallucinations and False Positives}
-\subsection{Context Window and Information Freshness}
-\subsection{Trust, Reproducibility, and Secure Tool Use}
-% This is where you justify grounding with RAG + structured tool calls (MCP).
+\label{sec:llm-challenges}
 
-\section{Summary and Transition to Wake}
-% 5–8 lines: LLMs help but need structured program context + grounded knowledge -> Wake/Wake-AI provides the workflow scaffold.
+\subsection{Hallucinations}
+\label{subsec:hallucinations}
+LLMs can produce plausible-sounding but incorrect statements, including claims about vulnerabilities that do not exist in the provided code. This is particularly problematic in auditing, where false positives waste reviewer time and may lead to unnecessary code changes. Empirical studies of code models report non-trivial rates of insecure or incorrect suggestions, especially when prompts are underspecified or when the model lacks relevant context \cite{pearce2022asleep}. A practical mitigation is to require evidence: every finding should reference concrete code behavior, tool outputs, or retrieved documentation rather than relying on model intuition alone.
+
+\subsection{Context Window}
+\label{subsec:context-window}
+Even with large context windows, real smart contract systems can exceed what is reasonable to include in a single prompt, especially when imported libraries, interfaces, and deployment configuration matter. Moreover, models have a fixed training cutoff; new vulnerability classes and best practices emerge continuously. RAG partially addresses both issues by retrieving up-to-date, task-relevant information at inference time and by focusing the prompt on a small set of high-signal chunks \cite{lewis2020retrieval}. The remaining challenge is selection: retrieval must be precise enough to avoid overwhelming the model with irrelevant text.
+
+\subsection{Security}
+\label{subsec:security}
+% This is where you justify grounding with RAG + structured tool calls (MCP).
+Audits are security-critical, so outputs must be reproducible and traceable. Purely generative answers are difficult to verify after the fact, and different runs may yield different results. Tool-augmented approaches improve reproducibility by logging which code artifacts and documents were used, and by separating verifiable computations (e.g., static analysis queries) from probabilistic summarization.
+
+When agents can call external tools, additional safety concerns arise, such as prompt injection in retrieved documents and unintended execution of dangerous actions. For our setting, we mitigate these risks by restricting the agent's tool surface to read-only analysis and retrieval primitives and by treating all retrieved text as untrusted input that must not override analysis policies. [CITATION NEEDED]
+
+LLMs offer a complementary capability to traditional program analysis: they can translate code behavior into natural language, relate patterns to prior examples, and assist in drafting remediation guidance. However, these strengths come with constraints that are especially visible in smart contract auditing: limited context windows, non-deterministic behavior, and the risk of hallucinated findings.
+
+After understanding what is blockchain and ethereum, how code analysis looks lie and what LLMS are capable of, we are ready to move to Wake framework, which incorporates all mentioned before.
 
 \chapter{The Wake Framework}
-% Goal: describe the platform you extend, and the baseline you improve.
+\label{chap:wake}
+
+This chapter provides a fundamental overview of Wake framework. It focuses on its internal model and analysis workflow. After it, the separate module with AI integration is described with findings of limitations. [TODO]
+
 \section{Overview}
+\label{sec:wake-overview}
+
+Wake is an open source Python-based development, testing, and security analysis framework specifically designed for Solidity smart contracts~\cite{wake-docs} [TODO how to correctly cite this docs]. Developed by Ackee Blockchain Security\footnote{\url{https://ackee.xyz/}}, Wake addresses the critical need for comprehensive tooling in the blockchain security ecosystem. 
+
+The framework provides several core capabilities:
+
+\begin{itemize}
+    \item \textbf{Testing Framework}: Built on top of \texttt{pytest}~\cite{pytest}, Wake enables developers to write unit tests and integration tests for smart contracts using Python's familiar testing idioms.
+
+    \item \textbf{Property-Based Fuzzer}: Wake includes a sophisticated fuzzer supporting both property-based and manually-guided fuzzing strategies to discover edge cases and vulnerabilities through automated input generation.
+
+    \item \textbf{Vulnerability Detectors}: The framework ships with built-in detectors for common vulnerability patterns such as reentrancy, integer overflows, and logic flaws. These detectors are designed with a low false-positive philosophy to minimize manual investigation overhead during audits.
+
+    \item \textbf{Printers}: Information extraction tools that generate structured outputs about contract properties, including control flow graphs, inheritance hierarchies, and data dependencies.
+
+    \item \textbf{Development Tools}: Wake integrates with modern development workflows through a Language Server Protocol (LSP) implementation and a Visual Studio Code extension called ``Tools for Solidity''~\cite{tools-for-solidity}, providing real-time feedback on vulnerabilities and code quality.
+
+    \item \textbf{Deployment and Interaction}: Support for mainnet interactions and contract deployments, enabling seamless transition from testing to production.
+\end{itemize}
+
+Wake has been actively used by Ackee Blockchain Security in professional smart contract audits, where it has helped discover numerous high and critical severity vulnerabilities in protocols such as IPOR Protocol\footnote{\url{https://www.ipor.io/}}, PWN Protocol\footnote{\url{https://pwn.xyz/}}, Brahma Console\footnote{\url{https://console.brahma.fi/}}, and Lido Community Staking Module\footnote{\url{https://csm.lido.fi/}} \cite{wake-docs}.
+
 
 \section{Internal Model}
-% Keep aligned with hookup points for your implementation (IR/CFG/DDG/ICFG).
-\subsection{Intermediate representation}
-\subsection{Control flow graph}
-\subsubsection*{Inter-procedural control flow graph}
-\subsection{Data dependency graph}
+\label{sec:wake-internal-model}
 
-\section{Analysis Infrastructure in Wake}
-\subsection{Static Analysis and Detectors}
-\subsection{Dynamic Analysis and Fuzz Testing Support}
-\subsection{Auxiliary Tools (Printers, Debugging, Reporting)}
+Wake constructs a rich internal representation of Solidity smart contracts that serves as the foundation for all analysis capabilities. Because of Wake build base on static analysis, all its components were described in Section \ref{sec:static-analysis}.
+
+\subsubsection*{Intermediate Representation}
+\label{subsubsec:wake-ir}
+
+At the core of Wake's analysis capabilities lies a typed intermediate representation (IR) derived from the Solidity compiler's Abstract Syntax Tree (AST). The IR provides a structured view of the source code, representing all language constructs. The IR preserves type information and cross-references between declarations and their usages, enabling precise semantic analysis. Each IR node maintains references to its parent and children, facilitating traversal in any direction. Wake's IR is fully typed using Python's type system, ensuring type safety during analysis development.
+
+
+\subsubsection*{Control Flow Graph}
+\label{subsubsec:wake-cfg}
+
+Wake constructs CFGs for functions and modifiers, representing the possible execution paths through the code. It provides utility functions for reachability analysis, such as determining whether the start node is reachable from a given position (backward reachability), or whether the success/revert end nodes are reachable from a statement (forward reachability). These primitives are essential for detecting issues like dead code or functions that always revert.
+
+\subsubsection*{Data Dependency Graph}
+\label{subsubsec:wake-ddg}
+
+The DDG is one of Wake's most sophisticated analysis structures, tracking how data flows through the contract. It automatically expands composite types (structs, arrays, mappings) to track data flow at the member/element level. For example, when a struct is assigned, the DDG creates edges not only for the struct itself but also for each of its members recursively.
+
+\section{Analysis Instruments}
+\label{sec:wake-analysis}
+
+Building upon the internal model, Wake provides a comprehensive infrastructure for implementing various analysis techniques.
+
+\subsubsection*{Detectors}
+\label{subsubsec:wake-detectors}
+
+Wake's static analysis framework enables the implementation of custom vulnerability detectors. Each detector is a Python class that:
+
+\begin{enumerate}
+    \item Receives access to the compiled IR and associated graphs (CFG, DDG, call graph)
+    \item Traverses relevant code structures to identify potential issues
+    \item Reports findings with precise source locations and severity classifications
+\end{enumerate}
+
+The framework includes over 30 built-in detectors covering patterns such as:
+
+\begin{itemize}
+    \item \textbf{Reentrancy patterns}: Detecting state changes after external calls
+    \item \textbf{Arithmetic issues}: Assembly overflow detection, divide-before-multiply patterns
+    \item \textbf{Access control}: Locked ether, unsafe send/transfer usage
+    \item \textbf{ERC compliance}: EIP-712 typehash mismatches, ERC-4337 compliance
+    \item \textbf{Code quality}: Dead code, unused errors/events, write-after-write redundancy
+    \item \textbf{Integration issues}: Chainlink deprecated function usage, proxy selector clashes
+\end{itemize}
+
+\subsubsection*{Fuzz Testing}
+\label{subsubsec:wake-fuzzing}
+
+Complementing static analysis, Wake provides robust support for dynamic testing and fuzzing:
+
+\begin{itemize}
+    \item \textbf{pytest Integration}: Tests are written as standard Python functions using pytest fixtures and assertions, lowering the barrier for developers familiar with Python testing.
+
+    \item \textbf{Property-Based Fuzzing}: Wake's fuzzer generates diverse inputs to test invariants and properties, automatically exploring edge cases that manual testing might miss.
+
+    \item \textbf{Stateful Fuzzing}: Support for fuzzing that maintains state across operations, essential for testing complex DeFi protocols with multi-step interactions.
+
+    \item \textbf{Shrinking}: When the fuzzer finds a failing input, it attempts to minimize the input to the smallest case that still reproduces the failure, simplifying debugging.
+\end{itemize}
+
+Wake has been used to discover critical vulnerabilities through fuzzing in production protocols. The framework's test collection ``Awesome Wake Tests''~\cite{awesome-wake-tests} provides reference implementations demonstrating effective fuzzing strategies.
+
+
+\subsubsection*{Printers}
+\label{subsubsec:wake-printers}
+
+Wake includes auxiliary tools that support development and audit workflows:
+
+\begin{itemize}
+    \item \textbf{Printers}: Extract and visualize structural information from contracts:
+    \begin{itemize}
+        \item Contract cross-reference graphs showing relationships between contracts
+        \item Data dependency graph visualization using Graphviz
+        \item Contract size estimation for deployment gas optimization
+        \item Contract summaries and function signature extraction
+        \item C3 linearization visualization for inheritance analysis
+    \end{itemize}
+
+    \item \textbf{Language Server Protocol (LSP)}: Real-time analysis integration with editors, providing:
+    \begin{itemize}
+        \item On-the-fly vulnerability detection
+        \item Code navigation and go-to-definition
+        \item Hover information with type details
+        \item Variable DDG visualization within the editor
+    \end{itemize}
+
+    \item \textbf{Compiler Management}: Built-in \texttt{solc} version management for reproducible builds across different Solidity versions.
+
+    \item \textbf{Code Flattening}: Utility for combining multi-file contracts into a single file for verification on block explorers.
+\end{itemize}
+
 
 \section{Wake-AI}
-% Cite wake-ai repo if that’s what you extend. :contentReference[oaicite:18]{index=18}
-\subsection{Architecture}
-\subsubsection*{Workflow steps}
-\subsection{Prompt-Based Reasoning and Validation}
-\subsection{Limitations}
-% The key: “prompt-only, no grounded KB, context cost, inconsistent coverage.”
+\label{sec:wake-ai}
 
-\section{Summary and Transition to Proposed Methodology}
-% 5–8 lines: Wake-AI gives structure; your thesis adds grounding + retrieval via MCP.
+With fast developing of tehcnologies, growing LLM capabilities and often their usage in practice, as we were able notice in Section \ref{sec:}, LLMs are integrated into Wake as special separate tool aimed to comprehensive AI audit of smart contracts. Unfortunateylly, challneges of static analysis described above, restricted a lo of spce and other rtypes of vulnerabilities. So there is time, when huge language models come to help auditors with security analysis. 
+
+\subsection{Architecture}
+\label{subsec:wake-ai-architecture}
+
+Wake-AI extends the Wake framework with artificial intelligence capabilities for automated security auditing. It implements a multi-stage workflow architecture where each stage performs a specific analysis task. The system orchestrates AI models through structured sessions:
+
+\begin{itemize}
+    \item \textbf{Session Management}: Wake-AI supports multiple AI backends, including Claude (via MCP---Model Context Protocol) and OpenAI Codex models. Sessions maintain conversation context and can be forked for parallel processing.
+
+    \item \textbf{MCP Integration}: Wake exposes its analysis capabilities as MCP tools, allowing AI models to query the IR, retrieve function signatures, access CFG information, and invoke static analysis detectors during their reasoning process.
+
+    \item \textbf{Working Directory}: Each audit maintains a structured working directory containing intermediate results, allowing workflow resumption and result inspection.
+
+    \item \textbf{Progress Tracking}: The framework provides real-time progress updates and token usage tracking for cost management.
+
+    \item Prompt-Based Reasoning and Validation
+\end{itemize}
+
+
+\subsection{Limitations}
+\label{subsec:wake-ai-limitations}
+
+Despite its capabilities, Wake-AI faces several limitations:
+
+\begin{itemize}
+    \item \textbf{Context Window Constraints}: LLMs have limited context windows, restricting the amount of code and analysis data that can be processed simultaneously. Large codebases may require chunking strategies that could miss cross-file vulnerabilities.
+
+    \item \textbf{Hallucination Risk}: AI models may generate plausible-sounding but incorrect vulnerability reports. The triage phase mitigates this through evidence requirements, but some false positives may persist.
+
+    \item \textbf{Determinism}: AI model outputs are inherently non-deterministic, potentially producing different findings on repeated runs of the same codebase.
+
+    \item \textbf{Knowledge Cutoff}: Models may lack awareness of recently discovered vulnerability patterns or new Solidity language features introduced after their training data cutoff.
+
+    \item \textbf{Limited Tool Access}: While MCP integration provides access to Wake's analysis tools, the AI cannot execute arbitrary code or perform dynamic testing during analysis. Complex vulnerabilities requiring runtime behavior observation may be missed.
+\end{itemize}
+
+Some of these limitations merit attention and can be addressed through alternative approaches. Others, such as hallucination risk and non-determinism, cannot be fully resolved due to the inherent nature of LLMs. This thesis focuses on one of the most critical limitations: knowledge cutoff. The following chapter presents a proposed solution designed to increase the detection of genuine security issues while reducing false positives. This is achieved by providing the LLM with similar historical issues, enabling it to make more informed judgments about vulnerabilities.
+
 
 \chapter{Proposed Methodology}
 % THIS is your main “design contribution” chapter.
