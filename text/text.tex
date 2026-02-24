@@ -529,15 +529,24 @@ In security auditing, fine-tuning can improve usefulness in two ways. It can bia
 
 Prompting is powerful but fragile. Small changes in wording can lead to different conclusions, and prompts that include large amounts of irrelevant context can degrade output quality. These realities motivate the later design of retrieval-augmented prompting: instead of relying on a single large prompt, we programmatically retrieve and assemble focused evidence that the model can cite and reason over.
 
+\subsubsection*{Prompting strategies}
+\begin{itemize}
+    \item \textbf{Task decomposition} - breaks an analysis into smaller sub-tasks such as ``summarize the contract's assets and trust boundaries'', ``identify external calls and state updates'', and ``check whether updates happen before interactions''. Decomposition improves reliability because each sub-task has narrower scope and clearer success criteria, and it naturally aligns with tool usage: static analysis can enumerate call sites, while the LLM focuses on explaining why a pattern is risky and what remediation looks like.
+    
+    \item \textbf{Chain-of-thought} - elicits intermediate reasoning steps and can improve performance on multi-step tasks by encouraging the model to keep track of assumptions and partial conclusions \cite{wei2022chain}. In security settings, however, the goal is not to obtain long informal traces, but to obtain \emph{checkable} reasoning: claims should be tied to specific code locations or retrieved evidence. In later chapters, we therefore structure outputs around findings, evidence, and remediation rather than relying on free-form reasoning traces.
+    
+    \item \textbf{Few-shot learning} - calibrates what ``good'' output looks like. In auditing, examples are most valuable when they mirror the desired report structure (severity, impact, evidence, remediation) and when they demonstrate the level of conservatism expected: the model should prefer ``uncertain, needs evidence'' over confident speculation. This style is compatible with retrieval: retrieved examples become dynamic few-shot demonstrations that are tailored to the code under analysis rather than static prompt templates.
+\end{itemize}
 
 \section{Code-Specialized Models and Embeddings}
 % Explain why code models/embeddings help retrieval + similarity search (ties directly to your KB).
-\subsection{Encoder Models for Code (e.g., CodeBERT)}
-\subsection{Seq2seq Code Models (T5/CodeT5 family)}
-\subsection{Code Embeddings for Retrieval}
-% Put nomic-embed-code here if you used it; otherwise keep model-agnostic and mention you pick one in Implementation.
+\subsection{Embeddings}
+\subsection{Encoder/Decoder Models}
+%codebert
+\subsection{Seq2seq Models}
+% T5/CodeT5 family
 
-\section{State of the Art: LLMs in Smart Contract Auditing}
+\section{LLMs in Smart Contract Auditing}
 % Focus on 4 buckets: prompt-only, agentic, fine-tuned, RAG-augmented.
 \subsection{Prompt-Only and Agentic Auditing Pipelines}
 % Example: multi-agent approaches; cite one solid paper you actually discuss.
@@ -546,22 +555,6 @@ Prompting is powerful but fragile. Small changes in wording can lead to differen
 \subsection{RAG-Augmented Detection Frameworks}
 % Discuss ParaVul (explicit RAG + verification/fusion). :contentReference[oaicite:16]{index=16}
 % (This directly motivates your “RAG inside Wake-AI” choice.)
-
-\section{Prompting strategies}
-\label{sec:prompting-strategies}
-
-\subsection{Task decomposition}
-\label{subsec:task-decomposition}
-Complex auditing questions are rarely solved in one step. Task decomposition breaks an analysis into smaller sub-tasks such as ``summarize the contract's assets and trust boundaries'', ``identify external calls and state updates'', and ``check whether updates happen before interactions''. Decomposition improves reliability because each sub-task has narrower scope and clearer success criteria, and it naturally aligns with tool usage: static analysis can enumerate call sites, while the LLM focuses on explaining why a pattern is risky and what remediation looks like.
-
-\subsection{Chain-of-thought}
-\label{subsec:cot}
-% Describe conceptually; do not dump long CoT traces. Cite original Transformer-based reasoning work if needed.
-Chain-of-thought prompting elicits intermediate reasoning steps and can improve performance on multi-step tasks by encouraging the model to keep track of assumptions and partial conclusions \cite{wei2022chain}. In security settings, however, the goal is not to obtain long informal traces, but to obtain \emph{checkable} reasoning: claims should be tied to specific code locations or retrieved evidence. In later chapters, we therefore structure outputs around findings, evidence, and remediation rather than relying on free-form reasoning traces.
-
-\subsection{Few-shot learning}
-\label{subsec:few-shot}
-Few-shot examples can calibrate what ``good'' output looks like. In auditing, examples are most valuable when they mirror the desired report structure (severity, impact, evidence, remediation) and when they demonstrate the level of conservatism expected: the model should prefer ``uncertain, needs evidence'' over confident speculation. This style is compatible with retrieval: retrieved examples become dynamic few-shot demonstrations that are tailored to the code under analysis rather than static prompt templates.
 
 \section{Challenges and Limitations}
 \label{sec:llm-challenges}
