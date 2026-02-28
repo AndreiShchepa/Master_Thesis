@@ -523,6 +523,17 @@ After pre-training, models are often adapted to downstream tasks via \emph{fine-
 
 In security auditing, fine-tuning can improve usefulness in two ways. It can bias the model toward structured reporting (clear findings, evidence, remediation steps), and it can improve adherence to constraints (e.g., ``only claim what you can justify''). However, fine-tuning also risks overfitting to narrow datasets or encoding dataset-specific biases. For this thesis, we therefore treat fine-tuning as complementary rather than required: grounding and tool integration can improve reliability even when using general-purpose models.
 
+\subsubsection*{Reinforcement Learning from Human Feedback}
+[CITE] Reinforcement Learning from Human Feedback (RLHF) is a machine learning paradigm
+that combines elements of reinforcement learning and supervised learning to enable
+AI systems to learn and make decisions in a more human-aligned manner [63]. RLHF
+introduces human feedback as a valuable source of guidance, which can help AI systems navigate complex decision spaces, align with human values, and make more
+informed and ethical choices [64].
+Fig. 2.4 illustrates the RLHF process, which consists of several key steps. Firstly,
+prompts are collected to train a reward model through human labelling. Subsequently, the language model is fine-tuned using reinforcement learning techniques,
+followed by deploying and iterating the model [65]. During the fine-tuning process,
+the reward model guides the model’s actions, and the agent aims to maximize cumulative rewards based on the reward model’s predictions.
+
 \subsection{Prompting}
 \label{subsec:llm-prompting}
 \emph{Prompting} refers to shaping model behavior by providing instructions, context, and examples at inference time rather than changing model weights. Few-shot prompting, popularized by large-scale decoder-only models, demonstrates that including a small number of input-output examples can elicit task behavior without explicit fine-tuning \cite{brown2020language}. For code auditing, prompts often include: (i) a description of the vulnerability class to look for, (ii) the relevant code snippets, and (iii) an expected output format such as a checklist or a structured report.
@@ -737,27 +748,49 @@ Some of these limitations merit attention and can be addressed through alternati
 \chapter{Proposed Methodology}
 % THIS is your main “design contribution” chapter.
 \section{Design Goals}
+
+
+\section{Retrieval augmented generation systen}
+
+A recent study by Lewis et al. [2020] investigates advancements in RAG models. They detail the architecture and key strategies employed in RAG, which
+aim to leverage the strengths of LLMs while simultaneously mitigating their
+limitations. 
+
+he RAG framework comprises of two primary components: a retriever in
+Equation 2.1 and a generator in Equation 2.2, parameterized by η and θ respectively. The retriever retrieves (topk truncated) distributions over text passages given an input query x, while the generator generates the next token
+based on the context of preceding tokens, the input sequence, and a retrieved
+passage.
+pη(z|x) (2.1)
+• η: Non-parametric retriever.
+• x: Sequence given by user.
+• z: Text passages to retrieve.
+pθ(yi
+|x, z, y1:i−1) (2.2)
+• θ: Parametric generator.
+• yi
+: Target sequence to generate.
+• y1:i−1: Sequences previously generated.
+
+
+% Cite RAG paper for concept framing. :contentReference[oaicite:21]{index=21}
+\subsection{Query Generation}
+% How you create retrieval queries: from detectors, IR features, function summaries, etc.
+\subsection{Re-ranking}
+% How you select top-k, de-duplicate, and compress into prompt context.
+
+
 % Goals: groundedness, audit usefulness, token efficiency, modularity, reproducibility.
 \section{System Architecture Overview}
 % Diagram: Wake-AI steps + retrieval module + KB + MCP server + LLM.
 % Cite MCP intro/spec. :contentReference[oaicite:19]{index=19}
 \subsection{High-Level Workflow}
 
-\section{Knowledge Base Design}
-% What you store and why (vuln patterns, fixes, audit snippets); tie to OWASP/SWC.
-\subsection{Vulnerability Pattern Database (Schema)}
-% Use OWASP/SWC identifiers as primary keys. :contentReference[oaicite:20]{index=20}
-\subsection{Audit Knowledge and Examples Database}
-% Curate short “evidence” chunks, not huge reports (supports token efficiency).
+\section{Knowledge Base}
+Describe solodit, that it will be taken from here, placed their all data with labels, metadata, crossing and mainly embed by summaries with normalization, Also there is a part with code + private reports from ackee audits
+
 \subsection{Indexing and Embeddings}
 % How documents are chunked + embedded for retrieval.
-
-\section{Retrieval augmented generation systen}
-% Cite RAG paper for concept framing. :contentReference[oaicite:21]{index=21}
-\subsection{Query Generation}
-% How you create retrieval queries: from detectors, IR features, function summaries, etc.
-\subsection{Re-ranking}
-% How you select top-k, de-duplicate, and compress into prompt context.
+TODO
 
 \section{Model context protocol integration}
 \subsection{Endpoints and Contracts}
@@ -771,25 +804,10 @@ Some of these limitations merit attention and can be addressed through alternati
 \section{Chapter Summary and Transition to Implementation}
 % 5–8 lines: design choices -> now show how it’s implemented inside Wake-AI.
 
-\chapter{Implementation}
-% Goal: engineering details; keep it reproducible.
-\section{Implementation Overview}
-% Repo structure, modules added/modified, runtime flow.
-\section{Knowledge Base Construction Pipeline}
-% Data ingestion, cleaning, chunking, embedding, indexing, update strategy.
-\section{MCP Server Implementation}
-% Endpoints, request/response schema, retrieval backend, caching.
-\section{Wake-AI Extension}
-% Where you hook retrieval into steps; how context is stored/passed.
-\section{Prompt Templates and Context Budgeting}
-% Show how you cap tokens and prioritize evidence.
-\section{End-to-End Example Walkthrough}
-% One concise audit run demonstrating retrieval helping reasoning.
-
-\section{Summary and Transition to Evaluation}
-% 5–8 lines: implemented system exists -> now measure whether it helps vs baseline.
-
 \chapter{Evaluation}
+
+\section{Dataset}
+
 % Goal: show it works and understand when/why.
 \section{Evaluation Questions}
 % RQ1: Does RAG reduce hallucinations/false positives? RQ2: Does it improve coverage? RQ3: Cost/latency tradeoffs?
