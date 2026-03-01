@@ -424,170 +424,428 @@ The subsequent chapters explore how LLM capabilities can augment traditional ana
 
 
 \chapter{Large Language Models}
+\label{ch:llm}
 
-The detection of vulnerabilities in smart contracts has traditionally relied on rule-based static analysis tools and formal verification methods. While these approaches have proven effective for certain classes of vulnerabilities, they struggle with complex logic bugs and require extensive manual effort to develop detection rules \cite{luu2016making, tsankov2018securify}. Recent advances in deep learning, particularly the emergence of transformer-based Large Language Models (LLMs), have opened new possibilities for automated vulnerability detection that can learn patterns from code rather than relying solely on pre-defined rules \cite{chen2021evaluating, wang2024software}.
+% ============================================================
+%  CHAPTER OPENING — from sequence modelling math to transformers
+% ============================================================
 
-This chapter explores the architectural foundations of modern LLMs and their application to vulnerability detection in smart contracts. We begin by tracing the evolution from early neural network approaches to the transformer architecture that underlies contemporary LLMs. Understanding these foundations is essential for our later discussion of how Wake-AI leverages LLM capabilities and why techniques like Retrieval-Augmented Generation (RAG) and Model Context Protocol (MCP) become necessary when working with the constraints of real-world code analysis tasks.
+The previous chapter showed that static analysis has broad usage in identifying many vulnerability patterns in codes. But it also showed the limitation that not all types of vulnerability could be described by rule, especially logical issues. The natural question follows --- can a model recognize a vulnerable pattern [TODO]?
 
+Answering that question requires a detour through the mathematics of sequence modeling, because the architectures that power today's Large Language Models (LLMs) grew directly out of attempts to assign probabilities to sequences of symbols.
+
+\section{Sequence Probabilities}
+\label{sec:seq-prob}
+
+Let $\mathbf{x} = (x_1, x_2, \dots, x_T)$ be a sequence of tokens (words) in English, opcodes in EVM bytecode, or lexemes in Solidity source. A \emph{language model} assigns a probability to the whole sequence by factoring it in with the chain rule of probability:
+
+\begin{equation}
+    P(\mathbf{x}) \;=\; \prod_{t=1}^{T} P\!\bigl(x_t \mid x_1, \dots, x_{t-1}\bigr).
+    \label{eq:chain-rule}
+\end{equation}
+
+Each factor on the right-hand side determines the likelihood of the the next token given everything that came before. Classical $n$-gram models approximate this by truncating the history to a fixed window of $n{-}1$ tokens, an assumption that works acceptably for short phrases but collapses when the prediction depends on context dozens or hundreds of tokens back~\cite{hindle2012naturalness}.
+
+% ── PLACEHOLDER ──────────────────────────────────────────────
+% FIGURE: side-by-side comparison of n-gram (fixed window) vs.
+% RNN (hidden state chain) vs. Transformer (full attention matrix)
+% showing how each architecture "sees" context.
+% \begin{figure}[!htbp]
+%     \centering
+%     \includegraphics[width=\textwidth]{images/context_comparison.pdf}
+%     \caption{Context access patterns in three sequence modelling paradigms.
+%              An $n$-gram model sees only the previous $n{-}1$ tokens (shaded window).
+%              An RNN compresses all prior tokens into a single hidden state vector (arrow chain).
+%              A transformer attends to every prior token in parallel (full attention matrix).}
+%     \label{fig:context-comparison}
+% \end{figure}
+% ─────────────────────────────────────────────────────────────
+
+\subsection{Recurrent Neural Networks}
+
+Recurrent Neural Networks (RNNs) offered the first neural solution to variable-length conditioning.  At each time step $t$, an RNN updates a hidden state that summarizes the entire prefix:
+
+\begin{equation}
+    \mathbf{h}_t = f\!\bigl(\mathbf{W}_h \mathbf{h}_{t-1} + \mathbf{W}_x \mathbf{x}_t + \mathbf{b}\bigr),
+    \label{eq:rnn}
+\end{equation}
+
+where $f$ is a nonlinearity such as $\tanh$ or ReLU, and $\mathbf{W}_h$, $\mathbf{W}_x$ are learned weight matrices.  The conditional distribution for the next token is then read off from $\mathbf{h}_t$.
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=11cm, height=9cm]{images/RNN.pdf}
+    \caption{Recurrent Neural Network architecture.}
+    \label{fig:rnn_diagram}
+\end{figure}
+
+The Figure \ref{fig:rnn_diagram} shows three main layers of RNN, and recurrent connection that feeds the hidden state from one time step to the next, allowing the network to maintain a memory of previous inputs. All recurrent connections share the same weight matrix, enabling the network to process variable-length sequences.
+
+In principle, the hidden state can carry information from arbitrarily far back.  In practice, gradients that flow through long chains of multiplication either vanish or explode, a phenomenon analysed formally by Bengio et al.~\cite{bengio1994learning}. [TODO ADD MORE ABOUT VANIHING GRADIENT]
+
+\subsubsection*{Long Short-Term Memory}
+Long Short-Term Memory (LSTM) networks~\cite{hochreiter1997long} mitigated vanishing gradients by introducing gated memory cells, but the fundamental bottleneck remained: processing is strictly sequential.  Token $t$ cannot be computed until token $t{-}1$ has been processed.  This makes training on large code corpora prohibitively slow—and it also means that information about a variable declared in line~5 must survive passage through every intermediate hidden state before it can influence the analysis of that variable's use in line~150.
+
+
+% ============================================================
 \section{Transformers}
+\label{sec:transformers}
+% ============================================================
+
+The transformer, introduced by Vaswani et al.\ in 2017~\cite{vaswani2023attentionneed}, replaced the sequential hidden-state chain with a mechanism that lets every token look directly at every other token --- \emph{self-attention}.  The result is a model that can be trained in parallel across all positions and that provides short, direct gradient paths between any pair of tokens regardless of their distance in the sequence.
 
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=0.7\linewidth]{images/transformer.png}
-    \caption{Transformer TODO REF.}
+    \caption{The original encoder–decoder transformer architecture~\cite{vaswani2023attentionneed}. Modern LLMs typically use only the decoder stack (right half) for autoregressive generation, or only the encoder stack (left half) for representation learning.}
     \label{fig:transformer}
 \end{figure}
 
-Before diving into transformer architecture, it's worth briefly reviewing the path that led to their development. Early attempts to apply machine learning to code analysis relied on simpler models such as n-gram language models and basic recurrent neural networks \cite{hindle2012naturalness}. These approaches treated code as a sequence of tokens and attempted to learn statistical patterns that could distinguish vulnerable from secure code.
+The full architecture is an encoder–decoder stack, but most models relevant to code analysis use only one half.  Encoder-only models such as BERT~\cite{devlin2019bert} and CodeBERT~\cite{feng2020codebert} produce contextual embeddings useful for classification and retrieval.  Decoder-only models in the GPT family~\cite{radford2019language, brown2020language} generate text autoregressively and form the backbone of today's chat-capable LLMs (GPT-4, Claude, LLaMA).  Encoder–decoder models such as T5~\cite{raffel2020exploring} and CodeT5~\cite{wang2021codet5} excel at sequence-to-sequence tasks like code summarisation and translation.
 
-Recurrent Neural Networks (RNNs) and their more sophisticated variants, Long Short-Term Memory (LSTM) networks \cite{hochreiter1997long}, represented a significant step forward. By maintaining hidden states that captured information about previously seen tokens, LSTMs could theoretically model long-range dependencies in code. However, they suffered from fundamental limitations. The sequential nature of RNN processing meant that information had to be passed through many intermediate states to connect distant parts of a program, leading to the vanishing gradient problem during training \cite{bengio1994learning}. More critically, the sequential processing constraint prevented parallelization, making it impractical to train on the massive code corpora needed for general-purpose code understanding.
+% ── PLACEHOLDER ──────────────────────────────────────────────
+% FIGURE: Visual taxonomy — Encoder-only (BERT, CodeBERT),
+% Decoder-only (GPT, LLaMA, Claude), Encoder-Decoder (T5, CodeT5).
+% Show which part of the transformer each variant uses, highlighted.
+% \begin{figure}[!htbp]
+%     \centering
+%     \includegraphics[width=0.85\textwidth]{images/model_taxonomy.pdf}
+%     \caption{Transformer model families.  Encoder-only models (left) produce bidirectional 
+%              representations; decoder-only models (centre) generate tokens autoregressively; 
+%              encoder–decoder models (right) map input sequences to output sequences.}
+%     \label{fig:model-taxonomy}
+% \end{figure}
+% ─────────────────────────────────────────────────────────────
 
-The transformer architecture, introduced by Vaswani et al. in their seminal 2017 paper "Attention Is All You Need" \cite{vaswani2017attention}, fundamentally changed this landscape. By replacing sequential recurrence with attention mechanisms that could directly relate any two positions in a sequence, transformers eliminated the sequential bottleneck while providing more direct paths for gradient flow during training. This architectural shift enabled both the massive scale of modern LLMs and their superior ability to capture complex relationships in code.
-
-\section{Transformer Architecture}
-
-The transformer architecture consists of an encoder-decoder structure, though many modern LLMs use only the decoder portion (GPT-family models) or only the encoder portion (BERT-family models) \cite{radford2019language, devlin2019bert}. Figure~\ref{fig:transformer} illustrates the complete transformer architecture. For vulnerability detection tasks, we primarily work with decoder-only models that have been pre-trained on large code corpora and can generate natural language explanations of detected issues.
-
-At its core, a transformer processes sequences through a series of identical layers, each containing two main components: a multi-head self-attention mechanism and a position-wise feed-forward network. The architecture also employs residual connections around each of these sub-layers, followed by layer normalization \cite{ba2016layer}.
-
-The input to the transformer begins with token embeddings that represent each element of the input sequence as a dense vector. For code analysis, these tokens might represent keywords, identifiers, operators, and other syntactic elements of the programming language. Crucially, since the attention mechanism itself has no inherent notion of sequence order, positional encodings are added to these embeddings to inject information about token positions.
 
 \subsection{Self-Attention Mechanism}
+\label{subsec:self-attention}
 
-The self-attention mechanism is the defining innovation of transformer architecture. Unlike RNNs that process tokens sequentially, self-attention allows the model to directly compute relationships between all pairs of tokens in parallel. This capability is particularly valuable for code analysis, where understanding a vulnerability often requires relating elements that are far apart in the token sequence—for example, connecting a variable declaration to its use in a security-critical operation several functions away.
-
-The attention mechanism operates through three learned linear projections of the input: queries (Q), keys (K), and values (V). For each position in the sequence, the model computes attention scores that determine how much focus to place on every other position. Mathematically, the attention operation for a single head is defined as:
-
-\begin{equation}
-\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right)V
-\end{equation}
-
-where $d_k$ is the dimension of the key vectors \cite{vaswani2017attention}. The scaling factor $\sqrt{d_k}$ prevents the dot products from growing too large in magnitude, which would push the softmax function into regions with extremely small gradients.
-
-To understand this intuitively, consider analyzing a function call in Solidity code. The query represents "what am I looking for" from the perspective of each token. The keys represent "what information do I contain" from each token's perspective. The dot product $QK^T$ computes compatibility scores between queries and keys—essentially asking "how relevant is each token to each other token?" The softmax normalizes these scores into a probability distribution, and finally, this distribution is used to take a weighted average of the values, producing an attention-weighted representation.
-
-Multi-head attention extends this by running several attention operations in parallel, each with different learned projection matrices. The outputs are concatenated and linearly transformed:
+Self-attention is the operation that gives transformers their power.  Each token is projected into three vectors—a \emph{query}~$\mathbf{q}$, a \emph{key}~$\mathbf{k}$, and a \emph{value}~$\mathbf{v}$—through learned linear maps:
 
 \begin{equation}
-\text{MultiHead}(Q, K, V) = \text{Concat}(\text{head}_1, ..., \text{head}_h)W^O
+    \mathbf{Q} = \mathbf{X}\mathbf{W}^Q, \qquad
+    \mathbf{K} = \mathbf{X}\mathbf{W}^K, \qquad
+    \mathbf{V} = \mathbf{X}\mathbf{W}^V,
+    \label{eq:qkv}
 \end{equation}
 
-where each $\text{head}_i = \text{Attention}(QW^Q_i, KW^K_i, VW^V_i)$ \cite{vaswani2017attention}. This multi-head design allows the model to attend to information from different representation subspaces simultaneously. In practice, different attention heads often learn to capture different types of relationships—some might focus on syntactic structure, while others capture semantic relationships or data flow patterns \cite{clark2019does, vig2019analyzing}.
-
-For vulnerability detection, this multi-head attention proves particularly powerful. One attention head might learn to track variable definitions and uses, another might focus on function call chains, and yet another might specialize in recognizing common vulnerability patterns. The model can then combine these different perspectives to make more nuanced judgments about potential security issues.
-
-The transformer architecture includes two variants of attention: in the encoder, self-attention allows each token to attend to all tokens in the input sequence. In the decoder, masked self-attention restricts each token to only attend to previous tokens (and itself), which is essential for autoregressive generation tasks. When we use a pre-trained LLM for vulnerability analysis, we're typically leveraging this masked attention structure—the model has learned to predict subsequent tokens given previous context, and this predictive capability extends to understanding what code patterns might indicate vulnerabilities.
-
-\subsection{Positional Encoding and Context Windows}
-
-A fundamental characteristic of the attention mechanism is its permutation invariance: if we shuffled the input tokens, the attention computation would produce the same results (just in shuffled order). For natural language and code, where token order carries critical semantic information, this is clearly problematic. Positional encoding solves this by adding position-dependent signals to the token embeddings before they enter the transformer layers.
-
-The original transformer used sinusoidal positional encodings \cite{vaswani2017attention}:
+where $\mathbf{X} \in \mathbb{R}^{T \times d_{\text{model}}}$ is the matrix of input embeddings and $\mathbf{W}^Q, \mathbf{W}^K \in \mathbb{R}^{d_{\text{model}} \times d_k}$, $\mathbf{W}^V \in \mathbb{R}^{d_{\text{model}} \times d_v}$ are the projection matrices.  The attention output is then:
 
 \begin{equation}
-PE_{(pos, 2i)} = \sin\left(\frac{pos}{10000^{2i/d_{model}}}\right)
+    \text{Attention}(\mathbf{Q}, \mathbf{K}, \mathbf{V})
+    \;=\; \text{softmax}\!\left(\frac{\mathbf{Q}\mathbf{K}^{\!\top}}{\sqrt{d_k}}\right)\mathbf{V}.
+    \label{eq:attention}
 \end{equation}
-\begin{equation}
-PE_{(pos, 2i+1)} = \cos\left(\frac{pos}{10000^{2i/d_{model}}}\right)
-\end{equation}
 
-where $pos$ is the position in the sequence, $i$ is the dimension index, and $d_{model}$ is the model dimension. This encoding has useful mathematical properties: any fixed offset in position corresponds to a linear transformation in the encoding space, potentially allowing the model to learn to attend by relative positions. Moreover, these functions can extend to sequence lengths beyond those seen during training.
+The matrix $\mathbf{Q}\mathbf{K}^{\!\top} \in \mathbb{R}^{T \times T}$ contains the compatibility score of every query–key pair.  Dividing by $\sqrt{d_k}$ prevents the dot products from growing with the embedding dimension, which would push softmax into saturation and produce near-zero gradients~\cite{vaswani2017attention}.  After softmax normalisation, each row becomes a probability distribution over positions, and the output for each token is the corresponding weighted average of value vectors.
 
-However, many modern LLMs use learned positional embeddings instead \cite{devlin2019bert, radford2019language}. While these must be explicitly trained for each position up to a maximum sequence length, they offer more flexibility and often perform slightly better in practice. More recent approaches like Rotary Position Embedding (RoPE) \cite{su2021roformer} and ALiBi \cite{press2022train} have shown promise in extending effective context lengths beyond training limits, an important consideration for analyzing long smart contracts.
+An intuitive reading in the context of Solidity code: the query at position~$t$ asks ``what do I need to know?'', the keys at all other positions advertise ``here is what I contain'', and the resulting attention weights decide how much each position contributes to the representation at~$t$.  For instance, when the model encounters a \texttt{call.value()} invocation, its query can attend directly to the location where the receiving address was assigned, even if hundreds of tokens intervene—something an RNN could achieve only if that information survived the entire hidden-state chain.
 
-The concept of a \textit{context window} refers to the maximum number of tokens a model can process at once. This is a hard constraint imposed by both the positional encoding scheme and computational resources—attention has $O(n^2)$ complexity with sequence length $n$, making it expensive for very long sequences. Early transformer models worked with context windows of 512 or 1024 tokens \cite{vaswani2017attention, devlin2019bert}. Modern LLMs have dramatically expanded this: GPT-4 supports context windows up to 128,000 tokens \cite{openai2023gpt4}, and Claude 3 extends to 200,000 tokens \cite{anthropic2024claude}.
+\subsubsection*{Multi-Head Attention}
 
-For smart contract analysis, context window limitations pose a significant practical challenge. A typical smart contract might contain 500-2000 lines of Solidity code, which can translate to 5,000-20,000 tokens once we include relevant context like imported libraries, interface definitions, and documentation. More complex projects might exceed even generous context limits. This constraint motivates the need for Retrieval-Augmented Generation (RAG) approaches, which we explore in the next chapter. Rather than feeding an entire codebase into the model at once, RAG systems selectively retrieve the most relevant code segments, allowing the LLM to focus its limited context window on the information most likely to contain or explain vulnerabilities.
-
-The feed-forward networks in each transformer layer also play a crucial role, though they're often overshadowed by the attention mechanism in discussions. After attention aggregates information across the sequence, the feed-forward network applies the same learned transformation to each position independently:
+Rather than computing a single attention function, transformers run $h$ independent attention heads in parallel, each with its own projection matrices, and concatenate the results:
 
 \begin{equation}
-\text{FFN}(x) = \max(0, xW_1 + b_1)W_2 + b_2
+    \text{MultiHead}(\mathbf{Q}, \mathbf{K}, \mathbf{V})
+    = \text{Concat}\!\bigl(\text{head}_1,\;\ldots,\;\text{head}_h\bigr)\,\mathbf{W}^O,
+    \label{eq:multihead}
+\end{equation}
+\begin{equation}
+    \text{where}\quad \text{head}_i = \text{Attention}\!\bigl(\mathbf{X}\mathbf{W}^Q_i,\;\mathbf{X}\mathbf{W}^K_i,\;\mathbf{X}\mathbf{W}^V_i\bigr).
+    \label{eq:head-i}
 \end{equation}
 
-This two-layer network with ReLU activation significantly expands the model's capacity to learn complex patterns \cite{vaswani2017attention}. Recent work suggests these feed-forward layers serve as "key-value memories" where the model stores factual knowledge learned during pre-training \cite{geva2021transformer}.
-
-Understanding these architectural components is essential for effectively applying LLMs to vulnerability detection. The attention mechanism's ability to capture long-range dependencies helps identify vulnerabilities that involve interactions between distant parts of code. The multi-head design allows specialization for different types of patterns. And the context window constraints explain why we need sophisticated retrieval strategies to handle real-world smart contracts. In the following chapters, we examine how these capabilities and limitations shape our approach to building Wake-AI, a system that combines static analysis tools like Wake with the pattern-recognition abilities of modern LLMs.
+Empirical probing studies show that different heads specialise in different relation types—syntactic dependencies, coreference, data flow—even without explicit supervision~\cite{clark2019does, vig2019analyzing}.  For vulnerability detection, this means the model can simultaneously track variable definitions and uses in one head, function call chains in another, and common vulnerability idioms in a third, before combining these perspectives through the output projection~$\mathbf{W}^O$.
 
 
-\section{Training paradigms}
+\subsection{Positional Encoding}
+\label{subsec:pos-enc}
+
+Self-attention is \emph{permutation-equivariant}: shuffling the input tokens produces the same outputs in shuffled order.  Since token order carries critical semantic information—both in natural language and in code—positional encoding must inject position information before attention is applied.
+
+[TODO]
+
+[TODO maybe some transition how it is possible to manipulate with these architectures, like training and so on]
+
+
+% ============================================================
+\section{Training Paradigms}
+\label{sec:training}
+% ============================================================
+
+Building a useful LLM involves three broad stages, each with distinct implications for code security. [TODO write a bit more, that will lead that training tuning and prompntg will be sdescribed]
+
 \subsection{Pre-training}
-\label{subsec:llm-pretraining}
-Most LLMs are first \emph{pre-trained} on large corpora using self-supervised objectives that require no manual labeling. In decoder-only models, the dominant objective is next-token prediction: given a prefix, the model learns to predict the distribution of the next token. In encoder-only models such as BERT, masked language modeling instead trains the model to recover randomly masked tokens from surrounding context \cite{devlin2019bert}. Although the objectives differ, both encourage the model to build internal representations that capture statistical regularities in language and code.
+\label{subsec:pretraining}
 
-For code, pre-training has two important implications. First, it teaches models syntax and idioms that are shared across many repositories, which helps with code comprehension and generation. Second, it also absorbs common-but-not-necessarily-correct patterns from open-source code, including insecure practices. This matters in security contexts: an LLM's familiarity with typical code can help it spot deviations or suspicious constructs, but pre-training alone does not provide guarantees that its conclusions are correct.
+Pre-training exposes the model to massive text corpora using self-supervised objectives that require no human labelling.  For decoder-only models, the objective is \emph{next-token prediction} (causal language modelling): given a prefix $x_1, \ldots, x_{t-1}$, maximise $\log P(x_t \mid x_1, \ldots, x_{t-1})$ summed over all positions and all documents in the corpus.  For encoder-only models like BERT~\cite{devlin2019bert}, the objective is \emph{masked language modelling}: randomly mask a fraction of tokens and train the model to recover them from bidirectional context.
+
+% ── PLACEHOLDER ──────────────────────────────────────────────
+% FIGURE: Pre-training objectives visualised.
+% Left: Causal LM — each token predicts the next, arrows flow left-to-right.
+% Right: Masked LM — bidirectional arrows, [MASK] tokens highlighted.
+% \begin{figure}[!htbp]
+%     \centering
+%     \includegraphics[width=0.85\textwidth]{images/pretraining_objectives.pdf}
+%     \caption{Two pre-training objectives.  \textbf{Left}: causal language modelling (decoder-only)—each 
+%              token predicts the next.  \textbf{Right}: masked language modelling (encoder-only)—randomly 
+%              masked tokens are predicted from bidirectional context.}
+%     \label{fig:pretraining}
+% \end{figure}
+% ─────────────────────────────────────────────────────────────
+
+For code, pre-training has a dual effect.  It teaches syntactic fluency and common programming idioms that transfer across repositories, which is valuable for code comprehension.  But it also absorbs patterns from the training corpus uncritically, including insecure practices that happen to be common in open-source code~\cite{pearce2022asleep}.  An LLM's familiarity with typical code can help it spot anomalous or suspicious constructs, but pre-training alone provides no guarantee that its security judgements are correct—a limitation that motivates every subsequent stage.
+
 
 \subsection{Fine-tuning}
-\label{subsec:llm-finetuning}
-After pre-training, models are often adapted to downstream tasks via \emph{fine-tuning}. A common approach is supervised fine-tuning on instruction-response pairs so the model follows user intent more reliably. Many production models also incorporate alignment techniques such as reinforcement learning from human feedback (RLHF), which optimizes model outputs toward human preference judgments \cite{ouyang2022training}.
+\label{subsec:finetuning}
 
-In security auditing, fine-tuning can improve usefulness in two ways. It can bias the model toward structured reporting (clear findings, evidence, remediation steps), and it can improve adherence to constraints (e.g., ``only claim what you can justify''). However, fine-tuning also risks overfitting to narrow datasets or encoding dataset-specific biases. For this thesis, we therefore treat fine-tuning as complementary rather than required: grounding and tool integration can improve reliability even when using general-purpose models.
+Fine-tuning adapts a pre-trained model to specific downstream tasks by continuing training on a smaller, curated dataset.  The most common modern approach is \emph{supervised fine-tuning} (SFT) on instruction–response pairs, which teaches the model to follow user intent reliably.
+
+For security auditing, fine-tuning can improve output quality in two key ways: it can bias the model toward structured reporting (severity, evidence, remediation steps) and it can improve adherence to epistemic constraints such as ``only claim what you can justify with code evidence.''  However, fine-tuning also risks overfitting to narrow datasets.  For this thesis, we treat fine-tuning as complementary rather than required: grounding through retrieval and tool integration can improve reliability even when using general-purpose models.
+
+\textbf{Parameter-efficient methods} have made fine-tuning accessible even for large models.  LoRA (Low-Rank Adaptation)~\cite{hu2022lora} freezes the pre-trained weights and injects small trainable low-rank matrices, reducing the number of trainable parameters by orders of magnitude.  QLoRA~\cite{dettmers2023qlora} combines LoRA with 4-bit quantisation of the frozen weights.  These techniques are widely used in the smart contract domain: for instance, ParaVul~\cite{huang2025paravul} extends QLoRA with sparse connections (SLoRA) for vulnerability detection, and LLM-BSCVM~\cite{llmbscvm2025} fine-tunes CodeLlama-13B with LoRA adapters for multi-agent vulnerability management.
 
 \subsubsection*{Reinforcement Learning from Human Feedback}
-[CITE] Reinforcement Learning from Human Feedback (RLHF) is a machine learning paradigm
-that combines elements of reinforcement learning and supervised learning to enable
-AI systems to learn and make decisions in a more human-aligned manner [63]. RLHF
-introduces human feedback as a valuable source of guidance, which can help AI systems navigate complex decision spaces, align with human values, and make more
-informed and ethical choices [64].
-Fig. 2.4 illustrates the RLHF process, which consists of several key steps. Firstly,
-prompts are collected to train a reward model through human labelling. Subsequently, the language model is fine-tuned using reinforcement learning techniques,
-followed by deploying and iterating the model [65]. During the fine-tuning process,
-the reward model guides the model’s actions, and the agent aims to maximize cumulative rewards based on the reward model’s predictions.
+
+After SFT, many production LLMs undergo alignment via \emph{Reinforcement Learning from Human Feedback} (RLHF)~\cite{ouyang2022training}.  The process has three stages:
+
+\begin{enumerate}
+    \item \textbf{Reward model training.}  Human annotators rank multiple model outputs for the same prompt.  A reward model is trained on these preference pairs to predict which outputs humans would prefer.
+    
+    \item \textbf{Policy optimisation.}  The language model is treated as a reinforcement learning agent whose ``action'' at each step is the next token.  Using Proximal Policy Optimisation (PPO)~\cite{schulman2017proximal}, the model is fine-tuned to maximise the reward model's score while staying close to the SFT policy (via a KL-divergence penalty).
+    
+    \item \textbf{Iteration.}  The process repeats: new outputs are collected, annotators provide fresh rankings, and the reward model and policy are updated.
+\end{enumerate}
+
+% ── PLACEHOLDER ──────────────────────────────────────────────
+% FIGURE: RLHF pipeline diagram — three stages:
+% (1) SFT model generates outputs
+% (2) Human annotators rank outputs → reward model trained
+% (3) PPO fine-tunes the model against the reward model
+% \begin{figure}[!htbp]
+%     \centering
+%     \includegraphics[width=0.85\textwidth]{images/rlhf_pipeline.pdf}
+%     \caption{The RLHF alignment pipeline.  An SFT model generates candidate responses.  
+%              Human annotators rank them to train a reward model.  The language model is then 
+%              fine-tuned with PPO to maximise the reward while staying close to the SFT policy.}
+%     \label{fig:rlhf}
+% \end{figure}
+% ─────────────────────────────────────────────────────────────
+
+An alternative gaining traction is \textbf{Direct Preference Optimisation (DPO)}~\cite{rafailov2023dpo}, which eliminates the separate reward model by directly optimising the language model on preference pairs.  Smart-LLaMA-DPO~\cite{yu2025smartllama} uses this approach for smart contract vulnerability detection, applying DPO on paired high-quality and low-quality vulnerability explanations to improve both detection accuracy and explanation quality.
+
 
 \subsection{Prompting}
-\label{subsec:llm-prompting}
-\emph{Prompting} refers to shaping model behavior by providing instructions, context, and examples at inference time rather than changing model weights. Few-shot prompting, popularized by large-scale decoder-only models, demonstrates that including a small number of input-output examples can elicit task behavior without explicit fine-tuning \cite{brown2020language}. For code auditing, prompts often include: (i) a description of the vulnerability class to look for, (ii) the relevant code snippets, and (iii) an expected output format such as a checklist or a structured report.
+\label{subsec:prompting}
 
-Prompting is powerful but fragile. Small changes in wording can lead to different conclusions, and prompts that include large amounts of irrelevant context can degrade output quality. These realities motivate the later design of retrieval-augmented prompting: instead of relying on a single large prompt, we programmatically retrieve and assemble focused evidence that the model can cite and reason over.
+\emph{Prompting} shapes model behaviour at inference time through instructions, context, and examples—without changing any model weights.  Brown et al.~\cite{brown2020language} demonstrated that including a few input–output examples (\emph{few-shot prompting}) can elicit task-specific behaviour from large decoder-only models without any fine-tuning at all.
 
-\subsubsection*{Prompting strategies}
-\begin{itemize}
-    \item \textbf{Task decomposition} - breaks an analysis into smaller sub-tasks such as ``summarize the contract's assets and trust boundaries'', ``identify external calls and state updates'', and ``check whether updates happen before interactions''. Decomposition improves reliability because each sub-task has narrower scope and clearer success criteria, and it naturally aligns with tool usage: static analysis can enumerate call sites, while the LLM focuses on explaining why a pattern is risky and what remediation looks like.
-    
-    \item \textbf{Chain-of-thought} - elicits intermediate reasoning steps and can improve performance on multi-step tasks by encouraging the model to keep track of assumptions and partial conclusions \cite{wei2022chain}. In security settings, however, the goal is not to obtain long informal traces, but to obtain \emph{checkable} reasoning: claims should be tied to specific code locations or retrieved evidence. In later chapters, we therefore structure outputs around findings, evidence, and remediation rather than relying on free-form reasoning traces.
-    
-    \item \textbf{Few-shot learning} - calibrates what ``good'' output looks like. In auditing, examples are most valuable when they mirror the desired report structure (severity, impact, evidence, remediation) and when they demonstrate the level of conservatism expected: the model should prefer ``uncertain, needs evidence'' over confident speculation. This style is compatible with retrieval: retrieved examples become dynamic few-shot demonstrations that are tailored to the code under analysis rather than static prompt templates.
-\end{itemize}
+For code auditing, prompts typically combine: (i) a description of the vulnerability class to check, (ii) the relevant code snippets, and (iii) an expected output format.  Prompting is powerful but fragile—small wording changes can shift conclusions, and including too much irrelevant context degrades output quality.  These realities motivate the retrieval-augmented prompting approach developed in the next chapter.
 
-\section{Code-Specialized Models and Embeddings}
-% Explain why code models/embeddings help retrieval + similarity search (ties directly to your KB).
-\subsection{Embeddings}
-\subsection{Encoder/Decoder Models}
-%codebert
-\subsection{Seq2seq Models}
-% T5/CodeT5 family
+Three strategies are particularly relevant to security analysis:
 
+\textbf{Task decomposition} breaks a complex audit into smaller sub-tasks—``summarise the contract's assets and trust boundaries'', ``identify external calls and state changes'', ``check whether state updates precede external interactions.''  Each sub-task has narrower scope and clearer success criteria, and the decomposition naturally aligns with tool usage: static analysis can enumerate call sites while the LLM focuses on explaining why a pattern is risky.
+
+\textbf{Chain-of-thought (CoT)} prompting~\cite{wei2022chain} elicits intermediate reasoning steps and improves performance on multi-step tasks.  In security settings, however, the goal is not free-form reasoning traces but \emph{checkable} reasoning: claims should be tied to specific code locations or retrieved evidence.  ReVul-CoT~\cite{chen2025revulcot} demonstrates this principle by guiding LLMs through structured step-by-step CVSS assessment grounded in retrieved vulnerability records.
+
+\textbf{Few-shot learning} calibrates what ``good'' output looks like.  In auditing, examples are most valuable when they mirror the desired report structure (severity, impact, evidence, remediation) and when they demonstrate appropriate epistemic caution—preferring ``uncertain, needs further evidence'' over confident speculation.  This approach is compatible with retrieval: retrieved vulnerability reports become dynamic few-shot demonstrations tailored to the contract under analysis.
+
+
+% ============================================================
+\section{Embeddings}
+\label{sec:code-models}
+% ============================================================
+
+General-purpose LLMs treat code as just another form of text, but models explicitly pre-trained or fine-tuned on source code develop richer representations of programming constructs.  These specialised models matter for smart contract analysis in two ways: they produce better \emph{embeddings} for retrieval and similarity search, and they achieve stronger performance on code understanding tasks.
+
+\subsection{Code Embeddings}
+\label{subsec:embeddings}
+
+An \emph{embedding} is a fixed-dimensional vector representation of a code snippet, produced by passing the snippet through an encoder model and extracting the hidden state (typically via mean pooling or the \texttt{[CLS]} token).  Two code fragments with similar semantics should have embeddings that are close in vector space, enabling nearest-neighbour retrieval over large code corpora.
+
+% ── PLACEHOLDER ──────────────────────────────────────────────
+% FIGURE: 2D t-SNE or UMAP projection of code embeddings, colour-coded 
+% by vulnerability type, showing clustering behaviour.  Could use 
+% CodeBERT embeddings of SmartBugs-Curated contracts.
+% \begin{figure}[!htbp]
+%     \centering
+%     \includegraphics[width=0.7\textwidth]{images/embedding_space.pdf}
+%     \caption{Projected embedding space of Solidity functions encoded by CodeBERT, 
+%              coloured by vulnerability type.  Semantically similar vulnerability 
+%              patterns cluster together, enabling retrieval-based detection.}
+%     \label{fig:embedding-space}
+% \end{figure}
+% ─────────────────────────────────────────────────────────────
+
+The quality of embeddings depends critically on the pre-training data and objective.  General text embeddings conflate semantically different code that happens to use similar natural-language identifiers; code-aware embeddings trained on programming-language corpora better capture structural and functional similarity.
+
+
+\subsection{Encoder Models}
+\label{subsec:encoder-models}
+
+\textbf{CodeBERT}~\cite{feng2020codebert} was one of the first models to pre-train a BERT-style encoder on both natural language and source code across six programming languages.  It uses both masked language modelling and replaced-token detection on NL–PL pairs, learning alignments between code and its documentation.  CodeBERT embeddings have become a standard baseline for code search, clone detection, and vulnerability classification.
+
+\textbf{GraphCodeBERT}~\cite{guo2021graphcodebert} extends CodeBERT by incorporating data flow graphs into the pre-training objective, explicitly modelling variable definition-use chains.  This structural awareness improves performance on tasks that require understanding data dependencies—precisely the kind of reasoning needed to trace the flow of tainted data in a smart contract.
+
+For smart contract vulnerability detection specifically, several studies have used encoder models as feature extractors.  Lightning Cat~\cite{lightningcat2023} uses CodeBERT preprocessing to achieve F1~scores above 93\% on the SolidiFI benchmark.  A comprehensive benchmark study by Sendner et al.~\cite{sendner2025firetries} compared seven pre-trained language models—BERT, CodeBERT, GraphCodeBERT, DeBERTa, RoBERTa, DistilBERT, and Longformer—for multi-label vulnerability detection across approximately 18,000 Ethereum smart contracts.
+
+
+\subsection{Encoder–Decoder and Seq2Seq Models}
+\label{subsec:seq2seq}
+
+\textbf{T5} (Text-to-Text Transfer Transformer)~\cite{raffel2020exploring} frames every NLP task as a text-to-text problem, enabling a single model architecture to handle classification, translation, summarisation, and generation.
+
+\textbf{CodeT5}~\cite{wang2021codet5} adapts the T5 architecture for code, using an identifier-aware pre-training objective that masks and recovers code identifiers rather than random tokens.  Its successor, \textbf{CodeT5+}~\cite{wang2023codet5p}, scales the model and adds contrastive learning objectives.  BreachT5~\cite{breacht5_2024} demonstrated that fine-tuned CodeT5+ ensembles can perform multi-label SWC classification over large smart contract datasets, though the model's 512-token input limit constrains analysis of longer contracts.
+
+These encoder–decoder models are particularly well-suited for tasks framed as sequence-to-sequence transformation: given vulnerable code, generate a description of the vulnerability; or given a natural-language specification, generate a formal property for verification.  PropertyGPT~\cite{liu2025propertygpt} exploits this capability by using RAG over human-written verification properties to generate new formal specifications, uncovering 12 zero-day vulnerabilities that earned \$8,256 in bug bounties.
+
+
+% ============================================================
 \section{LLMs in Smart Contract Auditing}
-% Focus on 4 buckets: prompt-only, agentic, fine-tuned, RAG-augmented.
-\subsection{Prompt-Only and Agentic Auditing Pipelines}
-% Example: multi-agent approaches; cite one solid paper you actually discuss.
-\subsection{Fine-tuned Models for Smart Contract Vulnerability Detection}
-% Example: SmartLLM (RAG + fine-tuning). :contentReference[oaicite:15]{index=15}
-\subsection{RAG-Augmented Detection Frameworks}
-% Discuss ParaVul (explicit RAG + verification/fusion). :contentReference[oaicite:16]{index=16}
-% (This directly motivates your “RAG inside Wake-AI” choice.)
+\label{sec:llm-auditing}
+% ============================================================
 
+The application of LLMs to smart contract security has evolved rapidly since 2023, with approaches spanning four broad categories: prompt-only and agentic pipelines, fine-tuned detection models, RAG-augmented frameworks, and hybrid systems that combine multiple strategies.
+
+% ── PLACEHOLDER ──────────────────────────────────────────────
+% FIGURE: Timeline/taxonomy diagram showing the four paradigms 
+% and key papers in each, arranged chronologically from 2023–2025.
+% \begin{figure}[!htbp]
+%     \centering
+%     \includegraphics[width=\textwidth]{images/llm_auditing_taxonomy.pdf}
+%     \caption{Taxonomy of LLM-based smart contract auditing approaches (2023–2025), 
+%              organised by primary strategy.  Hybrid approaches that combine multiple 
+%              paradigms are increasingly common.}
+%     \label{fig:llm-taxonomy}
+% \end{figure}
+% ─────────────────────────────────────────────────────────────
+
+
+\subsection{Prompt-Only and Agentic Auditing Pipelines}
+\label{subsec:prompt-only}
+
+The simplest approach feeds smart contract source code directly into a general-purpose LLM with appropriate instructions.  Chen et al.~\cite{chen2024chatgpt} conducted a systematic evaluation of GPT-3.5 and GPT-4 on the SmartBugs-Curated benchmark and found high recall but poor precision, with roughly 4 out of 5 flagged issues being false positives (GPT-4 achieved 88.2\% recall but only 22.6\% precision).  Perhaps more concerning, 42\% of contracts showed unstable detection outcomes across repeated runs, highlighting the non-deterministic nature of LLM-based analysis.
+
+More structured prompt-based approaches improve on this baseline.  \textbf{GPTLens}~\cite{hu2023gptlens} introduced an adversarial two-stage pipeline: a high-temperature ``Auditor'' agent generates vulnerability candidates, and a separate ``Critic'' agent filters false positives.  \textbf{GPTScan}~\cite{sun2024gptscan} combined GPT with static analysis for token contract auditing, achieving over 90\% precision and discovering 9~vulnerabilities missed by human auditors, at a cost of approximately \$0.01 per 1,000 lines of code.
+
+\textbf{LLM-SmartAudit}~\cite{wei2024smartaudit} deployed multi-agent conversational frameworks with role specialisation across 6,454 contracts from Code4rena competitions.  The multi-agent design mirrors how human audit teams operate, with different agents responsible for different vulnerability categories.
+
+These results collectively establish that general-purpose LLMs can identify security issues in smart contracts but lack the precision needed for production use without additional grounding mechanisms.
+
+\subsection{Fine-Tuned Models for Smart Contract Vulnerability Detection}
+\label{subsec:fine-tuned}
+
+Fine-tuning domain-specific models on labelled vulnerability datasets produces substantially stronger results than prompting alone.
+
+\textbf{iAudit}~\cite{ma2025iaudit} introduced a two-stage fine-tuning pipeline: a Detector model for binary vulnerability classification and a Reasoner model for generating human-readable explanations.  These are complemented by Ranker and Critic LLM agents that iteratively debate and refine the outputs, outperforming baselines including CodeBERT, GraphCodeBERT, CodeT5, and UniXcoder.
+
+\textbf{Smart-LLaMA-DPO}~\cite{yu2025smartllama} applies three-stage training to LLaMA-3.1-8B: continual pre-training on smart contract code, supervised fine-tuning, then Direct Preference Optimisation using paired quality explanations.  The result surpasses GPT-4o (accuracy 58.91\%) and iAudit (accuracy 64.42\%) with improvements of +10.43\% in F1 and +7.87\% in accuracy over the previous state of the art.
+
+Bu et al.~\cite{bu2025dapp} fine-tuned Llama3-8B on 4,998 real DApp contracts with full-parameter fine-tuning and random oversampling, reaching F1~=~0.83 and precision~0.97 for price manipulation vulnerabilities—up from F1~=~0.20 without fine-tuning.
+
+\textbf{LLMBugScanner}~\cite{yuan2024llmbugscanner} takes an ensemble approach, combining multiple LoRA-fine-tuned models from the OpenCode leaderboard through weighted voting.  This reduces the impact of individual model weaknesses but introduces complexity in deployment.
+
+
+\subsection{RAG-Augmented Detection Frameworks}
+\label{subsec:rag-augmented}
+
+Retrieval-Augmented Generation (RAG) addresses the fundamental limitation that LLMs cannot ``know'' about vulnerability patterns not present in their training data, and that their context windows may be insufficient for analysing entire protocols.  Several RAG frameworks have emerged for smart contract security.
+
+\textbf{ParaVul}~\cite{huang2025paravul} represents the most architecturally sophisticated approach.  It runs a SLoRA-fine-tuned LLaMA-13B detector and a hybrid RAG detector (combining dense embedding retrieval with BM25 lexical matching) in parallel, fusing their outputs through a meta-learning gated verification module.  The system achieves F1 scores of 0.9398 (single-label) and 0.9330 (multi-label), outperforming both standalone fine-tuning and standalone retrieval.  A final stage generates vulnerability reports using chain-of-thought prompts fed to a cloud-based LLM.
+
+% ── PLACEHOLDER ──────────────────────────────────────────────
+% FIGURE: ParaVul architecture diagram — four stages:
+% (1) SLoRA fine-tuned detector
+% (2) Hybrid RAG detector (dense + BM25)
+% (3) Meta-learning fusion module
+% (4) CoT report generation
+% \begin{figure}[!htbp]
+%     \centering
+%     \includegraphics[width=0.9\textwidth]{images/paravul_architecture.pdf}
+%     \caption{ParaVul architecture~\cite{huang2025paravul}.  A fine-tuned LLM path and a hybrid 
+%              RAG path operate in parallel; their predictions are fused by a meta-learning gate 
+%              before chain-of-thought report generation.}
+%     \label{fig:paravul}
+% \end{figure}
+% ─────────────────────────────────────────────────────────────
+
+\textbf{SmartLLM}~\cite{smartllm2025} combines RAG with fine-tuned LLaMA~3.1, integrating ERC documentation for domain context.  It achieves 100\% recall with 62.5\% precision (F1~=~76.9\%), demonstrating how retrieval of standard documentation can reduce false negatives.
+
+\textbf{PropertyGPT}~\cite{liu2025propertygpt} applies RAG in a different direction: rather than retrieving vulnerable code examples, it retrieves human-written formal verification properties from Certora audit reports and uses them to guide LLM-based property generation.  This yielded 80\% recall against ground-truth properties and uncovered 12~zero-day vulnerabilities.
+
+\textbf{SmartGuard}~\cite{smartguard2025} retrieves semantically similar code snippets to generate chain-of-thought reasoning chains, achieving recall of 95.06\% and F1 of 94.95\% on the SolidiFI benchmark.
+
+The most comprehensive framework is \textbf{LLM-BSCVM}~\cite{llmbscvm2025}, which implements a full vulnerability management lifecycle using a ``Decompose-Retrieve-Generate'' pipeline with multi-agent collaboration and LoRA-fine-tuned CodeLlama-13B, achieving 91\% accuracy with a 5.1\% false positive rate.
+
+While not targeting smart contracts specifically, \textbf{ReVul-CoT}~\cite{chen2025revulcot} demonstrates the RAG+CoT paradigm's effectiveness for general software vulnerability severity assessment.  Using retrieval from NVD and CWE databases combined with structured chain-of-thought reasoning, it achieved 87.50\% accuracy and 83.75\% Macro-F1 on 12,070 vulnerability records—improvements exceeding 10 percentage points over all baselines.  Its architecture provides a transferable blueprint for smart contract severity assessment.
+
+% ── PLACEHOLDER ──────────────────────────────────────────────
+% TABLE: Comparison of LLM-based smart contract auditing approaches.
+% Columns: Method | Approach | Base Model | Key Metric | Benchmark
+% Rows: GPTScan, iAudit, Smart-LLaMA-DPO, ParaVul, SmartGuard, LLM-BSCVM
+% \begin{table}[!htbp]
+%     \centering
+%     \caption{Comparison of LLM-based smart contract vulnerability detection approaches.}
+%     \label{tab:llm-comparison}
+%     \begin{tabular}{lllll}
+%     \toprule
+%     \textbf{Method} & \textbf{Approach} & \textbf{Base Model} & \textbf{Best F1} & \textbf{Benchmark} \\
+%     \midrule
+%     GPTScan       & Prompt + SA   & GPT-4        & >0.90 (precision) & Token contracts \\
+%     iAudit        & Fine-tune     & LLaMA        & —                  & Custom \\
+%     Smart-LLaMA-DPO & FT + DPO   & LLaMA-3.1-8B & +10.43\% over SOTA & Custom \\
+%     ParaVul       & FT + RAG      & LLaMA-13B    & 0.9398             & Custom \\
+%     SmartGuard    & RAG + CoT     & —            & 0.9495             & SolidiFI \\
+%     LLM-BSCVM     & RAG + agents  & CodeLlama-13B & 0.91 (acc)        & Custom \\
+%     \bottomrule
+%     \end{tabular}
+% \end{table}
+% ─────────────────────────────────────────────────────────────
+
+
+% ============================================================
 \section{Challenges and Limitations}
 \label{sec:llm-challenges}
+% ============================================================
 
-\subsection{Hallucinations}
+Despite rapid progress, LLM-based smart contract auditing faces fundamental challenges that constrain its reliability in production settings.
+
+\subsection*{Hallucinations}
 \label{subsec:hallucinations}
-LLMs can produce plausible-sounding but incorrect statements, including claims about vulnerabilities that do not exist in the provided code. This is particularly problematic in auditing, where false positives waste reviewer time and may lead to unnecessary code changes. Empirical studies of code models report non-trivial rates of insecure or incorrect suggestions, especially when prompts are underspecified or when the model lacks relevant context \cite{pearce2022asleep}. A practical mitigation is to require evidence: every finding should reference concrete code behavior, tool outputs, or retrieved documentation rather than relying on model intuition alone.
 
-\subsection{Context Window}
-\label{subsec:context-window}
-Even with large context windows, real smart contract systems can exceed what is reasonable to include in a single prompt, especially when imported libraries, interfaces, and deployment configuration matter. Moreover, models have a fixed training cutoff; new vulnerability classes and best practices emerge continuously. RAG partially addresses both issues by retrieving up-to-date, task-relevant information at inference time and by focusing the prompt on a small set of high-signal chunks \cite{lewis2020retrieval}. The remaining challenge is selection: retrieval must be precise enough to avoid overwhelming the model with irrelevant text.
+LLMs can produce plausible-sounding but factually incorrect outputs—a phenomenon termed \emph{hallucination}.  In code generation, this manifests as references to non-existent libraries, fabricated API calls, and invented vulnerability reports.  Spracklen et al.~\cite{spracklen2025package} tested 16~LLMs generating 576,000 code samples and found that 19.7\% of the 2.23~million referenced packages were hallucinated (non-existent), creating a direct supply-chain attack vector.
 
-\subsection{Security}
+For security specifically, the consequences are severe.  Pearce et al.~\cite{pearce2022asleep} found that approximately 40\% of GitHub Copilot's code completions contained vulnerabilities.  Perry et al.~\cite{perry2023users} demonstrated that users with AI coding assistant access wrote significantly less secure code while being more confident in its correctness—a dangerous automation bias.
+
+In the smart contract domain, Chen et al.~\cite{chen2024chatgpt} identified several hallucination patterns: ``Protected Mechanism Bias'' (the model assumes protective code exists when it does not), ``Development Intent Bias'' (the model assumes developers followed best practices), and ``Lack of Understanding of Actual Meaning'' of Solidity-specific constructs like \texttt{msg.value}.
+
+The primary mitigation is to require \emph{grounded evidence} for every finding.  Each reported vulnerability should reference specific code locations, static analysis outputs, or retrieved documentation rather than relying on the model's ``intuition'' alone.  RAG-based systems consistently reduce hallucination rates: LLM-BSCVM reduced false positives from 7.2\% to 5.1\% through retrieval-grounded multi-agent collaboration~\cite{llmbscvm2025}.
+
+
+\subsection*{Context Window Limitations}
+\label{subsec:context-window-limits}
+
+Even with context windows reaching hundreds of thousands of tokens, real smart contract systems can exceed what is reasonable to include in a single prompt.  Imported libraries, interface definitions, deployment configurations, and cross-contract dependencies all contribute to the token budget.  Moreover, models have a fixed training cutoff: new vulnerability classes and evolving best practices emerge continuously but are absent from the model's parametric knowledge.
+
+RAG partially addresses both issues by retrieving up-to-date, task-relevant information at inference time and by focusing the prompt on high-signal content~\cite{lewis2020retrieval}.  The remaining challenge is retrieval precision: irrelevant chunks can overwhelm the model and degrade output quality.  ReVul-CoT's ablation studies confirmed that retrieval Top-$k$ requires careful tuning to balance contextual richness against noise~\cite{chen2025revulcot}.
+
+
+\subsection*{Security}
 \label{subsec:security}
-% This is where you justify grounding with RAG + structured tool calls (MCP).
-Audits are security-critical, so outputs must be reproducible and traceable. Purely generative answers are difficult to verify after the fact, and different runs may yield different results. Tool-augmented approaches improve reproducibility by logging which code artifacts and documents were used, and by separating verifiable computations (e.g., static analysis queries) from probabilistic summarization.
 
-When agents can call external tools, additional safety concerns arise, such as prompt injection in retrieved documents and unintended execution of dangerous actions. For our setting, we mitigate these risks by restricting the agent's tool surface to read-only analysis and retrieval primitives and by treating all retrieved text as untrusted input that must not override analysis policies. [CITATION NEEDED]
+Security audits demand reproducible, traceable outputs.  Purely generative answers are difficult to verify after the fact, and identical prompts may yield different results across runs.  Chen et al.~\cite{chen2024chatgpt} found 42\% of smart contracts showed unstable detection outcomes across repeated GPT-4 evaluations.
 
-LLMs offer a complementary capability to traditional program analysis: they can translate code behavior into natural language, relate patterns to prior examples, and assist in drafting remediation guidance. However, these strengths come with constraints that are especially visible in smart contract auditing: limited context windows, non-deterministic behavior, and the risk of hallucinated findings.
+Tool-augmented approaches improve reproducibility by logging which code artifacts, retrieved documents, and tool outputs contributed to each finding.  This creates an audit trail that separates verifiable computations (static analysis queries, retrieval results) from probabilistic interpretation (the LLM's summary and explanation).
 
-After understanding what is blockchain and ethereum, how code analysis looks lie and what LLMS are capable of, we are ready to move to Wake framework, which incorporates all mentioned before.
+When LLM agents can call external tools, additional safety concerns arise.  Prompt injection in retrieved documents could manipulate the agent's behaviour, and unrestricted tool access could enable unintended actions.  For our setting, we mitigate these risks by restricting the agent's tool surface to read-only analysis and retrieval primitives, and by treating all retrieved text as untrusted input that must not override analysis policies~\cite{greshake2023youve}.
+
+This chapter traced the mathematical foundations of sequence modeling through the transformer architecture and its modern extensions, arriving at a clear picture of where LLMs excel and where they fall short for smart contract auditing.
+
+The transformer's self-attention mechanism gives LLMs the ability to relate distant code elements directly—a critical capability for tracing data flows and identifying cross-function vulnerabilities.
+
+After having the overview about Ethereum, Code Analysis and LLMs, we can move to framework Wake, which comnined all of this for security purposes.
 
 \chapter{The Wake Framework}
 \label{chap:wake}
