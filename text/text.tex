@@ -4,18 +4,18 @@
 %---------------------------------------------------------------
 \setcounter{page}{1}
 
-Problem, motivation, goal, contributions, and thesis roadmap.
-Why smart contract bugs are high impact (immutability, financial incentives) and why existing audits/tools still miss logical flaws. Tell about security audits and how it is time consuming. Then a bit about LLM, which is developed in parallel.
-State your contribution precisely: extending Wake-AI with MCP-based RAG + building KB from Solidity vulns/audit knowledge.
-One paragraph explaining what each chapter delivers and how it connects. (ethereum, code analysis, large language models, wake framework, proposes methododology, implementation, evaluation, conclusion)
+% Problem, motivation, goal, contributions, and thesis roadmap.
+% Why smart contract bugs are high impact (immutability, financial incentives) and why existing audits/tools still miss logical flaws. Tell about security audits and how it is time consuming. Then a bit about LLM, which is developed in parallel.
+% State your contribution precisely: extending Wake-AI with MCP-based RAG + building KB from Solidity vulns/audit knowledge.
+% One paragraph explaining what each chapter delivers and how it connects. (ethereum, code analysis, large language models, wake framework, proposes methododology, implementation, evaluation, conclusion)
 
-In June 2016, an attacker exploited a reentrancy vulnerability in The DAO smart contract, draining approximately \$60 million worth of Ether in a matter of hours \cite{mehar2019understanding}. The technical flaw was subtle—a recursive call that allowed withdrawals before balance updates—but the consequences were catastrophic. This incident, along with numerous subsequent exploits in decentralized finance (DeFi) protocols, highlights a fundamental challenge in blockchain development: once deployed, smart contracts are immutable, and vulnerabilities cannot be easily patched. Unlike traditional software where bugs might cause inconvenience or data corruption, smart contract vulnerabilities directly translate to financial losses, often measured in millions of dollars \cite{atzei2017survey, perez2021smart}.
+In June 2016, an attacker exploited a reentrancy vulnerability in The DAO smart contract, draining approximately \$60 million worth of Ether in a matter of hours\footnote{\url{https://www.gemini.com/cryptopedia/the-dao-hack-makerdao}}. This incident, along with numerous subsequent exploits in decentralized finance (DeFi) protocols, highlights a fundamental challenge in blockchain development: once deployed, smart contracts are immutable, and vulnerabilities cannot be easily patched. Unlike traditional software where bugs might cause inconvenience or data corruption, smart contract vulnerabilities directly translate to financial losses, often measured in millions of dollars.
 
-The immutability of blockchain systems creates a paradox for security. While immutability is precisely what makes smart contracts trustworthy—users can verify that contract logic won't change arbitrarily—it also means that any security flaw becomes permanent. An attacker who discovers a vulnerability can exploit it with confidence, knowing the code cannot be modified to prevent the attack. Moreover, the financial nature of most smart contract applications creates strong economic incentives for exploitation. When a DeFi protocol manages hundreds of millions in assets, even sophisticated attackers invest significant resources in finding vulnerabilities. This high-stakes environment has driven the development of increasingly rigorous security audit practices, yet critical vulnerabilities continue to slip through.
+% The immutability of blockchain systems creates a paradox for security. While immutability is precisely what makes smart contracts trustworthy—users can verify that contract logic won't change arbitrarily—it also means that any security flaw becomes permanent. An attacker who discovers a vulnerability can exploit it with confidence, knowing the code cannot be modified to prevent the attack. Moreover, the financial nature of most smart contract applications creates strong economic incentives for exploitation. When a DeFi protocol manages hundreds of millions in assets, even sophisticated attackers invest significant resources in finding vulnerabilities. This high-stakes environment has driven the development of increasingly rigorous security audit practices, yet critical vulnerabilities continue to slip through.
 
-Current smart contract security relies heavily on manual code audits supplemented by automated analysis tools. Professional audit firms employ expert security researchers who spend weeks examining contract code, looking for common vulnerability patterns, reasoning about edge cases, and attempting to violate protocol invariants \cite{perez2021smart}. Static analysis tools like Slither \cite{feist2019slither} and Mythril \cite{mueller2018mythril} automate detection of known vulnerability patterns such as reentrancy, unchecked external calls, and integer overflows. Fuzz testing tools like Echidna \cite{grieco2020echidna} explore program state spaces to find invariant violations. Despite these sophisticated techniques, significant vulnerabilities continue to evade detection until they are exploited in production.
+Current smart contract security is highly dependent on manual code audits supplemented by automated analysis tools. Professional audit firms employ expert security researchers who spend weeks examining contract code, looking for common vulnerability patterns, reasoning about edge cases, and trying to violate protocol invariants \cite{perez2021smart}. 
 
-The fundamental limitation is that many critical vulnerabilities are not simple pattern matches but rather logical flaws that emerge from complex interactions between contract components or violations of implicit business logic assumptions. For example, a flash loan attack might exploit the interaction between a pricing oracle, a lending pool, and a liquidation mechanism in ways that are individually correct but collectively create arbitrage opportunities. Detecting such vulnerabilities requires understanding not just what the code does syntactically, but what it means semantically in the context of the broader protocol design. This type of reasoning has historically required human expertise, making audits time-consuming and expensive—typically taking 2-4 weeks and costing \$50,000-\$200,000 for a medium-sized protocol \cite{consensys2023audit}.
+% The fundamental limitation is that many critical vulnerabilities are not simple pattern matches but rather logical flaws that emerge from complex interactions between contract components or violations of implicit business logic assumptions. For example, a flash loan attack might exploit the interaction between a pricing oracle, a lending pool, and a liquidation mechanism in ways that are individually correct but collectively create arbitrage opportunities. Detecting such vulnerabilities requires understanding not just what the code does syntactically, but what it means semantically in the context of the broader protocol design. This type of reasoning has historically required human expertise, making audits time-consuming and expensive—typically taking 2-4 weeks and costing \$50,000-\$200,000 for a medium-sized protocol \cite{consensys2023audit}.
 
 Recent advances in Large Language Models (LLMs) have demonstrated remarkable capabilities in understanding and reasoning about code. Models trained on vast corpora of source code, like GPT-4 \cite{openai2023gpt4} and Claude \cite{anthropic2024claude}, can explain code functionality, identify potential bugs, and even generate secure implementations when properly prompted. However, applying LLMs directly to smart contract security faces several challenges. First, LLMs have limited context windows—even models with 200,000 token contexts cannot process entire DeFi protocols with their complex interdependencies and imported libraries. Second, LLMs lack access to the structured analysis results produced by static analysis tools, which provide precise information about control flow, data dependencies, and detected patterns. Third, effective vulnerability analysis requires domain-specific knowledge about Solidity-specific pitfalls, common attack vectors, and audit best practices that may not be well-represented in general code training data.
 
@@ -67,38 +67,86 @@ Tell a bit about what was done and list objectives that were fullfilled:
 
 \chapter{Ethereum}
 \label{ch:ethereum}
-This chapter introduces the foundations needed to understand Ethereum and its components, as this work is closely related to that platform. It first outlines the general principles of blockchain, then specializes in the Ethereum execution model through the Ethereum Virtual Machine (EVM) and the Solidity programming language. Finally, it summarizes common smart-contract vulnerability categories that repeatedly appear in practical audits and will later inform the knowledge base
+This chapter introduces the foundations needed to understand Ethereum and its components, as this work is closely related to that platform. It first outlines the general principles of blockchain, then specializes in the Ethereum execution model through the Ethereum Virtual Machine (EVM) and the Solidity programming language. Finally, it summarizes common smart-contract vulnerability categories that repeatedly appear in practical audits.
 
 
 \section{Overview}
-\label{se:overview}
+\label{sec:overview}
 Ethereum, launched in 2015, marked a significant evolution in blockchain technology. First proposed by \texttt{Vitalik Buterin} in a 2013 white paper, Ethereum extends the ledger-centric model to a full application platform that supports smart contracts and decentralized applications (dApps) \cite{Buterin2013}. Rather than simply recording value transfers, it enables general-purpose programmable logic through the EVM while preserving the core properties of transparency, decentralization,and immutability \cite{wood2014yellow}. In effect, Ethereum transformed the blockchain as a generalized state-transition machine, broadening its applicability well beyond simple currency use cases.
 
 
 \subsection{Blockchain}
-\label{sabse:blockchain}
-To understand Ethereum’s role as a programmable state-transition system, it is useful to begin with the blockchain foundation on which it operates. A blockchain is a distributed ledger maintained by a network of peer-to-peer nodes rather than a single central authority. It grows as an ordered sequence of blocks, beginning with an initial block (commonly called the \emph{genesis block}), where each subsequent block contains a complete list of transaction records and a cryptographic link to its predecessor. As additional blocks are appended, reversing or altering earlier transactions becomes computationally infeasible. Participants interact through addresses instead of real-world identities, enabling transparency while preserving pseudonymity. Because every node stores a copy of the chain and the full transaction history is publicly verifiable, the system provides strong transparency: value flows can be traced, state transitions inspected, and the integrity of past operations independently confirmed. In short, from the initial genesis block through every appended block, blockchain architecture combines decentralization, tamper-resistance, and verifiable history in a single framework \cite{blockchain}.
+\label{subsec:blockchain}
 
+To understand Ethereum's role as a programmable state-transition system, 
+it is useful to begin with the blockchain foundation on which it operates. 
+A blockchain is a distributed ledger maintained by a network of 
+peer-to-peer nodes rather than a single central authority. It grows as an 
+ordered sequence of blocks, beginning with an initial block (commonly 
+called the \emph{genesis block}), where each subsequent block contains a 
+complete list of transaction records and a cryptographic link to its 
+predecessor. As additional blocks are appended, reversing or altering 
+earlier transactions becomes computationally infeasible. Participants 
+interact through addresses instead of real-world identities, enabling 
+transparency while preserving pseudonymity. Because every node stores a 
+copy of the chain and the full transaction history is publicly verifiable, 
+the system provides strong transparency: value flows can be traced, state 
+transitions inspected, and the integrity of past operations independently 
+confirmed. In short, from the initial genesis block through every appended 
+block, blockchain architecture combines decentralization, tamper-resistance, 
+and verifiable history in a single framework \cite{blockchain}.
 
-\begin{figure}[!h]
+\begin{figure}[!htbp]
     \centering
-    \includegraphics[width=10cm, height=9cm]{images/blockchain_diagram_eth.pdf}
-    \caption{Structure of an Ethereum blockchain node.}
-    \label{fig:blockchain_diagram_eth}
+    \includegraphics[width=0.7\linewidth]{images/block_eth.png}
+    \caption{Structure of an Ethereum blockchain node \cite{blockchain_diagram_eth}.}
+    \label{fig:block_eth}
 \end{figure}
 
-In Figure \ref{fig:blockchain_diagram_eth}, a blockchain block is shown linking to its predecessor and successor by storing the header hash of the previous block in its own header, forming an immutable chain; the header also includes the Merkle root, a timestamp and a nonce. The lower portion expands the block transaction set into a binary Merkle tree: individual transactions are hashed, then combined pairwise and re-hashed level by level until a single root hash remains. That root inserted in the block header acts as a compact commitment to every transaction in the block, so any alteration to a transaction propagates through the tree and changes the root, invalidating the header. This design allows nodes to verify the inclusion of specific transactions efficiently without reprocessing the entire block, while the previous-hash pointer secures block ordering \cite{blockchain_diagram_eth}.
+As illustrated in Figure~\ref{fig:block_eth}, a blockchain block links to 
+its predecessor and successor by storing the cryptographic hash of the 
+previous block's header within its own header, forming an immutable and 
+ordered chain. Beyond this backward pointer, the block header contains 
+four key fields: the \emph{previous block hash}, a \emph{timestamp} 
+recording when the block was produced, a \emph{nonce} adjusted during the 
+consensus process, and the \emph{Merkle root}, a single hash that 
+compactly summarises all transactions contained in the block 
+\cite{blockchain_diagram_eth}.
+
+A \emph{transaction} is the fundamental unit of state change in a 
+blockchain: a cryptographically signed instruction issued by a participant 
+that records the transfer of value or data between addresses. Each 
+transaction is broadcast to the network, validated by nodes, and 
+permanently written into a block, after which it becomes immutable.
 
 \subsubsection*{Merkle Tree}
-A Merkle tree (hash tree), mentioned in Figure \ref{fig:blockchain_diagram_eth}, is a binary tree in which each leaf holds the cryptographic hash of a data element and each internal node holds the hash of the concatenation of its two children. Starting from a set of items (e.g., transactions), we hash each item to form the leaves, then iteratively hash pairs of nodes until a single value remains: the \emph{Merkle root}. Because each internal label is a hash of its children, any change to any leaf propagates upward and deterministically alters the root. Under standard collision- and preimage-resistance assumptions for the hash function, the root acts as a binding, compact commitment to the entire dataset \cite{merkle1987,nakamoto2008}.
 
-Merkle trees are used in public blockchains to commit to all transactions in a block using only the root in the block header. This design enables efficient \emph{inclusion proofs} (also called \emph{Merkle proofs}) of size $O(\log n)$ for a block with $n$ transactions: to prove that a transaction is part of a block, a verifier only needs the transaction, the header (containing the root), and the minimal set of sibling hashes along the path from the leaf to the root, rather than the entire block. Such proofs underpin ``light'' or SPV clients that validate inclusion without reprocessing all transactions, saving bandwidth and storage while preserving data integrity \cite{nakamoto2008}.
+The lower portion of Figure~\ref{fig:block_eth} expands the block's 
+transaction set into a \emph{Merkle tree}: a binary tree in which each 
+leaf holds the cryptographic hash of an individual transaction and each 
+internal node holds the hash of its two children's concatenation. Leaf 
+hashes are combined pairwise and re-hashed level by level until a single 
+\emph{Merkle root} remains. Because every internal node is derived from 
+its children, any alteration to a transaction propagates deterministically 
+upward, changing the root and invalidating the block header --- making the 
+root a binding cryptographic commitment to the entire transaction set 
+\cite{merkle1987, nakamoto2008}.
 
+This design enables \emph{inclusion proofs} of size $O(\log n)$: to 
+verify that a transaction belongs to a block, a verifier needs only the 
+transaction itself, the header's Merkle root, and the minimal set of 
+sibling hashes along the path from leaf to root --- not the full block. 
+This allows lightweight validation without downloading entire blocks, 
+saving bandwidth and storage. Furthermore, the previous-hash pointer in 
+each header secures global block ordering: any retroactive modification 
+breaks the chain link to all subsequent blocks, making tampering 
+immediately detectable by any honest node in the network 
+\cite{nakamoto2008, merkle_tree}.
 
- public blockchain, each n-ode could take part in the consensus process. And onlya selected set of nodes are responsible for validating theblock in consortium blockchain. As for private chain, it isfully controlled by one organization and the organizationcould determine the final consensus mechanism. The two dominant families are proof-of-work (PoW), which selects leaders in proportion to computational power expended, and proof-of-stake (PoS), which selects leaders in proportion to economic stake locked as collateral
 
 \subsection{Consensus mechanisms}
-In a PoW system, network participants (miners) compete to solve computational puzzles (e.g., find a nonce so that the hash of the block header meets a target) and thereby propose the next valid block. In contrast, PoS selects block proposers (validators) based on their stake in the network (i.e., the amount of tokens locked up) rather than raw computing power, thereby altering the incentive, security and energy-profile of the system.
+\label{subsec:consensus}
+Once the block structure is established, the network must agree on which block to append next --- a process governed by the \emph{consensus mechanism}, the design of which depends on the blockchain's trust model. Across different deployment models, two dominant consensus families have emerged.
 
 \subsubsection*{Proof of Work}
 The first concept/method used by blockchains. Generally, the nodes in a PoW-based blockchain network reach consensus by participating in a solution searching process, where each node must find a nonce for its proposed new block. Due to the property of the hash function, the nonce can only be found by repeatedly trying different nonce values until the output is within the target range. When a participant finds the nonce, it will broadcast the block along with the transactions to other nodes. Then, if the new block is verified and determined to be the first block mined after the last block in the chain, it will be integrated into the current chain and become the latest block in the chain. This solution searching procedure can be considered to be a weighted random coin-tossing process where a participant with a higher hash rate(computational power) might have higher chances to be the block winner (leader) who can receive the reward. his computa-tion leads to the large amount of energy consumption forblockchains using PoW consensus mechanisms, as the par-ticipants try to increase their hash rates to have a higherchance to be the leader and receive rewards. Moreover, sinceparticipants with low hash rates have very low chances towin a block and receive rewards, they often join miningpools to have more opportunities to get revenues. A miningpool consists of participants who want to collaborate by con-tributing their computing resources to the pool. In this way,mining tasks will be distributed to the miners, and due to hugecomputing resources, mining pools often get much higher op-portunities to win a new block than individuals. While joininga mining pool provides more stable incomes, the nodes inthe pool often do not contribute to the transaction validationand propagation since they only perform the nonce searchprocess in a specific range. Thus, mining pools have beendominating processes making new blocks in most of currentblockchain networks. For example, the top five mining poolscontrol up to 62.7\% total hash rate of the Bitcoin network [3].This is the most serious issue of PoW-based blockchainnetworks because it is against the decentralized spirit ofblockchain technology. Another issue of PoW protocols isdelay. In a PoW-based blockchain network, when a block isadded to the chain, there is still a possibility that this blockwill not be included in the main chain for several reasons,e.g., network delay causing several versions of the chainor two participants finding two blocks simultaneously. Thispossibility decreases exponentially as the block is deeper inthe chain. Therefore, a block is considered to be finalizedonly when it is a certain k, usually six blocks deep in thechain. This delays the transaction confirmation significantly.Moreover, PoW mechanism is also vulnerable to 51\% attack.In particular, if a single party controls more than 51\% of thenetwork’s total computational power, they can spend theircoins multiple times (in cryptocurrency networks) or preventother transactions by adding conflicting blocks to the chain.While 51\% attacks might not be a serious problem for largeblockchain networks, the newly established networks withsmall and limited total computational power are especiallyvulnerable 
@@ -113,7 +161,7 @@ PoS (Proof of stake) is an energy-saving alternative to PoW.Miners in PoS have t
 
 
 
-With a solid understanding of how blocks are structured and how consensus mechanisms (whether proof-of-work or proof-of-stake) enable nodes to agree upon the canonical chain, we now turn our attention to the next layer of the architecture: how transactions and smart contract code are actually executed
+With a solid understanding of how blocks are structured and how consensus mechanisms work, we can turn our attention to the next layer of the architecture: how transactions and smart contract code are actually executed.
 
 \section{Ethereum Virtual Machine}
 The Ethereum Virtual Machine (EVM) is a deterministic state machine that executes the bytecode of the smart contract identically on all nodes \cite{wood2014yellow}. However, it is not Turing complete in the classical sense: execution is strictly resource-bounded by gas - every instruction has a metered gas cost, and execution halts once the supplied gas is exhausted. 
@@ -393,7 +441,7 @@ In the smart contract domain, tools such as Mythril~\cite{mueller2018smashing} a
 
 Environment modelling presents particular challenges for smart contract symbolic execution. The blockchain environment includes not just the contract under analysis but the entire ecosystem of other contracts, the block context, and the transaction parameters. Accurate modelling requires assumptions about what external contracts might do, what values environmental variables might take, and how transactions might be sequenced. Conservative assumptions lead to false positives; optimistic assumptions may miss real vulnerabilities~\cite{luu2016making}.
 
-[https://www.cyfrin.io/blog/solidity-smart-contract-formal-verification-symbolic-execution#layer-4-or-formal-verification]
+% [https://www.cyfrin.io/blog/solidity-smart-contract-formal-verification-symbolic-execution#layer-4-or-formal-verification]
 
 \subsection{Theorem Proving}
 \label{subsec:theorem-proving}
