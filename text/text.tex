@@ -1069,93 +1069,555 @@ Some of these limitations merit attention and can be addressed through alternati
 
 
 \chapter{Proposed Methodology}
-% THIS is your main “design contribution” chapter.
+\label{ch:methodology}
+
+The previous chapters established the theoretical and practical foundations for this work: blockchain and Ethereum fundamentals (Chapter~\ref{ch:ethereum}), code analysis techniques ranging from static analysis to formal verification (Chapter~\ref{ch:code-analysis}), large language models and their application to smart contract auditing (Chapter~\ref{ch:llm}), and the Wake framework with its AI extension and identified limitations (Chapter~\ref{chap:wake}). This chapter synthesises these elements into a concrete methodology for augmenting LLM-based smart contract auditing with Retrieval-Augmented Generation. We present the design goals that drive all subsequent decisions, formalise the RAG framework, describe the system architecture, detail the knowledge base construction, explain the retrieval pipeline (including embedding strategies, multi-mode search, and re-ranking), specify the integration with Wake through the Model Context Protocol, and discuss the prompt engineering strategy that ties the components together.
+
+
 \section{Design Goals}
+\label{sec:design-goals}
+
+The design of our RAG-augmented auditing system is guided by five goals, each motivated by the limitations identified in Sections~\ref{sec:llm-challenges} and~\ref{subsec:wake-ai-limitations}.
+
+\begin{enumerate}
+    \item \textbf{Groundedness.} Every claim in the LLM's output should be traceable to a concrete piece of evidence: a retrieved audit finding, a static-analysis result, or a specific code location. This directly mitigates the hallucination risk described in Section~\ref{subsec:hallucinations}. The system must present the retrieved context alongside the LLM response so that a human auditor can verify each claim.
+
+    \item \textbf{Token efficiency.} LLM context windows are finite and costly. Rather than concatenating entire codebases or knowledge bases into the prompt, the system must retrieve a small, highly relevant subset of documents and inject only the most informative content. This keeps inference fast, reduces cost, and avoids the noise degradation observed when irrelevant material is included~\cite{lewis2020retrieval}.
+
+    \item \textbf{Modularity.} Each component---knowledge base, embedding model, retrieval engine, re-ranker, LLM---should be independently replaceable. A modular design enables controlled ablation studies (e.g., disabling re-ranking to measure its contribution) and future upgrades (e.g., swapping embedding models or adding new data sources) without redesigning the pipeline.
+
+    \item \textbf{Reproducibility.} Audit findings must be reproducible. The system therefore logs every configuration parameter, retrieved document, similarity score, and LLM response. Experiment snapshots capture the full settings at run time, enabling exact reproduction of any evaluation run.
+
+    \item \textbf{Audit usefulness.} The ultimate consumers of the system's output are human auditors. The system must produce structured reports that include a verdict (vulnerable or safe), a confidence level, and a detailed reasoning trace that references specific past findings. This aligns with industry audit report conventions and allows auditors to use the output as a starting point for deeper investigation rather than a final answer.
+\end{enumerate}
 
 
-\section{Retrieval augmented generation systen}
+\section{Retrieval-Augmented Generation}
+\label{sec:rag}
 
-A recent study by Lewis et al. [2020] investigates advancements in RAG models. They detail the architecture and key strategies employed in RAG, which
-aim to leverage the strengths of LLMs while simultaneously mitigating their
-limitations. 
+Retrieval-Augmented Generation (RAG), introduced by Lewis et al.~\cite{lewis2020retrieval}, addresses two fundamental limitations of standalone language models: the inability to access information beyond the training data cutoff, and the tendency to hallucinate when answering questions requiring specialised knowledge. RAG augments a parametric generator with a non-parametric retrieval component that fetches relevant documents from an external corpus at inference time.
 
-he RAG framework comprises of two primary components: a retriever in
-Equation 2.1 and a generator in Equation 2.2, parameterized by η and θ respectively. The retriever retrieves (topk truncated) distributions over text passages given an input query x, while the generator generates the next token
-based on the context of preceding tokens, the input sequence, and a retrieved
-passage.
-pη(z|x) (2.1)
-• η: Non-parametric retriever.
-• x: Sequence given by user.
-• z: Text passages to retrieve.
-pθ(yi
-|x, z, y1:i−1) (2.2)
-• θ: Parametric generator.
-• yi
-: Target sequence to generate.
-• y1:i−1: Sequences previously generated.
+\subsection{Formal Framework}
+\label{subsec:rag-formal}
+
+A RAG system comprises two components parameterised by $\eta$ and $\theta$ respectively. The \emph{retriever} $p_\eta$ produces a distribution over text passages~$z$ given an input query~$x$:
+\begin{equation}
+    p_\eta(z \mid x),
+    \label{eq:retriever}
+\end{equation}
+where $\eta$ denotes the retriever parameters (e.g., the embedding model weights and the index structure). In practice, the retriever returns a truncated top-$k$ set of passages ranked by similarity.
+
+The \emph{generator} $p_\theta$ produces the next output token $y_i$ conditioned on the input~$x$, a retrieved passage~$z$, and all previously generated tokens $y_{1:i-1}$:
+\begin{equation}
+    p_\theta(y_i \mid x, z, y_{1:i-1}),
+    \label{eq:generator}
+\end{equation}
+where $\theta$ denotes the generator parameters (the LLM weights). The full output sequence probability marginalises over the retrieved passages:
+\begin{equation}
+    p(y \mid x) \;\approx\; \sum_{z \in \text{top-}k} p_\eta(z \mid x)\;\prod_{i=1}^{N} p_\theta(y_i \mid x, z, y_{1:i-1}).
+    \label{eq:rag-marginal}
+\end{equation}
+
+In our setting, $x$ is a compound query consisting of the Solidity code under analysis, a description of the suspected vulnerability, and an optional vulnerability label. The retrieved passages~$z$ are historical audit findings from the knowledge base (Section~\ref{sec:knowledge-base}). The generator is a general-purpose LLM (e.g., GPT-4o-mini) that reasons about whether the suspected vulnerability truly exists, grounding its analysis in the retrieved evidence.
+
+\subsection{Adaptation to Smart Contract Auditing}
+\label{subsec:rag-adaptation}
+
+Standard RAG architectures retrieve documents based on a single query and inject them into a single prompt. Our domain requires several adaptations:
+
+\begin{itemize}
+    \item \textbf{Multi-modal queries.} A vulnerability may be characterised by its natural-language description, by the code pattern that exhibits it, or by its category label. We therefore support multiple query strategies (description-based, code-based, description-with-label) and multiple search modes (text, code, hybrid) that exploit different embedding spaces.
+
+    \item \textbf{Structured retrieval output.} Rather than returning raw text chunks, our retriever returns rich metadata: finding title, vulnerability label, severity, summary, and code blocks. This structured output enables the prompt to present findings in a format that mirrors real audit reports, making it easier for the LLM to draw accurate parallels.
+
+    \item \textbf{Two-stage retrieval.} An initial broad retrieval (e.g., top-50 candidates) is followed by a re-ranking stage that uses a more expensive cross-encoder model to re-score candidates. Only the top-$k$ after re-ranking are injected into the prompt. This two-stage approach balances recall and precision.
+
+    \item \textbf{Hybrid retrieval.} Dense vector search excels at capturing semantic similarity but may miss lexically important terms (e.g., specific Solidity function names). BM25 keyword search complements dense retrieval by matching on exact terms. The two are merged via Reciprocal Rank Fusion (RRF)~\cite{cormack2009rrf}, producing a single ranked list that benefits from both approaches.
+\end{itemize}
 
 
-% Cite RAG paper for concept framing. :contentReference[oaicite:21]{index=21}
-\subsection{Query Generation}
-% How you create retrieval queries: from detectors, IR features, function summaries, etc.
-\subsection{Re-ranking}
-% How you select top-k, de-duplicate, and compress into prompt context.
-
-
-% Goals: groundedness, audit usefulness, token efficiency, modularity, reproducibility.
 \section{System Architecture Overview}
-% Diagram: Wake-AI steps + retrieval module + KB + MCP server + LLM.
-% Cite MCP intro/spec. :contentReference[oaicite:19]{index=19}
+\label{sec:system-architecture}
+
+The proposed system extends Wake-AI (Section~\ref{sec:wake-ai}) with a retrieval module that connects a domain-specific knowledge base to the LLM reasoning pipeline via the Model Context Protocol (MCP). The architecture is composed of four main layers.
+
+[TODO: Architecture diagram showing the four layers: (1) Knowledge Base layer (Solodit API $\rightarrow$ preprocessing $\rightarrow$ PostgreSQL/pgvector), (2) Retrieval layer (embedding models, vector store, BM25 index, fusion, re-ranker), (3) MCP Integration layer (MCP server exposing search/retrieve tools to Wake-AI), (4) Reasoning layer (LLM with structured prompts, verdict generation). Arrows show data flow from left to right: KB $\rightarrow$ Retrieval $\rightarrow$ MCP $\rightarrow$ LLM $\rightarrow$ Structured Report.]
+
 \subsection{High-Level Workflow}
+\label{subsec:workflow}
+
+The end-to-end pipeline proceeds as follows:
+
+\begin{enumerate}
+    \item \textbf{Ingestion.} New vulnerability findings are fetched from the Solodit platform via its REST API, processed (text cleaning, code block extraction, summarisation, label assignment), and stored in a PostgreSQL database with pgvector extension.
+
+    \item \textbf{Embedding.} Each finding is embedded twice: its textual summary is encoded with a text embedding model (nomic-embed-text-v1.5), and its code blocks are encoded with a code-specialised model (CodeRankEmbed). Both embeddings are stored alongside the finding record.
+
+    \item \textbf{Query formulation.} Given a piece of Solidity code and a suspected vulnerability, the system constructs a query using one of several strategies (description, code, description with label, or hybrid BM25).
+
+    \item \textbf{Retrieval.} The query is embedded and used to search the vector store. Depending on the configured search mode, the system performs text-only, code-only, hybrid (text + code merged by max-score), or hybrid BM25 (text vectors fused with BM25 keyword scores via RRF) search.
+
+    \item \textbf{Re-ranking.} An optional cross-encoder re-ranker refines the initial candidate set, improving precision before final top-$k$ selection.
+
+    \item \textbf{Context assembly.} The top-$k$ findings are formatted into a structured context block that includes each finding's title, label, severity, summary, and relevant code blocks.
+
+    \item \textbf{LLM reasoning.} The assembled context, along with the Solidity code and issue description, is injected into a structured prompt. The LLM generates a verdict (VULNERABLE or SAFE), a confidence level (HIGH, MEDIUM, LOW), and a detailed reasoning trace that references specific retrieved findings.
+
+    \item \textbf{Evaluation.} Both the retrieval quality and the generation quality are evaluated against ground-truth labels and reference answers, producing quantitative metrics stored alongside the experiment configuration for reproducibility.
+\end{enumerate}
+
 
 \section{Knowledge Base}
-Describe solodit, that it will be taken from here, placed their all data with labels, metadata, crossing and mainly embed by summaries with normalization, Also there is a part with code + private reports from ackee audits
+\label{sec:knowledge-base}
+
+The quality of a RAG system is bounded by the quality and coverage of its knowledge base. Our knowledge base is constructed from publicly available smart contract audit findings, supplemented by private audit reports where available.
+
+\subsection{Data Source: Solodit}
+\label{subsec:solodit}
+
+Solodit\footnote{\url{https://solodit.cyfrin.io}} is a comprehensive aggregator of smart contract audit findings, maintained by Cyfrin. It indexes findings from major audit firms (Trail of Bits, OpenZeppelin, Spearbit, Code4rena, Sherlock, and others) and provides a searchable, categorised repository of historical vulnerabilities. Each finding includes a title, a detailed markdown content (with vulnerability description, proof of concept, recommended mitigation, and often inline Solidity code), a severity classification (Critical, High, Medium, Low, Informational), source metadata (audit firm, report date, links), and community-contributed tags.
+
+We access Solodit through its REST API, which supports paginated queries filtered by severity level. Our ingestion pipeline fetches findings sorted by recency, stopping upon finding an already-ingested record (incremental ingestion). This ensures the knowledge base grows monotonically without duplication.
+
+\paragraph{Filtering.} We restrict ingestion to findings with severity \texttt{HIGH} or \texttt{MEDIUM}. Lower-severity findings (e.g., gas optimisations, informational notes) tend to describe code-quality issues rather than exploitable vulnerabilities, diluting the semantic coherence of the embedding space. This filtering ensures that retrieved findings are likely to describe genuine security issues relevant to vulnerability assessment.
+
+\subsection{Preprocessing Pipeline}
+\label{subsec:preprocessing}
+
+Raw audit findings vary widely in format, length, and quality. Our preprocessing pipeline normalises findings into a uniform representation suitable for embedding and retrieval.
+
+[TODO: Preprocessing pipeline diagram showing the flow: Raw API finding $\rightarrow$ text sanitisation (null byte removal) $\rightarrow$ code block extraction (regex) $\rightarrow$ whitespace collapse $\rightarrow$ LLM-based preprocessing (optional) $\rightarrow$ Output: summary, summary\_for\_embeddings, custom\_label, code\_blocks\_for\_embeddings]
+
+\subsubsection*{Text Sanitisation}
+Raw content from the API may contain null bytes and other control characters that cause problems with database storage and text processing. These are stripped before any further processing.
+
+\subsubsection*{Code Block Extraction}
+Fenced code blocks (delimited by triple backticks in the markdown source) are extracted using regular expression matching and stored separately from the textual content. This separation serves two purposes: it enables code-specific embedding using a dedicated code model, and it allows the textual summary to focus on the vulnerability description without code noise.
+
+\subsubsection*{Summary Generation}
+Each finding requires a concise summary for display and a keyword-dense variant optimised for embedding-based retrieval. We support two summarisation strategies:
+
+\begin{itemize}
+    \item \textbf{LLM-based summarisation.} When enabled, an LLM (e.g., GPT-4o-mini at temperature 0) receives the finding title and content (truncated to 8{,}000 characters) and produces a JSON object containing three fields: (i)~a human-readable summary of 2--4 sentences, (ii)~a dense, keyword-rich summary optimised for semantic search that includes vulnerability type, affected components, attack vectors, and impact without filler words, and (iii)~a vulnerability label selected from a predefined taxonomy.
+
+    \item \textbf{Heuristic fallback.} When LLM preprocessing is disabled or fails, the system strips code blocks and markdown formatting from the content and truncates the result to a maximum of 2{,}000 characters. The summary for embeddings is then derived by lowercasing the summary, removing articles (a, an, the), and collapsing whitespace---a simple normalisation that reduces surface variation without semantic loss.
+\end{itemize}
+
+\subsubsection*{Label Assignment}
+\label{subsubsec:labeling}
+
+Each finding is assigned a vulnerability label from a predefined taxonomy of 23 categories, including Access Control, Reentrancy, Logic Error, Denial of Service, Arithmetics, Front-running, Data Validation, and others. Labels enable filtered retrieval (e.g., when the issue description mentions reentrancy, the system can retrieve only reentrancy-labelled findings) and provide a semantic signal for evaluation.
+
+When LLM preprocessing is enabled, the label is extracted jointly with the summary. A separate lightweight label-assignment endpoint is available for batch-labelling existing findings: it sends each finding's summary to the LLM with the complete label list and expects an exact match as output. Labels that do not match the predefined list are discarded to ensure consistency.
+
+\subsubsection*{Code Block Normalisation}
+Extracted code blocks are normalised for embedding by flattening each block into a single line (replacing newlines and tabs with spaces, collapsing duplicate whitespace) and truncating to 5{,}000 characters. This normalisation reduces syntactic variation, that does not affect semantic meaning in the embedding space.
 
 \subsection{Indexing and Embeddings}
-% How documents are chunked + embedded for retrieval.
-TODO
+\label{subsec:indexing-embeddings}
 
-\section{Model context protocol integration}
-\subsection{Endpoints and Contracts}
-% Define each endpoint (search patterns, fetch details, get examples, etc.) with expected inputs/outputs.
-\subsubsection*{Security considerations}
-% Timeouts, empty results, injection resistance, deterministic logging.
+Each finding is embedded independently along two modalities---text and code---using different embedding models selected for their respective strengths.
 
-\section{Prompt engineering}
-\subsection{TODO}
+\subsubsection*{Text Embeddings}
 
-\section{Chapter Summary and Transition to Implementation}
-% 5–8 lines: design choices -> now show how it’s implemented inside Wake-AI.
+The textual summary of each finding is embedded using \textbf{nomic-embed-text-v1.5}~\cite{nussbaum2024nomic}, a 768-dimensional embedding model from the Nomic AI family. This model is trained with task-specific prefixes: documents are prefixed with \texttt{"search\_document: "} during indexing, and queries are prefixed with \texttt{"search\_query: "} during retrieval, allowing the model to distinguish between the embedding objectives.
+
+We chose nomic-embed-text-v1.5 for several reasons: (i)~its 768-dimensional output provides a good balance between embedding quality and storage/computation cost; (ii)~it is runnable locally via sentence-transformers without requiring API calls, supporting reproducibility and offline operation; and (iii)~its prefix-aware training aligns well with the asymmetric retrieval setting where queries are short vulnerability descriptions and documents are longer audit finding summaries.
+
+All embeddings are L2-normalised at encoding time (\texttt{normalize\_embeddings=True}), which converts cosine similarity into a simple inner product and enables efficient similarity search using pgvector's inner-product operator.
+
+\subsubsection*{Code Embeddings}
+
+Code blocks extracted from findings are embedded using \textbf{CodeRankEmbed}~\cite{nomic2024coderank}, a 768-dimensional model from the Nomic AI family specifically trained for code search tasks. This model uses the prefix \texttt{"Represent this query for searching relevant code: "} for query embedding. Code embeddings enable a retrieval mode where the query is a Solidity code snippet rather than a natural-language description, directly matching code patterns across findings.
+
+\subsubsection*{Storage}
+
+All embeddings are stored in PostgreSQL using the \textbf{pgvector} extension, which supports vector similarity operations (cosine distance, inner product, L2 distance) natively within SQL queries. Each finding embedding is stored as a row in the \texttt{finding\_embeddings} table with columns for the source modality (\texttt{text} or \texttt{code}), the embedding model identifier, the content mode indicator, and vector columns for 768-, 1536-, and 3072-dimensional embeddings. This multi-column design accommodates future model upgrades without schema migration.
+
+The database exposes dedicated search functions (\texttt{search\_findings\_by\_text\_ranked} and \texttt{search\_findings\_by\_code\_ranked}) that accept a query vector, $k$, a similarity threshold, and an optional label filter, returning ranked results with full finding metadata. These SQL functions encapsulate the similarity computation and filtering logic, keeping the application code clean and making retrieval behaviour transparent and auditable.
+
+
+\section{Retrieval Pipeline}
+\label{sec:retrieval}
+
+The retrieval pipeline transforms a query (vulnerability description, code snippet, or both) into a ranked list of the $k$ most relevant historical findings. The pipeline supports four search modes, each combining the available retrieval signals differently.
+
+\subsection{Query Strategies}
+\label{subsec:query-strategies}
+
+The way a query is constructed from an evaluation case significantly affects retrieval quality. We define four query strategies:
+
+\begin{enumerate}
+    \item \textbf{Description-based (\texttt{description}).} The issue description is embedded with the text embedding model. This is the most natural strategy: the query is a natural-language description of a vulnerability, and the retriever searches for semantically similar finding summaries.
+
+    \item \textbf{Code-based (\texttt{code}).} The Solidity code snippet is embedded with the code embedding model. This strategy matches code structural patterns directly, bypassing the natural-language intermediary. It is effective when the vulnerability is better characterised by its code pattern than by a verbal description.
+
+    \item \textbf{Description with label (\texttt{description\_label}).} The issue description is concatenated with the vulnerability label (e.g., ``Reentrancy'') and embedded with the text model. The label narrows the retrieval to a specific vulnerability class, improving precision at the cost of recall for edge cases that span multiple categories.
+
+    \item \textbf{Hybrid BM25 (\texttt{hybrid\_bm25}).} The issue description is used for both dense vector retrieval and sparse BM25 keyword retrieval. The two ranked lists are merged via Reciprocal Rank Fusion (Section~\ref{subsec:rrf}). This strategy combines the semantic understanding of dense retrieval with the lexical precision of keyword matching.
+\end{enumerate}
+
+\subsection{Dense Vector Search}
+\label{subsec:vector-search}
+
+For dense retrieval, the query is embedded using the appropriate model (text or code) and compared against stored embeddings using inner-product similarity (equivalent to cosine similarity for normalised vectors). PostgreSQL's pgvector extension performs this computation within the database, avoiding the need for a separate vector search service.
+
+In the \textbf{hybrid} search mode (not to be confused with hybrid BM25), the system performs both text and code searches independently, then merges the results by finding ID, keeping the higher score when a finding appears in both result sets. The merged list is sorted by descending score and truncated to~$k$.
+
+\subsection{BM25 Keyword Search}
+\label{subsec:bm25}
+
+BM25 (Okapi BM25~\cite{robertson2009probabilistic}) is a term-frequency-based ranking function that scores documents by their lexical overlap with the query. Our BM25 implementation builds an in-memory index over finding summaries using the \texttt{rank-bm25} library. The index uses \texttt{summary\_for\_embeddings} (the keyword-dense variant) when available, falling back to the standard summary.
+
+Tokenisation is minimal: text is lowercased and split on non-alphanumeric characters, filtering out single-character tokens. This lightweight approach preserves domain-specific identifiers (e.g., \texttt{delegatecall}, \texttt{msg\_sender}, \texttt{ERC20}) that are critical for smart contract vulnerability retrieval.
+
+BM25 compensates for a known weakness of dense retrieval: semantic embedding models may map queries and documents with similar meaning but different terminology to nearby vectors, yet miss findings that use the exact Solidity identifier mentioned in the query. For example, a query about \texttt{transferFrom} reentrancy should retrieve findings mentioning \texttt{transferFrom} by name, even if their summaries describe the vulnerability using different phrasing.
+
+\subsection{Reciprocal Rank Fusion}
+\label{subsec:rrf}
+
+When combining results from multiple retrieval systems (e.g., dense vectors and BM25), the scores are on different scales and cannot be directly compared. Reciprocal Rank Fusion~\cite{cormack2009rrf} provides a principled, parameter-light method for merging ranked lists.
+
+For each result appearing in any ranked list, the RRF score is computed as:
+\begin{equation}
+    \text{RRF}(d) = \sum_{i=1}^{L} \frac{1}{k_{\text{rrf}} + r_i(d)},
+    \label{eq:rrf}
+\end{equation}
+where $L$ is the number of ranked lists, $r_i(d)$ is the rank of document~$d$ in list~$i$ (starting from 1), and $k_{\text{rrf}}$ is a smoothing constant (default 60, following the original paper). Documents not appearing in a given list are simply omitted from the sum for that list. After fusion, results are sorted by descending RRF score and truncated to the desired top-$n$.
+
+RRF has two practical advantages: it requires no calibration of score distributions across systems, and it is robust to outlier scores in individual lists. In our system, the hybrid BM25 mode fetches a configurable number of candidates (default 50) from each retrieval source before applying RRF.
+
+\subsection{Re-ranking}
+\label{subsec:reranking}
+
+Initial retrieval (whether dense, BM25, or fused) produces a broad candidate set optimised for recall. A \emph{re-ranker} refines this set by scoring each candidate more carefully, optimising for precision. Our system supports a two-stage retrieve-then-rerank pipeline.
+
+\subsubsection*{Cross-Encoder Re-ranking}
+Unlike bi-encoder (embedding) retrieval, which encodes query and document independently and compares their vectors, a cross-encoder processes the (query, document) pair jointly through a single transformer forward pass. This joint encoding captures fine-grained interaction features that bi-encoders miss, at the cost of being too slow for exhaustive search over large corpora~\cite{nogueira2020passage}.
+
+Our system supports several cross-encoder models:
+\begin{itemize}
+    \item \texttt{cross-encoder/ms-marco-MiniLM-L-6-v2} --- a lightweight 6-layer model suitable for CPU inference.
+    \item \texttt{cross-encoder/ms-marco-MiniLM-L-12-v2} --- a 12-layer variant with higher accuracy.
+    \item \texttt{BAAI/bge-reranker-v2-m3} and \texttt{BAAI/bge-reranker-v2-gemma} --- models from the BGE family with multilingual and large-scale capabilities.
+\end{itemize}
+
+During re-ranking, the query and each candidate's summary are fed as a sentence pair to the cross-encoder, which outputs a relevance score. Candidates are re-sorted by this score, and only the top-$k$ are retained for prompt construction.
+
+\subsubsection*{Cloud Re-ranking}
+As an alternative to local cross-encoder inference, the system supports cloud-based re-ranking via the Cohere Rerank API\footnote{\url{https://cohere.com/rerank}}. The Cohere re-ranker (\texttt{rerank-v3.5}) is a proprietary cross-encoder model optimised for relevance scoring. It accepts the query and a batch of documents, returning relevance scores and re-ordered indices. This option is useful when GPU hardware is unavailable for local cross-encoder inference.
+
+\subsubsection*{No-Op Baseline}
+A passthrough re-ranker (no-op) is provided as a baseline: it simply truncates the candidate list to~$k$ without re-scoring. This enables controlled ablation experiments that isolate the contribution of re-ranking from other pipeline components.
+
+
+\section{Model Context Protocol Integration}
+\label{sec:mcp-integration}
+
+The Model Context Protocol (MCP)\footnote{\url{https://modelcontextprotocol.io/}} is an open standard for connecting AI models with external tools and data sources. It defines a structured interface through which an LLM-based agent can discover available tools, invoke them with typed inputs, and receive structured outputs. MCP separates the agent's reasoning from tool implementation, enabling modular architectures where tools can be developed, tested, and replaced independently.
+
+\subsection{Integration with Wake-AI}
+\label{subsec:mcp-wake}
+
+Wake-AI already uses MCP to expose Wake's static analysis capabilities (IR queries, CFG traversal, detector invocation) to the LLM agent. Our RAG system extends this MCP surface with additional tools for knowledge base search and retrieval:
+
+\begin{itemize}
+    \item \textbf{Search tool.} Accepts a natural-language query (and optional parameters: $k$, threshold, label filter, search mode) and returns a ranked list of similar findings with full metadata (title, summary, label, severity, code blocks, similarity score).
+
+    \item \textbf{Retrieve details tool.} Given a finding identifier (slug), returns the complete finding content, enabling the agent to request full details after an initial search returned summaries.
+\end{itemize}
+
+This design allows the LLM agent to iteratively refine its retrieval: it might first search broadly for ``reentrancy in ERC-20 transfer'', inspect the returned summaries, then retrieve full details for the most promising findings, and finally use that information to ground its vulnerability analysis. The iterative retrieval pattern is more token-efficient than pre-loading all potentially relevant documents into the prompt.
+
+\subsection{Security Considerations}
+\label{subsec:mcp-security}
+
+Exposing external tools to an LLM agent introduces security risks that must be addressed:
+
+\begin{itemize}
+    \item \textbf{Read-only surface.} All MCP tools in the RAG module are strictly read-only: they query the knowledge base but cannot modify it. This eliminates the risk of the agent corrupting the knowledge base through unintended tool calls.
+
+    \item \textbf{Input sanitisation.} Query strings passed to the search tool are used as embedding inputs and BM25 tokenisation inputs. Neither pathway evaluates queries as code or SQL, eliminating injection vectors. The pgvector search functions use parameterised queries, preventing SQL injection.
+
+    \item \textbf{Timeouts and rate limiting.} MCP tool calls are subject to configurable timeouts. If a search takes too long (e.g., due to a very large candidate set or slow database), the tool returns an error rather than blocking the agent indefinitely.
+
+    \item \textbf{Empty results.} The system gracefully handles empty result sets (e.g., when the knowledge base contains no findings matching the query). The LLM receives an explicit ``no relevant findings found'' message rather than an empty string, preventing it from hallucinating findings.
+
+    \item \textbf{Deterministic logging.} All MCP tool invocations, inputs, and outputs are logged with timestamps, enabling post-hoc auditing of the agent's retrieval behaviour. This logging is essential for reproducibility and for diagnosing cases where retrieval quality affects the final verdict.
+\end{itemize}
+
+
+\section{Prompt Engineering}
+\label{sec:prompt-engineering}
+
+Prompt design governs how the LLM interprets the retrieved context and generates its analysis. Our prompt strategy follows three principles: \emph{structured input} (clear separation of code, issue description, label, and retrieved findings), \emph{structured output} (machine-parseable verdict format), and \emph{evidence requirements} (explicit instruction to reference retrieved findings).
+
+\subsection{System Prompt}
+\label{subsec:system-prompt}
+
+The system prompt establishes the LLM's role and output constraints:
+
+\begin{quote}
+\small
+\textit{You are a smart contract security auditor. You are given: (1) a Solidity code snippet, (2) a description of a potential vulnerability, (3) similar past audit findings retrieved from a knowledge base. Based on the evidence from similar findings, decide whether the potential vulnerability truly exists in the provided code. Reference specific findings when they support your reasoning. Respond with: VERDICT: VULNERABLE or SAFE; CONFIDENCE: HIGH, MEDIUM, or LOW; REASONING: detailed explanation referencing the similar findings.}
+\end{quote}
+
+This prompt enforces three design goals: groundedness (the LLM must reference findings), structured output (machine-parseable verdict), and epistemic humility (the confidence field encourages the LLM to express uncertainty rather than defaulting to high-confidence assertions).
+
+\subsection{User Prompt}
+\label{subsec:user-prompt}
+
+The user prompt assembles the concrete analysis inputs using a template with four sections:
+
+\begin{enumerate}
+    \item \textbf{Solidity Code.} The code snippet under analysis, enclosed in a fenced code block for clear delineation.
+    \item \textbf{Potential Issue.} The natural-language description of the suspected vulnerability.
+    \item \textbf{Assigned Label.} The vulnerability category label (e.g., ``Reentrancy'', ``Access control''), if available, or ``Not assigned'' otherwise.
+    \item \textbf{Similar Past Findings.} The structured context assembled from the top-$k$ retrieved findings, with each finding presented under headers indicating its title, label, severity, and summary, followed by relevant code blocks.
+\end{enumerate}
+
+This structured layout ensures that the LLM can easily distinguish between the code it should analyse, the issue it should investigate, and the evidence it should use for grounding.
+
+\subsection{Context Assembly}
+\label{subsec:context-assembly}
+
+The context block is constructed by concatenating the top-$k$ retrieved findings in a structured format. Each finding entry includes:
+
+\begin{itemize}
+    \item A header with the finding title.
+    \item Metadata: vulnerability label and severity/impact classification.
+    \item The finding summary (2--4 sentences).
+    \item Code blocks from the finding, if available.
+\end{itemize}
+
+This rich context gives the LLM multiple anchor points for grounding its analysis: it can compare code patterns, reference vulnerability descriptions, and cite finding titles by name in its reasoning.
+
+
+\section{Chapter Summary}
+\label{sec:methodology-summary}
+
+This chapter presented the complete design of our RAG-augmented smart contract auditing methodology. The system is built around five design goals---groundedness, token efficiency, modularity, reproducibility, and audit usefulness---that address the limitations of standalone LLM-based analysis identified in earlier chapters.
+
+The methodology comprises a knowledge base of historical audit findings from Solodit, a dual-embedding strategy for text and code, a multi-mode retrieval pipeline with BM25 fusion and cross-encoder re-ranking, MCP-based integration with Wake-AI, and a structured prompting strategy that enforces evidence-grounded reasoning.
+
+The following chapter presents the evaluation framework designed to measure the effectiveness of this methodology across both retrieval quality and end-to-end vulnerability detection accuracy.
+
 
 \chapter{Evaluation}
+\label{ch:evaluation}
+
+This chapter defines the evaluation framework for the RAG-augmented smart contract auditing system described in Chapter~\ref{ch:methodology}. We establish the research questions, describe the dataset and experimental setup, define the metrics for both retrieval and generation quality, outline the planned experiments (including ablation studies), and discuss threats to validity.
+
+
+\section{Research Questions}
+\label{sec:research-questions}
+
+The evaluation is structured around four research questions:
+
+\begin{description}
+    \item[RQ1: Retrieval quality.] How effectively does the retrieval pipeline surface relevant historical findings for a given vulnerability query? We measure this across query strategies (description, code, description+label, hybrid BM25), search modes (text, code, hybrid), and with/without re-ranking.
+
+    \item[RQ2: Detection accuracy.] Does augmenting the LLM with retrieved findings improve its ability to correctly classify vulnerabilities (VULNERABLE vs.\ SAFE) compared to a prompt-only baseline without retrieval context?
+
+    \item[RQ3: Groundedness and reasoning quality.] Are the LLM's explanations faithful to the retrieved evidence? Does the system reduce hallucinated vulnerability reports compared to ungrounded analysis?
+
+    \item[RQ4: Component contributions.] What is the individual contribution of each pipeline component (re-ranking, BM25 fusion, label filtering, code embeddings)? Ablation experiments isolate the effect of removing or swapping each component.
+\end{description}
+
 
 \section{Dataset}
+\label{sec:dataset}
 
-% Goal: show it works and understand when/why.
-\section{Evaluation Questions}
-% RQ1: Does RAG reduce hallucinations/false positives? RQ2: Does it improve coverage? RQ3: Cost/latency tradeoffs?
+\subsection{Knowledge Base Corpus}
+\label{subsec:kb-corpus}
+
+The knowledge base is populated by incrementally ingesting findings from the Solodit API, filtered to HIGH and MEDIUM severity. Each finding undergoes the preprocessing pipeline described in Section~\ref{subsec:preprocessing}, producing a normalised record with summary, summary for embeddings, vulnerability label, and extracted code blocks. The corpus size, label distribution, and source-firm distribution will be reported as part of the experimental results.
+
+\subsection{Evaluation Cases}
+\label{subsec:eval-cases}
+
+Evaluation cases are structured test inputs, each consisting of:
+
+\begin{itemize}
+    \item \textbf{Solidity code.} A code snippet exhibiting (or not exhibiting) a vulnerability.
+    \item \textbf{Issue description.} A natural-language description of the suspected vulnerability.
+    \item \textbf{Label.} The vulnerability category (e.g., ``Reentrancy'', ``Access control'').
+    \item \textbf{Expected verdict.} The ground-truth classification: VULNERABLE or SAFE.
+    \item \textbf{Reference answer.} An expert-written explanation of why the code is or is not vulnerable, serving as a reference for answer correctness evaluation.
+    \item \textbf{Reference finding IDs.} UUIDs of findings in the knowledge base that are known to be relevant to this case, enabling reference-based retrieval metrics.
+\end{itemize}
+
+Evaluation cases are loaded from structured files (JSON or YAML) and stored in the \texttt{evaluation\_cases} table. They are designed to cover a range of vulnerability types, code patterns, and difficulty levels, including both true positives (code with genuine vulnerabilities) and true negatives (code that superficially resembles a vulnerability but is actually safe).
+
+
 \section{Experimental Setup}
-\subsection{Benchmarks and Datasets}
-% Real vulnerable contracts + (optional) synthetic cases to test each pipeline component.
+\label{sec:experimental-setup}
+
 \subsection{Baselines}
-% Wake-AI (prompt-only), Wake detectors, and Slither as external baseline. :contentReference[oaicite:22]{index=22}
+\label{subsec:baselines}
+
+We compare the RAG-augmented pipeline against the following baselines:
+
+\begin{enumerate}
+    \item \textbf{Prompt-only LLM.} The same LLM (e.g., GPT-4o-mini) receives the Solidity code and issue description \emph{without} any retrieved context. This baseline isolates the LLM's parametric knowledge.
+
+    \item \textbf{Wake detectors.} Wake's built-in static analysis detectors are run on the same code. This baseline represents traditional rule-based analysis without LLM involvement.
+
+    \item \textbf{Slither.} An external static analysis tool~\cite{feist2019slither} is run as an additional baseline for comparison with a widely used industry tool.
+\end{enumerate}
+
 \subsection{Metrics}
-% Precision/recall per vulnerability class; “evidence correctness”; runtime/token cost.
+\label{subsec:metrics}
+
+We define metrics for two pipeline phases: retrieval quality and generation quality.
+
+\subsubsection*{Retrieval Metrics}
+
+\begin{itemize}
+    \item \textbf{Context precision} (reference-based). The fraction of retrieved findings that appear in the ground-truth relevant set:
+    \begin{equation}
+        \text{ContextPrecision} = \frac{|\text{retrieved} \cap \text{relevant}|}{|\text{retrieved}|}.
+        \label{eq:ctx-precision}
+    \end{equation}
+
+    \item \textbf{Context recall} (reference-based). The fraction of ground-truth relevant findings that were successfully retrieved:
+    \begin{equation}
+        \text{ContextRecall} = \frac{|\text{retrieved} \cap \text{relevant}|}{|\text{relevant}|}.
+        \label{eq:ctx-recall}
+    \end{equation}
+
+    \item \textbf{Label match ratio.} The fraction of retrieved findings whose vulnerability label matches the query label. This metric measures how well the retriever respects category boundaries:
+    \begin{equation}
+        \text{LabelMatch} = \frac{|\{r \in \text{retrieved} : \text{label}(r) = \text{label}(q)\}|}{|\text{retrieved}|}.
+        \label{eq:label-match}
+    \end{equation}
+
+    \item \textbf{Context relevance} (LLM-judged, holistic). An LLM judge evaluates the entire retrieved set for its relevance to the query vulnerability, scoring on a 0--1 scale with structured feedback on coverage (full/partial/none) and specificity (high/medium/low).
+
+    \item \textbf{Context precision} (LLM-judged, per-chunk). Each retrieved finding is independently evaluated for relevance (binary: relevant or not). The per-chunk precision is the fraction of individually relevant findings in the retrieved set. This metric is more costly (one LLM call per finding) but provides fine-grained diagnostic information.
+\end{itemize}
+
+\subsubsection*{Generation Metrics}
+
+\begin{itemize}
+    \item \textbf{Verdict accuracy} (deterministic). Binary comparison between the predicted verdict (VULNERABLE/SAFE) and the expected verdict. This metric requires no LLM judge.
+
+    \item \textbf{Faithfulness} (LLM-judged). Measures whether the analysis is grounded in the retrieved findings. The LLM judge counts the total factual claims in the analysis and the number supported by the retrieved context, producing a grounded-claims ratio on a 0--1 scale.
+
+    \item \textbf{Reasoning quality} (LLM-judged). Evaluates how well the analysis references similar past findings, draws accurate parallels, and provides a clear, well-supported verdict. Scored on a 0--1 scale with structured feedback on evidence usage (strong/adequate/weak/none).
+
+    \item \textbf{Answer correctness} (LLM-judged). Compares the generated analysis against a reference answer, checking whether the same verdict was reached, whether the same root cause was identified, and whether the explanation is technically accurate. Available only for cases with reference answers.
+\end{itemize}
+
+\subsubsection*{Aggregate Classification Metrics}
+
+Across all evaluation cases, we compute standard binary classification metrics by treating VULNERABLE as the positive class:
+
+\begin{itemize}
+    \item \textbf{Precision}: $\text{TP} / (\text{TP} + \text{FP})$
+    \item \textbf{Recall}: $\text{TP} / (\text{TP} + \text{FN})$
+    \item \textbf{F1}: $2 \cdot \text{Precision} \cdot \text{Recall} / (\text{Precision} + \text{Recall})$
+    \item \textbf{False positive rate}: $\text{FP} / (\text{FP} + \text{TN})$
+    \item \textbf{Accuracy}: $(\text{TP} + \text{TN}) / (\text{TP} + \text{FP} + \text{TN} + \text{FN})$
+\end{itemize}
+
+Reducing the false positive rate is a primary objective, as prior work has shown that ungrounded LLM analysis produces ${\sim}80\%$ false positives~\cite{chen2024chatgpt}.
+
+\subsection{Experiment Tracking}
+\label{subsec:experiment-tracking}
+
+Each experiment run is recorded as an \texttt{Experiment} entity with a unique name, optional description, a full configuration snapshot (all settings serialised to JSON, excluding secrets), an optional parent experiment ID (for incremental experiments), and a Git commit hash for code traceability. All evaluation results are stored as \texttt{EvaluationResult} rows linked to the experiment and evaluation case, with phase (retrieval or generation), metric name, score, and structured details in JSON format. This design enables post-hoc comparison of arbitrary experiment pairs and trend analysis across pipeline iterations.
+
 
 \section{Experiments}
-\subsection{Retrieval Quality (Component Test)}
-% Top-k hit rate / qualitative relevance checks of retrieved patterns.
+\label{sec:experiments}
+
+\subsection{Retrieval Quality}
+\label{subsec:exp-retrieval}
+
+The first experiment evaluates the retrieval component in isolation. For each evaluation case, we run all four query strategies (description, code, description+label, hybrid BM25) and measure retrieval metrics at $k = 5$.
+
+\begin{itemize}
+    \item \textbf{Hypothesis.} The hybrid BM25 strategy achieves the highest context relevance by combining semantic understanding with lexical precision. The description+label strategy achieves the highest label match ratio by constraining retrieval to the correct vulnerability class.
+
+    \item \textbf{Variants.} Each strategy is tested with and without cross-encoder re-ranking, producing $4 \times 2 = 8$ experiment configurations. A batch evaluation command runs all three main strategies (description, code, description+label) in sequence under a shared name prefix and logs separate experiments for each.
+\end{itemize}
+
+[TODO: Table skeleton showing the experimental grid: rows = query strategies (description, code, description+label, hybrid\_bm25), columns = metrics (context\_precision, context\_recall, label\_match, context\_relevance\_llm, context\_precision\_llm), with/without reranking]
+
 \subsection{End-to-End Vulnerability Detection}
-% Compare baseline vs RAG-augmented on same contracts.
+\label{subsec:exp-e2e}
+
+The second experiment evaluates the full retrieve-rerank-reason pipeline against baselines.
+
+\begin{itemize}
+    \item \textbf{RAG pipeline.} The best-performing retrieval configuration (determined in the previous experiment) is used to retrieve context, which is injected into the LLM prompt.
+
+    \item \textbf{Prompt-only baseline.} The same LLM receives the same code and issue description without any retrieved context.
+
+    \item \textbf{Static analysis baselines.} Wake detectors and Slither are run on the same code snippets; their outputs are mapped to VULNERABLE/SAFE verdicts for comparison.
+\end{itemize}
+
+The primary metrics are detection precision, recall, F1, and false positive rate. We expect the RAG pipeline to maintain comparable or higher recall (by providing the LLM with evidence of similar vulnerabilities) while significantly improving precision (by grounding the analysis and reducing hallucinated findings).
+
 \subsection{Ablation Study}
-% Remove reranking / remove audit KB / remove detector-seeded queries to show what matters.
-\subsection{Qualitative Case Studies and Error Analysis}
-% 2–3 focused cases: success, failure, “helped explanation but not detection,” etc.
+\label{subsec:exp-ablation}
+
+The third experiment isolates the contribution of individual pipeline components through controlled ablation:
+
+\begin{enumerate}
+    \item \textbf{Remove re-ranking.} Replace the cross-encoder re-ranker with the no-op passthrough. Measures the precision gain from re-ranking.
+
+    \item \textbf{Remove BM25.} Use dense vector search only (no BM25 fusion). Measures the contribution of keyword matching to retrieval quality.
+
+    \item \textbf{Remove label filtering.} Do not pass the vulnerability label as part of the query or as a filter. Measures how much label information helps narrow retrieval.
+
+    \item \textbf{Remove code embeddings.} Disable the code search mode, using only text embeddings. Measures whether code-specific embeddings improve retrieval for code-pattern-based queries.
+
+    \item \textbf{Swap embedding model.} Replace nomic-embed-text-v1.5 with an alternative embedding model to measure sensitivity to the embedding model choice.
+\end{enumerate}
+
+Each ablation produces a complete set of retrieval and generation metrics, enabling pairwise comparison with the full pipeline.
+
+\subsection{Qualitative Case Studies}
+\label{subsec:exp-case-studies}
+
+The fourth component is a qualitative analysis of selected cases that illustrate system strengths, weaknesses, and interesting failure modes:
+
+\begin{itemize}
+    \item \textbf{Success case.} A vulnerability correctly identified with high confidence, where the retrieved findings provide strong supporting evidence and the LLM's reasoning accurately references them.
+
+    \item \textbf{Failure case.} A vulnerability missed or a false positive, with analysis of whether the failure originated in retrieval (irrelevant findings retrieved) or generation (LLM ignored relevant findings or hallucinated).
+
+    \item \textbf{Borderline case.} A case where retrieval provided partially relevant findings and the LLM's analysis was correct but with lower confidence, illustrating the system's ability to express uncertainty.
+\end{itemize}
+
 
 \section{Threats to Validity}
-% Dataset bias, label quality, prompt sensitivity, reproducibility, and generalization.
-\section{Summary and Transition to Conclusion}
-% 5–8 lines: what improved, what didn’t, and why.
+\label{sec:threats}
+
+Several factors may limit the validity and generalisability of our evaluation:
+
+\begin{itemize}
+    \item \textbf{Dataset bias.} The knowledge base is sourced from Solodit, which aggregates findings from specific audit firms. Vulnerability patterns and reporting styles may not be representative of all smart contract vulnerabilities. Novel vulnerability classes or protocols not covered by past audits will have no relevant findings in the knowledge base.
+
+    \item \textbf{Label quality.} Vulnerability labels are assigned either by an LLM or by community contributors. Label errors---both misclassifications and inconsistencies across findings describing similar issues---introduce noise into label-based metrics and label-filtered retrieval.
+
+    \item \textbf{Prompt sensitivity.} LLM outputs are sensitive to prompt phrasing. While we use fixed prompt templates, small modifications to wording might produce different verdicts. We mitigate this by using temperature~0 (greedy decoding) to reduce randomness, but non-determinism from API-side batching may still occur.
+
+    \item \textbf{LLM-as-judge limitations.} Several metrics (faithfulness, reasoning quality, context relevance) rely on an LLM judge. The judge itself may hallucinate or apply inconsistent scoring criteria. We mitigate this by using structured JSON output formats that constrain the judge's responses and by providing detailed evaluation criteria in the judge prompts.
+
+    \item \textbf{Evaluation case coverage.} The evaluation case set may not cover all vulnerability types or code patterns. Results on a limited test set may not generalise to the full diversity of real-world smart contracts.
+
+    \item \textbf{Reproducibility.} While we log all configurations and results, exact reproduction depends on deterministic LLM behaviour (which API providers do not always guarantee) and on the knowledge base state at evaluation time (which grows with ongoing ingestion).
+\end{itemize}
+
+
+\section{Summary}
+\label{sec:eval-summary}
+
+This chapter defined the evaluation framework for our RAG-augmented auditing system. Four research questions structure the evaluation around retrieval quality, detection accuracy, reasoning groundedness, and component contributions. The metric suite covers both retrieval (reference-based and LLM-judged precision, recall, relevance) and generation (verdict accuracy, faithfulness, reasoning quality, answer correctness, and aggregate classification metrics). The experimental design includes retrieval-only evaluation across query strategies, end-to-end comparison with baselines, ablation studies isolating component contributions, and qualitative case studies. Threats to validity are acknowledged and mitigated where possible. The results of these experiments are presented in the subsequent sections as they become available.
+
 
 \chapter{Conclusion}
 \section{Summary of Contributions}
