@@ -132,7 +132,7 @@ upward, changing the root and invalidating the block header --- making the
 root a binding cryptographic commitment to the entire transaction set 
 \cite{merkle1987, nakamoto2008}.
 
-This design enables \emph{inclusion proofs} of size $O(\log n)$: to 
+This design enables inclusion proofs of size $O(\log n)$: to 
 verify that a transaction belongs to a block, a verifier needs only the 
 transaction itself, the header's Merkle root, and the minimal set of 
 sibling hashes along the path from leaf to root --- not the full block. 
@@ -146,16 +146,34 @@ immediately detectable by any honest node in the network
 
 \subsection{Consensus mechanisms}
 \label{subsec:consensus}
-Once the block structure is established, the network must agree on which block to append next --- a process governed by the \emph{consensus mechanism}, the design of which depends on the blockchain's trust model. Across different deployment models, two dominant consensus families have emerged.
+Once the block structure is established, the network must agree on which block to append next --- a process governed by the \emph{consensus mechanism}, the design of which depends on the blockchain's trust model. Across different deployment models, two following dominant consensus families have emerged.
 
 \subsubsection*{Proof of Work}
-The first concept/method used by blockchains. Generally, the nodes in a PoW-based blockchain network reach consensus by participating in a solution searching process, where each node must find a nonce for its proposed new block. Due to the property of the hash function, the nonce can only be found by repeatedly trying different nonce values until the output is within the target range. When a participant finds the nonce, it will broadcast the block along with the transactions to other nodes. Then, if the new block is verified and determined to be the first block mined after the last block in the chain, it will be integrated into the current chain and become the latest block in the chain. This solution searching procedure can be considered to be a weighted random coin-tossing process where a participant with a higher hash rate(computational power) might have higher chances to be the block winner (leader) who can receive the reward. his computa-tion leads to the large amount of energy consumption forblockchains using PoW consensus mechanisms, as the par-ticipants try to increase their hash rates to have a higherchance to be the leader and receive rewards. Moreover, sinceparticipants with low hash rates have very low chances towin a block and receive rewards, they often join miningpools to have more opportunities to get revenues. A miningpool consists of participants who want to collaborate by con-tributing their computing resources to the pool. In this way,mining tasks will be distributed to the miners, and due to hugecomputing resources, mining pools often get much higher op-portunities to win a new block than individuals. While joininga mining pool provides more stable incomes, the nodes inthe pool often do not contribute to the transaction validationand propagation since they only perform the nonce searchprocess in a specific range. Thus, mining pools have beendominating processes making new blocks in most of currentblockchain networks. For example, the top five mining poolscontrol up to 62.7\% total hash rate of the Bitcoin network [3].This is the most serious issue of PoW-based blockchainnetworks because it is against the decentralized spirit ofblockchain technology. Another issue of PoW protocols isdelay. In a PoW-based blockchain network, when a block isadded to the chain, there is still a possibility that this blockwill not be included in the main chain for several reasons,e.g., network delay causing several versions of the chainor two participants finding two blocks simultaneously. Thispossibility decreases exponentially as the block is deeper inthe chain. Therefore, a block is considered to be finalizedonly when it is a certain k, usually six blocks deep in thechain. This delays the transaction confirmation significantly.Moreover, PoW mechanism is also vulnerable to 51\% attack.In particular, if a single party controls more than 51\% of thenetwork’s total computational power, they can spend theircoins multiple times (in cryptocurrency networks) or preventother transactions by adding conflicting blocks to the chain.While 51\% attacks might not be a serious problem for largeblockchain networks, the newly established networks withsmall and limited total computational power are especiallyvulnerable 
+Proof-of-Work (PoW) is the oldest and most widely adopted consensus mechanism in blockchain networks, first introduced by Nakamoto as the backbone of Bitcoin \cite{nakamoto2008}. The fundamental principle of PoW is straightforward: nodes in a peer-to-peer network, commonly referred to as \textit{miners}, compete to solve a computationally intensive cryptographic puzzle. This puzzle requires finding a nonce value $x$ such that the hash of the block header $y = f(x)$ satisfies a predefined difficulty target --- typically that the resulting hash begins with a certain number of leading zeros. The first miner to find a valid solution broadcasts it to the network, and upon verification by other nodes, the new block is appended to the chain. The successful miner is rewarded with newly minted cryptocurrency, incentivising continued participation \cite{sabry2023}.
+
+Each block in the chain contains the cryptographic hash of the preceding block, a timestamped list of validated transactions, and the winning nonce. This chaining structure ensures immutability: altering any historical record would require recomputing the proof-of-work for that block and every subsequent block, a feat that is computationally infeasible for any actor lacking a majority of the network's hashing power \cite{sabry2023}.
+
+Despite its security guarantees, PoW carries a significant drawback: the competitive nature of the puzzle-solving process demands enormous and continuously growing energy consumption. As noted by Truby \cite{SCHINCKUS2021111682}, the vast majority of blockchain-based projects in the energy sector---49 out of 140 reviewed cases---relied on PoW, paradoxically consuming large amounts of electricity while simultaneously aiming to promote renewable energy adoption. This contradiction has prompted substantial debate around the environmental sustainability of PoW-based systems and has accelerated research into alternative or modified consensus protocols \cite{SCHINCKUS2021111682}.
+ 
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.9\linewidth]{images/PoW.jpg}
+    \caption{Proof of Work mechanism flow \cite{pow_ledger}.}
+    \label{fig:pow}
+\end{figure}
+
+Figure~\ref{fig:pow} illustrates the operational flow of the PoW mechanism. A network server broadcasts a cryptographic puzzle defined as finding $x$ such that $y = f(x)$ to a set of competing miners ($x_1$, $x_2$, $x_3$). Each miner independently attempts to solve the puzzle using their available computational resources and submits their proposed solution back to the network. The server then verifies each submission: in the example shown, only the solution provided by miner $x_2$ is deemed correct, while those of $x_1$ and $x_3$ are rejected. The winning miner is subsequently awarded a token reward, reflecting the incentive structure that underpins participation in the PoW process.
 
 
-\subsubsection*{Proof of Stake}
-The first Proof-of-Stakes (PoS) network, Peercoin [16], wasdeveloped as a PoX consensus mechanism with the aim toreduce the computational requirements of PoW. Participantswith higher coin age, i.e., product of network tokens and theirholding time, have higher chances to be selected. Specifi-cally, each node in Peercoin solves a PoW puzzle with itsown difficulty, which can be reduced by consuming coin age.In the more recent PoS networks, the solution searching iscompletely removed, and the block leaders are no longerselected by computational power. Instead, they are selectedbased on the stakes that they are holding.With the stake-based leader selection process, a node’schance to be selected to be a leader no longer depends on itscomputational power, and thus energy consumption of PoS mechanisms is significantly reduced compared with that ofPoW. Moreover, the block generation and transaction con-firmation speeds are kept at relatively low constant rates bythe PoW networks to ensure security because there are manydifferent blocks proposed by the miners. In contrast, sinceonly one block is made in each round of PoS mechanisms,the block generation and transaction confirmation speedsare usually much faster, and thus PoS mechanism starts tobecome popular recently. 
 
-PoS (Proof of stake) is an energy-saving alternative to PoW.Miners in PoS have to prove the ownership of the amountof currency. It is believed that people with more currencieswould be less likely to attack the network. The selectionbased on account balance is quite unfair because the singlerichest person is bound to be dominant in the network. As aresult, many solutions are proposed with the combination ofthe stake size to decide which one to forge the next block.In particular, Blackcoin [26] uses randomization to predict thenext generator. It uses a formula that looks for the lowesthash value in combination with the size of the stake. Peercoin[21] favors coin age based selection. In Peercoin, older andlarger sets of coins have a greater probability of mining thenext block. Compared to PoW, PoS saves more energy andis more effective. Unfortunately, as the mining cost is nearlyzero, attacks might come as a consequence. Many blockchainsadopt PoW at the beginning and transform to PoS gradually.For instance, ethereum is planing to move from Ethash ( 
+\subsection{Proof of Stake}
+
+Proof-of-Stake (PoS) emerged as a direct response to the energy and scalability limitations inherent in Proof-of-Work. Rather than requiring participants to expend computational power, PoS achieves consensus by requiring validators to lock up, or \textit{stake}, a quantity of the network's native cryptocurrency as collateral~\cite{nguyen2019pos}. The probability of a node being selected to propose and validate the next block is proportional to the size of its stake. This fundamental shift replaces the physical resource of electricity with the economic stake as the primary security guaranty of the network.
+
+Ethereum originally operated on a PoW consensus mechanism, sharing its underlying architecture with Bitcoin. However, PoW imposed significant constraints on the network: Ethereum consumed an estimated 113 terawatt-hours of electricity annually, and its throughput was limited to approximately 15 transactions per second, which proved inadequate for the growing ecosystem of decentralized applications built on top of the platform~\cite{mit_merge}. To address these issues, the Ethereum development community pursued a long-planned transition to PoS, ultimately completed on 15 September 2022 in an event referred to as \textit{The Merge}. The transition went smoothly without major disruptions to the live network, and Ethereum's energy consumption was subsequently reduced by over 99\%\footnote{\url{https://en.wikipedia.org/wiki/Proof_of_stake}}.
+
+Under Ethereum's current PoS implementation, a validator must stake a minimum of 32~ETH into a dedicated smart contract in order to participate in the consensus process. Block proposers are selected pseudo-randomly using a mechanism called RANDAO, and once a block is broadcast, the remaining validators attest to its validity. Finality is achieved through the Casper Friendly Finality Gadget (Casper-FFG) protocol: a block becomes finalized when two consecutive checkpoint blocks have been justified by a supermajority (two-thirds) of all staked ETH. Reverting a finalized block would require an attacker to burn at least one-third of the total staked supply, making such an attack economically devastating and effectively infeasible~\cite{ethereum_pos}.
 
 
 
@@ -165,7 +183,7 @@ With a solid understanding of how blocks are structured and how consensus mechan
 
 \section{Ethereum Virtual Machine}
 The Ethereum Virtual Machine (EVM) is a deterministic state machine that executes the bytecode of the smart contract identically on all nodes \cite{wood2014yellow}. However, it is not Turing complete in the classical sense: execution is strictly resource-bounded by gas - every instruction has a metered gas cost, and execution halts once the supplied gas is exhausted. 
-This gas-bounded execution guarantees termination and prevents non-halting or deliberately expensive programs from stalling the network; accordingly, the EVM is often described as \emph{quasi–Turing complete} (computationally universal only under a finite gas budget) \cite{antonopoulos2018mastering}\cite{wood2014yellow}.
+This gas-bounded execution guarantees termination and prevents non-halting or deliberately expensive programs from stalling the network; accordingly, the EVM is often described as \emph{quasi–Turing complete} (computationally universal only under a finite gas budget) \cite{antonopoulos2018mastering, wood2014yellow}.
 
 \subsection{Gas}
 Gas is the unit of account for computational effort in Ethereum. Each EVM opcode has an associated gas cost, and a transaction specifies an upper bound (gas limit) on how much gas may be consumed during its execution.
@@ -186,12 +204,11 @@ Blocks have an elastic gas target and the base fee increases or decreases depend
 
 \begin{figure}[!htbp]
     \centering
-    \includegraphics[width=\linewidth]{images/evm}
-    \caption[Ethereum Virtual Machine illustration]{Ethereum Virtual Machine illustration\footnote{\url{https://ethereum.org/developers/docs/evm/}}.}
+    \includegraphics[width=0.8\linewidth]{images/evm}
+    \caption[Ethereum Virtual Machine illustration]{Ethereum Virtual Machine illustration \cite{evm_web}.}
     \label{fig:evm}
 \end{figure}
 
-where 
 \begin{itemize}
     \item Program Counter (PC) - component that tracks the current instruction that it is executing;
     \item EVM code - immutable compoennt holds the bytecode of the smart contract that is being executed.
@@ -208,7 +225,7 @@ where
 \end{itemize}
 
 \section{Smart Contracts}
-Building on the blockchain foundation introduced in Section~\ref{se:overview}, Ethereum extends the ledger model with \emph{smart contracts}: programs stored on-chain and executed by all nodes under the same consensus rules \cite{wood2014yellow}. In practice, this means contract execution is deterministic and publicly verifiable: anyone can inspect the code, replay transactions, and validate resulting state changes.
+Building on the blockchain foundation introduced in Section~\ref{sec:overview}, Ethereum extends the ledger model with \emph{Smart Contracts}: programs stored on-chain and executed by all nodes under the same consensus rules \cite{wood2014yellow}. In practice, this means that contract execution is deterministic and publicly verifiable: anyone can inspect the code, replay transactions, and validate the resulting state changes.
 
 A contract is deployed through a transaction, receives its own on-chain address, and can then be called by externally owned accounts or by other contracts. This execution model reduces reliance on intermediaries and enables composable decentralized applications, where protocols interact as reusable building blocks.
 
@@ -1011,7 +1028,7 @@ Wake includes auxiliary tools that support development and audit workflows:
 \section{Wake-AI}
 \label{sec:wake-ai}
 
-With fast developing of tehcnologies, growing LLM capabilities and often their usage in practice, as we were able notice in Section \ref{sec:}, LLMs are integrated into Wake as special separate tool aimed to comprehensive AI audit of smart contracts. Unfortunateylly, challneges of static analysis described above, restricted a lo of spce and other rtypes of vulnerabilities. So there is time, when huge language models come to help auditors with security analysis. 
+With fast developing of tehcnologies, growing LLM capabilities and often their usage in practice, as we were able notice in Chapter \ref{ch:llm}, LLMs are integrated into Wake as special separate tool aimed to comprehensive AI audit of smart contracts. Unfortunateylly, challneges of static analysis described above, restricted a lo of spce and other rtypes of vulnerabilities. So there is time, when huge language models come to help auditors with security analysis. 
 
 \subsection{Architecture}
 \label{subsec:wake-ai-architecture}
