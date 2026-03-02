@@ -255,23 +255,240 @@ contract Counter {
 Even this trivial piece of code captures the core model, where a transaction triggers EVM execution, the state is updated, and the transition becomes part of the verifiable blockchain history.
 
 \section{Security}
-In Ethereum, security follows directly from the execution model rather than from a separate component: transparent code, immutable state transitions, and adversarially accessible interfaces mean every design decision can become an attack surface. The next section therefore focuses on how vulnerabilities emerge in real Solidity/EVM workflows and how they can be systematically prevented.
 
+In Ethereum, security is not an add-on layer, but a property that must be deliberately engineered into every line of contract code. The EVM's execution model is transparent, deterministic, and adversarially accessible by design: any deployed contract can be inspected, called, and interacted with by anyone on the network. Unlike traditional software, deployed smart contracts are typically immutable, meaning that a discovered vulnerability cannot simply be patched with a software update. The financial stakes compound this risk: contracts routinely hold millions of dollars in assets, making them high-value targets that attract sophisticated adversaries. The history of Ethereum is therefore also a history of costly security failures, many of which trace back to a small set of recurring patterns. The following sections provide a structured treatment of these patterns, grounding each in concrete code, and reference notable real-world incidents in which they were exploited to steal significant funds.
+
+%------------------------------------------------------------------
 \subsection{Vulnerability Taxonomies}
-Smart contract security research and industry practice have converged on a set of recurring vulnerability categories. Two widely used resources are the Smart Contract Weakness Classification (SWC) registry and the OWASP Smart Contract Top 10, both of which provide structured names, short descriptions, and representative examples for common classes of issues \cite{swc_registry,owasp_sc_top10}. Using a shared taxonomy is not merely a reporting convenience: it enables consistent labeling across audit reports, static analyzers, and vulnerability datasets, and it makes retrieval-based systems (such as the knowledge base used later in this thesis) easier to query and evaluate.
+%------------------------------------------------------------------
 
-That said, taxonomies are imperfect abstractions. Many real incidents do not map cleanly to a single label: an exploit may combine oracle manipulation with reentrancy, or rely on an access control mistake that only becomes exploitable due to an accounting bug. For this reason, we treat taxonomies as an organizational tool rather than a complete explanation of risk, and we emphasize concrete vulnerability \emph{patterns} that are actionable during analysis \cite{atzei2017survey,perez2021smart}.
+Smart contract security research and industry practice have converged on shared classification frameworks for recurring vulnerability types. Two widely used resources are the Smart Contract Weakness Classification (SWC) registry and the OWASP Smart Contract Top 10, both of which provide structured identifiers, short descriptions, and canonical examples for common issue classes~\cite{swc_registry, owasp_sc_top10}. A shared taxonomy enables consistent labelling across audit reports, static analysis tools, and vulnerability datasets. It also makes retrieval-based systems---such as the knowledge base constructed later in this thesis---easier to query and evaluate.
 
+However, taxonomies are imperfect abstractions. Real incidents rarely map cleanly to a single label: an exploit may combine oracle manipulation with reentrancy, or rely on an access-control mistake that only becomes exploitable because of a separate accounting error. We therefore treat taxonomies as an organizational tool rather than a complete model of risk, and we emphasize actionable vulnerability \emph{patterns} that are relevant during both manual and automated code analysis~\cite{atzei2017survey, perez2021smart}.
+
+%------------------------------------------------------------------
 \subsection{Common Vulnerability Types}
-% Your “working set” of patterns referenced later by the KB.
-\subsubsection*{Reentrancy and External Call Hazards}
-\emph{Reentrancy} occurs when a contract makes an external call before it has fully updated its own state, allowing the callee to re-enter and observe or manipulate intermediate state \cite{luu2016making,atzei2017survey}. In practice, the underlying hazard is broader than classic reentrancy: any external call can revert unexpectedly, consume unbounded gas, or execute arbitrary code in the callee, so call ordering and error handling are security-critical \cite{consensys_best_practices}. A common mitigation is the checks-effects-interactions pattern, complemented by explicit reentrancy guards where appropriate \cite{consensys_best_practices}.
-\subsubsection*{Access Control and Authorization Bugs}
-\emph{Access control} issues arise when privileged operations are callable by unintended parties, or when authorization checks are missing, inconsistent, or based on manipulable state \cite{atzei2017survey,consensys_best_practices}. Typical examples include unprotected administrative functions, incorrect role checks, and unsafe assumptions about \texttt{msg.sender} in proxy and meta-transaction settings. Because Solidity and the EVM do not provide built-in role management, secure authorization is largely a matter of correct application logic and disciplined use of vetted libraries \cite{consensys_best_practices}.
-\subsubsection*{DoS and Gas Griefing}
-\emph{Denial of service} in Ethereum often takes the form of making a critical operation prohibitively expensive or consistently reverting. Examples include iterating over unbounded lists, relying on external calls that can be forced to revert, or designs where a single malicious participant can block progress by refusing to cooperate \cite{atzei2017survey}. Because gas imposes a hard resource budget, some failures are not ``bugs'' in the conventional sense but brittleness in protocol design under adversarial conditions. Defensive patterns include bounded iteration, pull-based payments, and explicit fail-open/fail-closed decisions with documented assumptions \cite{consensys_best_practices}.
-\subsubsection*{Front-running / MEV-related Issues (when relevant)}
-Ethereum transactions are visible in the mempool before inclusion, and block producers can influence ordering within a block. This creates opportunities for \emph{front-running} and broader Maximal Extractable Value (MEV) strategies, where adversaries profit from reordering or inserting transactions around a victim transaction \cite{daian2020flash}. In protocol design, this shows up as price manipulation during trades, sandwich attacks, and liquidation races. Mitigations depend heavily on the application and often require mechanism design choices (e.g., commit-reveal, batch auctions, or oracle design) rather than purely local code changes \cite{daian2020flash}.
+%------------------------------------------------------------------
+
+\subsubsection*{Reentrancy attack}
+
+This type of attack occurs when a contract makes an external call before it has finished updating its own state. The callee---which may be a contract under attacker control---can re-enter the caller inside the same transaction and observe or manipulate the intermediate, stale state~\cite{luu2016making, atzei2017survey}. The classic pattern involves a \texttt{withdraw} function that transfers Ether \emph{before} reducing the caller's recorded balance.
+
+\begin{minted}[fontsize=\small,breaklines]{solidity}function susceptible to reentrancy.}, label=lst:reentrancy_bad]
+// VULNERABLE -- do NOT use
+contract VulnerableVault {
+    mapping(address => uint256) public balances;
+
+    function deposit() external payable {
+        balances[msg.sender] += msg.value;
+    }
+
+    function withdraw() external {
+        uint256 amount = balances[msg.sender];
+        require(amount > 0, "Nothing to withdraw");
+
+        // (1) External call -- attacker's fallback fires here
+        (bool ok, ) = msg.sender.call{value: amount}("");
+        require(ok, "Transfer failed");
+
+        // (2) State update happens AFTER the call -- too late
+        balances[msg.sender] = 0;
+    }
+}
+\end{minted}
+
+An attacker deploys a malicious contract whose \texttt{receive()} fallback immediately calls \texttt{withdraw()} again. Because \texttt{balances[msg.sender]} has not yet been set to zero at step~(1), each recursive call passes the balance check, draining the vault until gas is exhausted.
+
+\begin{lstlisting}[language=Solidity, caption={Attacker contract exploiting the reentrancy vulnerability.}, label=lst:reentrancy_attacker]
+contract Attacker {
+    VulnerableVault public target;
+
+    constructor(address _target) {
+        target = VulnerableVault(_target);
+    }
+
+    function attack() external payable {
+        target.deposit{value: msg.value}();
+        target.withdraw();
+    }
+
+    // Re-enters withdraw() on every incoming Ether transfer
+    receive() external payable {
+        if (address(target).balance >= msg.value) {
+            target.withdraw();
+        }
+    }
+}
+\end{lstlisting}
+
+The fix is straightforward: apply the \emph{checks-effects-interactions} (CEI) pattern---update all internal state \emph{before} making any external call. An additional defense is an explicit reentrancy guard.
+
+\begin{lstlisting}[language=Solidity, caption={Secure withdrawal following the checks-effects-interactions pattern.}, label=lst:reentrancy_good]
+// SECURE
+contract SecureVault {
+    mapping(address => uint256) public balances;
+    bool private _locked;
+
+    modifier nonReentrant() {
+        require(!_locked, "Reentrant call");
+        _locked = true;
+        _;
+        _locked = false;
+    }
+
+    function deposit() external payable {
+        balances[msg.sender] += msg.value;
+    }
+
+    function withdraw() external nonReentrant {
+        uint256 amount = balances[msg.sender];
+        require(amount > 0, "Nothing to withdraw");
+
+        // (1) Effects: state updated BEFORE the call
+        balances[msg.sender] = 0;
+
+        // (2) Interaction: external call is now safe
+        (bool ok, ) = msg.sender.call{value: amount}("");
+        require(ok, "Transfer failed");
+    }
+}
+\end{lstlisting}
+
+\paragraph{Real-world impact: The DAO Hack (2016).}
+The most consequential reentrancy exploit in Ethereum's history occurred on 17 June 2016, when an attacker drained approximately 3.6 million ETH (valued at \$60 million at the time) from \emph{The DAO}, a decentralised autonomous investment fund that had raised \$150 million from over 11,000 contributors~\cite{dao_hack_coindesk, atzei2017survey}. The attacker exploited a recursive split function that transferred Ether before updating the caller's token balance. Because no checks-effects-interactions discipline was applied, the attacker's malicious contract could call back into the withdrawal function repeatedly within a single transaction. The incident was so severe that it caused the Ethereum community to execute a contentious hard fork at block 1,920,000, reverting the stolen transactions---an event that permanently split the network into Ethereum (ETH) and Ethereum Classic (ETC)~\cite{dao_hack_gemini}.
+
+%------------------------------------------------------------------
+\subsubsection*{Access Control}
+
+\paragraph{Mechanism.}
+Access control vulnerabilities arise when sensitive functions lack sufficient authorization checks, or when those checks can be circumvented due to incorrect state, incorrect use of \texttt{msg.sender}, or unsafe delegation patterns~\cite{atzei2017survey, consensys_best_practices}. A common mistake in early Solidity code was naming a constructor incorrectly (using the contract name as a function name), effectively making the ``constructor'' a public function callable by anyone after deployment.
+
+\begin{lstlisting}[language=Solidity, caption={Access control vulnerability: unprotected initializer exposed as a regular function.}, label=lst:access_bad]
+// VULNERABLE (pre-Solidity 0.4.22 pattern)
+contract OwnedWallet {
+    address public owner;
+
+    // Intended as constructor, but name mismatch makes it
+    // a public function callable by anyone at any time
+    function OwnedWallt() public {   // typo: 'Wallt' != 'OwnedWallet'
+        owner = msg.sender;
+    }
+
+    function withdraw(uint256 amount) public {
+        require(msg.sender == owner);
+        payable(msg.sender).transfer(amount);
+    }
+}
+\end{lstlisting}
+
+Any caller can invoke \texttt{OwnedWallt()} to claim ownership, then drain the wallet. The modern fix is to use the \texttt{constructor} keyword (mandatory since Solidity 0.4.22) and to use role-based access control patterns from audited libraries.
+
+\begin{lstlisting}[language=Solidity, caption={Secure access control using the \texttt{constructor} keyword and an \texttt{onlyOwner} modifier.}, label=lst:access_good]
+// SECURE
+contract OwnedWallet {
+    address public owner;
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not the owner");
+        _;
+    }
+
+    function withdraw(uint256 amount) external onlyOwner {
+        payable(msg.sender).transfer(amount);
+    }
+}
+\end{lstlisting}
+
+\paragraph{Real-world impact: Parity MultiSig Hack (2017).}
+In July 2017, an attacker exploited an access control flaw in Parity Technologies' multi-signature wallet contract to steal approximately 153,037 ETH (\$30 million at the time) from three high-profile ICO-funded projects: Aeternity, Edgeless, and Swarm City~\cite{parity_hack_openzeppelin}. The wallet contract separated its logic into a shared library using \texttt{delegatecall}, but the library's initialization function was left unprotected---callable by anyone. The attacker sent two transactions: the first claimed ownership of the multi-sig by calling the exposed initializer; the second moved all funds to an address under their control. The attack could have been prevented by not using \texttt{delegatecall} as a catch-all forwarding mechanism, and instead explicitly defining which library functions could be invoked externally. 
+
+%------------------------------------------------------------------
+\subsubsection{Denial of Service}
+
+\paragraph{Mechanism.}
+Denial of service (DoS) in Ethereum manifests as making a critical operation consistently revert or prohibitively expensive. One prevalent pattern involves iterating over an unbounded array to distribute funds or update state; an attacker who controls one entry in that array can cause the iteration to fail by forcing a revert, blocking all other participants~\cite{atzei2017survey}.
+
+\begin{lstlisting}[language=Solidity, caption={DoS via push-payment to an array of recipients: one reverting recipient blocks all others.}, label=lst:dos_bad]
+// VULNERABLE: push-payment pattern over unbounded array
+contract Distributor {
+    address[] public recipients;
+
+    function addRecipient(address r) external {
+        recipients.push(r);
+    }
+
+    // An attacker adds a contract that always reverts on receive().
+    // This causes the entire loop to revert, locking all funds.
+    function distribute() external {
+        for (uint256 i = 0; i < recipients.length; i++) {
+            payable(recipients[i]).transfer(1 ether); // can revert!
+        }
+    }
+}
+\end{lstlisting}
+
+The standard mitigation is a \emph{pull-payment} (withdrawal) pattern: instead of the contract pushing funds to all recipients in a loop, each recipient calls a \texttt{claimPayment()} function individually, so a malicious recipient can only block their own withdrawal.
+
+\begin{lstlisting}[language=Solidity, caption={Secure pull-payment pattern: each recipient claims their own funds.}, label=lst:dos_good]
+// SECURE: pull-payment
+contract PullDistributor {
+    mapping(address => uint256) public owed;
+
+    function credit(address r, uint256 amount) external {
+        owed[r] += amount;
+    }
+
+    // Each user withdraws independently -- one failure
+    // does not affect any other user
+    function claimPayment() external {
+        uint256 amount = owed[msg.sender];
+        require(amount > 0, "Nothing owed");
+        owed[msg.sender] = 0;
+        (bool ok, ) = msg.sender.call{value: amount}("");
+        require(ok, "Transfer failed");
+    }
+}
+\end{lstlisting}
+
+%------------------------------------------------------------------
+\subsubsection{Front-running}
+
+\paragraph{Mechanism.}
+Ethereum transactions are broadcast to a public mempool before they are included in a block. Block producers (and, in some configurations, specialised searcher bots) can observe pending transactions and exploit their ordering advantage. This enables \emph{front-running}: submitting a competing transaction with a higher gas price that is mined before the victim's, thereby profiting from the price impact the victim's transaction would have caused~\cite{daian2020flash}.
+
+A canonical example is a decentralised exchange (DEX) trade. If a user submits a large buy order that will move the price, an attacker can front-run it by buying first, then sell immediately after the victim's transaction settles---a so-called \emph{sandwich attack}. The attacker profits from the price difference at the victim's expense.
+
+\begin{lstlisting}[language=Solidity, caption={Vulnerable DEX interaction with no slippage protection, exposing the user to sandwich attacks.}, label=lst:frontrun_bad]
+// VULNERABLE: no minimum output specified
+function swapETHForToken(address token) external payable {
+    uint256 amountOut = dex.getAmountOut(msg.value, token);
+    // Attacker front-runs to inflate price, so actual
+    // amountOut at execution is much less than quoted
+    dex.swap{value: msg.value}(token, 0); // minOut = 0
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=Solidity, caption={Mitigated swap with explicit slippage bound and deadline.}, label=lst:frontrun_good]
+// SECURE: caller specifies acceptable minimum and deadline
+function swapETHForToken(
+    address token,
+    uint256 minAmountOut,
+    uint256 deadline
+) external payable {
+    require(block.timestamp <= deadline, "Expired");
+    dex.swap{value: msg.value}(token, minAmountOut);
+    // Reverts if price has moved beyond the user's tolerance
+}
+\end{lstlisting}
+
+Broader MEV mitigations often require protocol-level mechanism design: commit-reveal schemes, batch auctions, or private mempools (e.g., Flashbots), rather than local code changes alone~\cite{daian2020flash}.
+
+
+The preceding discussion establishes that well-known smart contract vulnerabilities are well-defined and follow certain patterns, respectively. Manual code review, while indispensable, does not scale to the volume and pace at which new contracts are deployed. Even experienced auditors can miss subtle instances of a vulnerability buried in complex inheritance hierarchies or proxy patterns. This is precisely where static analysis can provide systematic, scalable assistance. 
 
 % For each: 2–5 sentences + 1 tiny example later in Implementation/Eval if needed.
 
