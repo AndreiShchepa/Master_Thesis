@@ -548,37 +548,35 @@ Recent advances in large language models (LLMs) offer a promising complementary 
 %  CHAPTER OPENING
 % ============================================================
 
-The previous chapter showed that static analysis is broadly effective at identifying many vulnerability patterns, yet it also revealed a fundamental limitation: not every class of vulnerability can be captured by hand-written rules, especially those involving subtle logical errors or context-dependent reasoning.  A natural question follows---can a model \emph{learn} to recognise such patterns directly from data?
+[TODO correct bried text conmnection] of Large Language Models (LLMs)~--- the class of deep neural networks that has transformed natural language processing over the past several years.  LLMs learn to predict and generate text by training on massive corpora, and in doing so they acquire rich internal representations of syntax, semantics, and even multi-step reasoning. The architectures behind these models grew directly out of attempts to assign probabilities to sequences of symbols, a problem with a long history in machine learning.
 
-Answering that question requires understanding Large Language Models (LLMs)---the class of deep neural networks that has transformed natural language processing over the past several years.  LLMs learn to predict and generate text by training on massive corpora, and in doing so they acquire rich internal representations of syntax, semantics, and even multi-step reasoning.  The architectures behind these models grew directly out of attempts to assign probabilities to sequences of symbols, a problem with a long history in machine learning.
-
-This chapter traces that history and the ideas it produced.  We begin with the mathematical foundations of sequence probability and early neural approaches to sequence modelling.  We then introduce the transformer architecture and its core mechanisms---self-attention and positional encoding---which resolved the key limitations of earlier models.  Next, we discuss the training paradigms that turn raw architectures into capable systems, and survey the landscape of embedding representations.  Finally, we examine how all of these techniques have been brought to bear on the specific problem of smart contract security auditing.
+This chapter traces that history and the ideas it produced. It begins with the mathematical foundations of sequence probability and early neural approaches to sequence modeling. Then it introduces the transformer architecture and its core mechanisms with the following discussion about training paradigms. Finally, it examines how all of these techniques have been brought to bear on the specific problem of smart contract security auditing.
 
 
 \section{Sequence Probabilities}
 \label{sec:seq-prob}
 
-Let $\mathbf{x} = (x_1, x_2, \dots, x_T)$ be a sequence of tokens---these could be words in a sentence, symbols in a formula, or any discrete units drawn from a finite vocabulary.  A \emph{language model} assigns a probability to the whole sequence by factoring it with the chain rule of probability:
+Let $\mathbf{x} = (x_1, x_2, \dots, x_T)$ be a sequence of tokens --- these could be words in a sentence, symbols in a formula, or any discrete units drawn from a finite vocabulary.  A \emph{language model} assigns a probability to the whole sequence by factoring it with the chain rule of probability:
 
 \begin{equation}
     P(\mathbf{x}) \;=\; \prod_{t=1}^{T} P\!\bigl(x_t \mid x_1, \dots, x_{t-1}\bigr).
     \label{eq:chain-rule}
 \end{equation}
 
-Each factor on the right-hand side determines the likelihood of the next token given everything that came before~\cite{jurafsky2024slp3}.  Classical $n$-gram models approximate this by truncating the history to a fixed window of $n{-}1$ tokens, an assumption that works acceptably for short phrases but collapses when the prediction depends on context dozens or hundreds of tokens back~\cite{hindle2012naturalness}.  To handle longer-range dependencies, the field turned to neural networks that could, in principle, condition on the entire preceding sequence.
+Each factor on the right-hand side determines the likelihood of the next token given everything that preceded \cite{jm3}. Classical $n$-gram models approximate this by truncating the history to a fixed window of $n{-}1$ tokens, an assumption that works acceptably for short phrases but collapses when the prediction depends on context dozens or hundreds of tokens back. To handle longer-range dependencies, the field turned to neural networks that could, in principle, condition on the entire preceding sequence \cite{hindle2012naturalness}.
 
 
 \subsection{Recurrent Neural Networks}
 \label{subsec:rnn}
 
-Recurrent Neural Networks (RNNs) offered the first neural solution to variable-length conditioning~\cite{goodfellow2016deep}.  At each time step $t$, an RNN updates a hidden state that summarises the entire prefix:
+Recurrent Neural Networks (RNNs) offered the first neural solution to variable-length conditioning. At each time step $t$, an RNN updates a hidden state that summarises the entire prefix:
 
 \begin{equation}
     \mathbf{h}_t = f\!\bigl(\mathbf{W}_h \mathbf{h}_{t-1} + \mathbf{W}_x \mathbf{x}_t + \mathbf{b}\bigr),
     \label{eq:rnn}
 \end{equation}
 
-where $f$ is a nonlinearity such as $\tanh$ or ReLU, and $\mathbf{W}_h$, $\mathbf{W}_x$ are learned weight matrices.  The conditional distribution for the next token is then read off from $\mathbf{h}_t$.
+where $f$ is a nonlinearity such as $\tanh$ or \footnote{\url{https://en.wikipedia.org/wiki/Rectified_linear_unit}}, and $\mathbf{W}_h$, $\mathbf{W}_x$ are learned weight matrices.  The conditional distribution for the next token is then read off from $\mathbf{h}_t$ \cite{Goodfellow-et-al-2016}.
 
 \begin{figure}[!h]
     \centering
@@ -589,13 +587,13 @@ where $f$ is a nonlinearity such as $\tanh$ or ReLU, and $\mathbf{W}_h$, $\mathb
 
 Figure~\ref{fig:rnn_diagram} illustrates the three main layers of an RNN and the recurrent connection that feeds the hidden state from one time step to the next.  This feedback loop allows the network to maintain a form of memory over previous inputs.  Crucially, all recurrent connections share the same weight matrix, enabling the network to process sequences of arbitrary length.
 
-In principle, the hidden state can carry information from arbitrarily far back.  In practice, however, the repeated multiplication of weight matrices during backpropagation causes gradients to either shrink exponentially toward zero or grow without bound---the \emph{vanishing} and \emph{exploding gradient} problems.  Bengio et al.~\cite{bengio1994learning} analysed this phenomenon formally, showing that the influence of an input at time step $\tau$ on the hidden state at a later time step $t$ decays exponentially with the distance $t - \tau$.  The consequence is that standard RNNs struggle to learn dependencies that span more than roughly 10--20 time steps, even though many meaningful patterns in language and other sequential data require much longer memory.
+In principle, the hidden state can carry information from arbitrarily far back.  In practice, however, the repeated multiplication of weight matrices during backpropagation causes gradients to either shrink exponentially toward zero or grow without bound --- the \emph{vanishing} and \emph{exploding gradient} problems. Bengio et al.~\cite{279181} analyzed this phenomenon formally, showing that the influence of an input at time step $\tau$ on the hidden state at a later time step $t$ decays exponentially with the distance $t - \tau$.  The consequence is that standard RNNs struggle to learn dependencies that span more than roughly 10--20 time steps, even though many meaningful patterns in language and other sequential data require much longer memory.
 
 \subsubsection*{Long Short-Term Memory}
 
-Long Short-Term Memory (LSTM) networks~\cite{hochreiter1997long} were specifically designed to address the vanishing gradient problem.  They introduce a dedicated \emph{cell state} that runs through the entire sequence like a conveyor belt, regulated by three learned gates: a \emph{forget gate} that decides what information to discard, an \emph{input gate} that controls what new information to store, and an \emph{output gate} that determines what part of the cell state to expose as the hidden state.  By learning to open and close these gates, LSTMs can preserve information over hundreds of time steps---a substantial improvement over vanilla RNNs.
+To address this problem, Long Short-Term Memory (LSTM) networks were specifically designed~\cite{hochreiter1997long}. They introduce a dedicated \emph{cell state} that runs through the entire sequence like a conveyor belt, regulated by three learned gates: a \emph{forget gate} that decides what information to discard, an \emph{input gate} that controls what new information to store, and an \emph{output gate} that determines what part of the cell state to expose as the hidden state.  By learning to open and close these gates, LSTMs can preserve information over hundreds of time steps.
 
-Despite this advance, a fundamental bottleneck remained: processing is strictly sequential.  Token $t$ cannot be computed until token $t{-}1$ has been processed.  This sequential dependency has two consequences.  First, it makes training on large corpora prohibitively slow, since parallelism across positions within a sequence is impossible.  Second, information about an element early in the sequence must survive passage through every intermediate hidden state before it can influence the processing of a distant element, even if the two are directly related.  Both limitations motivated the search for an architecture that could process all positions simultaneously while maintaining the ability to model long-range dependencies.
+Despite this advance, a fundamental bottleneck remained: processing is strictly sequential. The token $t$ cannot be computed until the token $t{-}1$ has been processed.  This sequential dependency has two consequences.  First, it makes training on large corpora prohibitively slow, since parallelism across positions within a sequence is impossible.  Second, information about an element early in the sequence must survive passage through every intermediate hidden state before it can influence the processing of a distant element, even if the two are directly related.  Both limitations motivated the search for an architecture that could process all positions simultaneously while maintaining the ability to model long-range dependencies.
 
 
 % ============================================================
