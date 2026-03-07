@@ -545,28 +545,33 @@ Recent advances in large language models (LLMs) offer a promising complementary 
 \label{ch:llm}
 
 % ============================================================
-%  CHAPTER OPENING — from sequence modelling math to transformers
+%  CHAPTER OPENING
 % ============================================================
 
-The previous chapter showed that static analysis has broad usage in identifying many vulnerability patterns in codes. But it also showed the limitation that not all types of vulnerability could be described by rule, especially logical issues. The natural question follows --- can a model recognize a vulnerable pattern [TODO]?
+The previous chapter showed that static analysis is broadly effective at identifying many vulnerability patterns, yet it also revealed a fundamental limitation: not every class of vulnerability can be captured by hand-written rules, especially those involving subtle logical errors or context-dependent reasoning.  A natural question follows---can a model \emph{learn} to recognise such patterns directly from data?
 
-Answering that question requires a detour through the mathematics of sequence modeling, because the architectures that power today's Large Language Models (LLMs) grew directly out of attempts to assign probabilities to sequences of symbols.
+Answering that question requires understanding Large Language Models (LLMs)---the class of deep neural networks that has transformed natural language processing over the past several years.  LLMs learn to predict and generate text by training on massive corpora, and in doing so they acquire rich internal representations of syntax, semantics, and even multi-step reasoning.  The architectures behind these models grew directly out of attempts to assign probabilities to sequences of symbols, a problem with a long history in machine learning.
+
+This chapter traces that history and the ideas it produced.  We begin with the mathematical foundations of sequence probability and early neural approaches to sequence modelling.  We then introduce the transformer architecture and its core mechanisms---self-attention and positional encoding---which resolved the key limitations of earlier models.  Next, we discuss the training paradigms that turn raw architectures into capable systems, and survey the landscape of embedding representations.  Finally, we examine how all of these techniques have been brought to bear on the specific problem of smart contract security auditing.
+
 
 \section{Sequence Probabilities}
 \label{sec:seq-prob}
 
-Let $\mathbf{x} = (x_1, x_2, \dots, x_T)$ be a sequence of tokens (words) in English, opcodes in EVM bytecode, or lexemes in Solidity source. A \emph{language model} assigns a probability to the whole sequence by factoring it in with the chain rule of probability:
+Let $\mathbf{x} = (x_1, x_2, \dots, x_T)$ be a sequence of tokens---these could be words in a sentence, symbols in a formula, or any discrete units drawn from a finite vocabulary.  A \emph{language model} assigns a probability to the whole sequence by factoring it with the chain rule of probability:
 
 \begin{equation}
     P(\mathbf{x}) \;=\; \prod_{t=1}^{T} P\!\bigl(x_t \mid x_1, \dots, x_{t-1}\bigr).
     \label{eq:chain-rule}
 \end{equation}
 
-Each factor on the right-hand side determines the likelihood of the the next token given everything that came before. Classical $n$-gram models approximate this by truncating the history to a fixed window of $n{-}1$ tokens, an assumption that works acceptably for short phrases but collapses when the prediction depends on context dozens or hundreds of tokens back~\cite{hindle2012naturalness}.
+Each factor on the right-hand side determines the likelihood of the next token given everything that came before~\cite{jurafsky2024slp3}.  Classical $n$-gram models approximate this by truncating the history to a fixed window of $n{-}1$ tokens, an assumption that works acceptably for short phrases but collapses when the prediction depends on context dozens or hundreds of tokens back~\cite{hindle2012naturalness}.  To handle longer-range dependencies, the field turned to neural networks that could, in principle, condition on the entire preceding sequence.
+
 
 \subsection{Recurrent Neural Networks}
+\label{subsec:rnn}
 
-Recurrent Neural Networks (RNNs) offered the first neural solution to variable-length conditioning.  At each time step $t$, an RNN updates a hidden state that summarizes the entire prefix:
+Recurrent Neural Networks (RNNs) offered the first neural solution to variable-length conditioning~\cite{goodfellow2016deep}.  At each time step $t$, an RNN updates a hidden state that summarises the entire prefix:
 
 \begin{equation}
     \mathbf{h}_t = f\!\bigl(\mathbf{W}_h \mathbf{h}_{t-1} + \mathbf{W}_x \mathbf{x}_t + \mathbf{b}\bigr),
@@ -582,12 +587,15 @@ where $f$ is a nonlinearity such as $\tanh$ or ReLU, and $\mathbf{W}_h$, $\mathb
     \label{fig:rnn_diagram}
 \end{figure}
 
-The Figure \ref{fig:rnn_diagram} shows three main layers of RNN, and recurrent connection that feeds the hidden state from one time step to the next, allowing the network to maintain a memory of previous inputs. All recurrent connections share the same weight matrix, enabling the network to process variable-length sequences.
+Figure~\ref{fig:rnn_diagram} illustrates the three main layers of an RNN and the recurrent connection that feeds the hidden state from one time step to the next.  This feedback loop allows the network to maintain a form of memory over previous inputs.  Crucially, all recurrent connections share the same weight matrix, enabling the network to process sequences of arbitrary length.
 
-In principle, the hidden state can carry information from arbitrarily far back.  In practice, gradients that flow through long chains of multiplication either vanish or explode, a phenomenon analysed formally by Bengio et al.~\cite{bengio1994learning}. [TODO ADD MORE ABOUT VANIHING GRADIENT]
+In principle, the hidden state can carry information from arbitrarily far back.  In practice, however, the repeated multiplication of weight matrices during backpropagation causes gradients to either shrink exponentially toward zero or grow without bound---the \emph{vanishing} and \emph{exploding gradient} problems.  Bengio et al.~\cite{bengio1994learning} analysed this phenomenon formally, showing that the influence of an input at time step $\tau$ on the hidden state at a later time step $t$ decays exponentially with the distance $t - \tau$.  The consequence is that standard RNNs struggle to learn dependencies that span more than roughly 10--20 time steps, even though many meaningful patterns in language and other sequential data require much longer memory.
 
 \subsubsection*{Long Short-Term Memory}
-Long Short-Term Memory (LSTM) networks~\cite{hochreiter1997long} mitigated vanishing gradients by introducing gated memory cells, but the fundamental bottleneck remained: processing is strictly sequential.  Token $t$ cannot be computed until token $t{-}1$ has been processed.  This makes training on large code corpora prohibitively slow—and it also means that information about a variable declared in line~5 must survive passage through every intermediate hidden state before it can influence the analysis of that variable's use in line~150.
+
+Long Short-Term Memory (LSTM) networks~\cite{hochreiter1997long} were specifically designed to address the vanishing gradient problem.  They introduce a dedicated \emph{cell state} that runs through the entire sequence like a conveyor belt, regulated by three learned gates: a \emph{forget gate} that decides what information to discard, an \emph{input gate} that controls what new information to store, and an \emph{output gate} that determines what part of the cell state to expose as the hidden state.  By learning to open and close these gates, LSTMs can preserve information over hundreds of time steps---a substantial improvement over vanilla RNNs.
+
+Despite this advance, a fundamental bottleneck remained: processing is strictly sequential.  Token $t$ cannot be computed until token $t{-}1$ has been processed.  This sequential dependency has two consequences.  First, it makes training on large corpora prohibitively slow, since parallelism across positions within a sequence is impossible.  Second, information about an element early in the sequence must survive passage through every intermediate hidden state before it can influence the processing of a distant element, even if the two are directly related.  Both limitations motivated the search for an architecture that could process all positions simultaneously while maintaining the ability to model long-range dependencies.
 
 
 % ============================================================
@@ -595,36 +603,24 @@ Long Short-Term Memory (LSTM) networks~\cite{hochreiter1997long} mitigated vanis
 \label{sec:transformers}
 % ============================================================
 
-The transformer, introduced by Vaswani et al.\ in 2017~\cite{vaswani2023attentionneed}, replaced the sequential hidden-state chain with a mechanism that lets every token look directly at every other token --- \emph{self-attention}.  The result is a model that can be trained in parallel across all positions and that provides short, direct gradient paths between any pair of tokens regardless of their distance in the sequence.
+The transformer, introduced by Vaswani et al.\ in 2017~\cite{vaswani2023attentionneed}, addressed both limitations of recurrent models in a single architectural innovation.  It replaced the sequential hidden-state chain with a mechanism that lets every token attend directly to every other token---\emph{self-attention}.  The result is a model that can be trained in parallel across all positions and that provides short, direct gradient paths between any pair of tokens regardless of their distance in the sequence.
 
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=0.7\linewidth]{images/transformer.png}
-    \caption{The original encoder–decoder transformer architecture~\cite{vaswani2023attentionneed}. Modern LLMs typically use only the decoder stack (right half) for autoregressive generation, or only the encoder stack (left half) for representation learning.}
+    \caption{The original encoder--decoder transformer architecture~\cite{vaswani2023attentionneed}.  The encoder (left) processes the input sequence bidirectionally, while the decoder (right) generates the output sequence autoregressively.  Modern LLMs typically use only one half: decoder-only models for generation, or encoder-only models for representation learning.}
     \label{fig:transformer}
 \end{figure}
 
-The full architecture is an encoder–decoder stack, but most models relevant to code analysis use only one half.  Encoder-only models such as BERT~\cite{devlin2019bert} and CodeBERT~\cite{feng2020codebert} produce contextual embeddings useful for classification and retrieval.  Decoder-only models in the GPT family~\cite{radford2019language, brown2020language} generate text autoregressively and form the backbone of today's chat-capable LLMs (GPT-4, Claude, LLaMA).  Encoder–decoder models such as T5~\cite{raffel2020exploring} and CodeT5~\cite{wang2021codet5} excel at sequence-to-sequence tasks like code summarisation and translation.
+The full architecture, shown in Figure~\ref{fig:transformer}, consists of an encoder--decoder stack.  The encoder maps an input sequence to a sequence of continuous representations, which the decoder then uses to generate output tokens one at a time.  However, most models relevant to contemporary NLP and code analysis use only one half of this design.  Encoder-only models such as BERT~\cite{devlin2019bert} and CodeBERT~\cite{feng2020codebert} produce contextual embeddings useful for classification and retrieval.  Decoder-only models in the GPT family~\cite{radford2019language, brown2020language} generate text autoregressively and form the backbone of today's chat-capable LLMs (GPT-5~\cite{openai2025gpt5}, Claude~\cite{anthropic2025claude}, DeepSeek~\cite{deepseekai2025deepseekv3}, Qwen~\cite{qwen2025qwen3}).  Encoder--decoder models such as T5~\cite{raffel2020exploring} and CodeT5~\cite{wang2021codet5} excel at sequence-to-sequence tasks like summarisation and translation.
 
-% ── PLACEHOLDER ──────────────────────────────────────────────
-% FIGURE: Visual taxonomy — Encoder-only (BERT, CodeBERT),
-% Decoder-only (GPT, LLaMA, Claude), Encoder-Decoder (T5, CodeT5).
-% Show which part of the transformer each variant uses, highlighted.
-% \begin{figure}[!htbp]
-%     \centering
-%     \includegraphics[width=0.85\textwidth]{images/model_taxonomy.pdf}
-%     \caption{Transformer model families.  Encoder-only models (left) produce bidirectional 
-%              representations; decoder-only models (centre) generate tokens autoregressively; 
-%              encoder–decoder models (right) map input sequences to output sequences.}
-%     \label{fig:model-taxonomy}
-% \end{figure}
-% ─────────────────────────────────────────────────────────────
+The remainder of this section examines the two mechanisms that make the transformer work: self-attention, which allows tokens to exchange information regardless of distance, and positional encoding, which injects the notion of order into an otherwise position-agnostic architecture.
 
 
 \subsection{Self-Attention Mechanism}
 \label{subsec:self-attention}
 
-Self-attention is the operation that gives transformers their power.  Each token is projected into three vectors—a \emph{query}~$\mathbf{q}$, a \emph{key}~$\mathbf{k}$, and a \emph{value}~$\mathbf{v}$—through learned linear maps:
+Self-attention is the core operation that gives transformers their representational power.  The central idea is to let each token in a sequence compute a weighted combination of all other tokens, where the weights are determined by learned compatibility functions.  Concretely, each token's embedding is projected into three vectors---a \emph{query}~$\mathbf{q}$, a \emph{key}~$\mathbf{k}$, and a \emph{value}~$\mathbf{v}$---through learned linear maps:
 
 \begin{equation}
     \mathbf{Q} = \mathbf{X}\mathbf{W}^Q, \qquad
@@ -633,7 +629,7 @@ Self-attention is the operation that gives transformers their power.  Each token
     \label{eq:qkv}
 \end{equation}
 
-where $\mathbf{X} \in \mathbb{R}^{T \times d_{\text{model}}}$ is the matrix of input embeddings and $\mathbf{W}^Q, \mathbf{W}^K \in \mathbb{R}^{d_{\text{model}} \times d_k}$, $\mathbf{W}^V \in \mathbb{R}^{d_{\text{model}} \times d_v}$ are the projection matrices.  The attention output is then:
+where $\mathbf{X} \in \mathbb{R}^{T \times d_{\text{model}}}$ is the matrix of input embeddings and $\mathbf{W}^Q, \mathbf{W}^K \in \mathbb{R}^{d_{\text{model}} \times d_k}$, $\mathbf{W}^V \in \mathbb{R}^{d_{\text{model}} \times d_v}$ are the projection matrices.  The attention output is then computed as:
 
 \begin{equation}
     \text{Attention}(\mathbf{Q}, \mathbf{K}, \mathbf{V})
@@ -641,13 +637,14 @@ where $\mathbf{X} \in \mathbb{R}^{T \times d_{\text{model}}}$ is the matrix of i
     \label{eq:attention}
 \end{equation}
 
-The matrix $\mathbf{Q}\mathbf{K}^{\!\top} \in \mathbb{R}^{T \times T}$ contains the compatibility score of every query–key pair.  Dividing by $\sqrt{d_k}$ prevents the dot products from growing with the embedding dimension, which would push softmax into saturation and produce near-zero gradients~\cite{vaswani2017attention}.  After softmax normalisation, each row becomes a probability distribution over positions, and the output for each token is the corresponding weighted average of value vectors.
+The matrix $\mathbf{Q}\mathbf{K}^{\!\top} \in \mathbb{R}^{T \times T}$ contains the compatibility score of every query--key pair.  Dividing by $\sqrt{d_k}$ is essential: without this scaling, the dot products grow in magnitude with the embedding dimension, pushing softmax into regions where its gradients are vanishingly small~\cite{vaswani2017attention}.  After softmax normalisation, each row becomes a probability distribution over positions, and the output for each token is the corresponding weighted average of value vectors.
 
-An intuitive reading in the context of Solidity code: the query at position~$t$ asks ``what do I need to know?'', the keys at all other positions advertise ``here is what I contain'', and the resulting attention weights decide how much each position contributes to the representation at~$t$.  For instance, when the model encounters a \texttt{call.value()} invocation, its query can attend directly to the location where the receiving address was assigned, even if hundreds of tokens intervene—something an RNN could achieve only if that information survived the entire hidden-state chain.
+An intuitive reading: the query at position~$t$ asks ``what do I need to know?'', the keys at all other positions advertise ``here is what I contain'', and the resulting attention weights decide how much each position contributes to the updated representation at~$t$.  This mechanism allows the model to relate any two positions in a sequence with a single computational step, regardless of their distance---a stark contrast to RNNs, where information must traverse every intermediate hidden state.
+
 
 \subsubsection*{Multi-Head Attention}
 
-Rather than computing a single attention function, transformers run $h$ independent attention heads in parallel, each with its own projection matrices, and concatenate the results:
+Rather than computing a single attention function, transformers run $h$ independent attention heads in parallel, each with its own set of projection matrices, and concatenate the results:
 
 \begin{equation}
     \text{MultiHead}(\mathbf{Q}, \mathbf{K}, \mathbf{V})
@@ -659,17 +656,37 @@ Rather than computing a single attention function, transformers run $h$ independ
     \label{eq:head-i}
 \end{equation}
 
-Empirical probing studies show that different heads specialise in different relation types—syntactic dependencies, coreference, data flow—even without explicit supervision~\cite{clark2019does, vig2019analyzing}.  For vulnerability detection, this means the model can simultaneously track variable definitions and uses in one head, function call chains in another, and common vulnerability idioms in a third, before combining these perspectives through the output projection~$\mathbf{W}^O$.
+The motivation for multiple heads is that a single attention function can only capture one type of relationship at a time.  By running several heads in parallel, the model can attend to different aspects of the input simultaneously.  Empirical probing studies confirm that different heads do indeed specialise in different relation types---some track syntactic dependencies, others capture coreference or semantic similarity---even without explicit supervision~\cite{clark2019does, vig2019analyzing}.  The output projection~$\mathbf{W}^O$ then combines these diverse perspectives into a single representation for each token.
 
 
 \subsection{Positional Encoding}
 \label{subsec:pos-enc}
 
-Self-attention is \emph{permutation-equivariant}: shuffling the input tokens produces the same outputs in shuffled order.  Since token order carries critical semantic information—both in natural language and in code—positional encoding must inject position information before attention is applied.
+Self-attention is \emph{permutation-equivariant}: if the input tokens are shuffled, the outputs are shuffled in exactly the same way, with no change in their values.  Since token order carries critical semantic information---both in natural language and in structured formats---the model must be given explicit information about position.  This is the role of \emph{positional encoding}, which is added to the input embeddings before they enter the attention layers.
 
-[TODO]
+The original transformer~\cite{vaswani2023attentionneed} used fixed sinusoidal functions to encode position.  For each position $\text{pos}$ and each dimension $i$ of the embedding:
 
-[TODO maybe some transition how it is possible to manipulate with these architectures, like training and so on]
+\begin{equation}
+    \text{PE}_{(\text{pos},\, 2i)} = \sin\!\left(\frac{\text{pos}}{10000^{2i/d_{\text{model}}}}\right), \qquad
+    \text{PE}_{(\text{pos},\, 2i+1)} = \cos\!\left(\frac{\text{pos}}{10000^{2i/d_{\text{model}}}}\right).
+    \label{eq:sinusoidal-pe}
+\end{equation}
+
+This design has an elegant property: the positional encoding of any fixed offset $k$ can be expressed as a linear function of the encoding at position $\text{pos}$, which in principle allows the model to learn to attend to relative positions.  However, sinusoidal encodings are fixed and cannot adapt to the data.
+
+More recent models have moved to \emph{learned} positional encodings or, increasingly, to \emph{relative} positional encoding schemes.  Rotary Position Embedding (RoPE)~\cite{su2024roformer} encodes position by rotating query and key vectors in the complex plane, so that the dot product between a query at position $m$ and a key at position $n$ depends only on their relative distance $m - n$.  RoPE has become the dominant choice in modern decoder-only LLMs, including LLaMA~\cite{touvron2023llama} and many of its derivatives, because it combines the benefits of relative encoding with straightforward integration into the standard attention mechanism.
+
+
+\subsection{Mixture-of-Experts}
+\label{subsec:moe}
+
+Standard transformers are \emph{dense}: every parameter is involved in processing every input token.  Scaling such models to hundreds of billions of parameters therefore increases compute cost proportionally.  \emph{Mixture-of-Experts} (MoE) architectures~\cite{shazeer2017outrageously} offer a way to decouple model capacity from per-token compute.  In an MoE transformer, each feed-forward sublayer is replaced by a set of $N$ parallel ``expert'' networks, and a learned \emph{router} selects only the top-$K$ experts to process each token.  The remaining experts are inactive for that token, so the model can hold far more parameters than it actually uses on any single input.
+
+This idea has moved from a niche research topic to the dominant architecture for frontier LLMs.  The Switch Transformer~\cite{fedus2022switch} demonstrated that routing each token to a single expert could scale efficiently to trillion-parameter models.  Mixtral~\cite{jiang2024mixtral} brought MoE to open-weight models with strong performance.  Most significantly, the DeepSeek model family~\cite{deepseekai2025deepseekv3} introduced fine-grained expert segmentation---splitting experts into many smaller units and activating more of them per token---alongside shared experts that capture common knowledge across tasks, an auxiliary-loss-free load-balancing strategy, and Multi-head Latent Attention (MLA) for efficient inference.  DeepSeek-V3, with 671~billion total parameters but only 37~billion activated per token, was reportedly trained for approximately \$5.6~million---an order of magnitude less than comparable dense models---while achieving competitive performance with the best proprietary systems.
+
+By 2025, MoE had become the architecture of choice for the majority of frontier models, adopted by DeepSeek, Mistral, Qwen, and others~\cite{nvidia2025moe}.  The key insight is that sparsity allows models to grow much larger---and thus to store more knowledge and develop more specialised internal representations---without a corresponding increase in inference cost.
+
+With self-attention providing the ability to relate tokens across arbitrary distances, positional encoding supplying the necessary notion of order, and MoE enabling efficient scaling, the transformer has the representational machinery to model complex sequential structure at enormous scale.  The next question is how to turn this architecture into a capable model---that is, how to train it.
 
 
 % ============================================================
@@ -677,35 +694,39 @@ Self-attention is \emph{permutation-equivariant}: shuffling the input tokens pro
 \label{sec:training}
 % ============================================================
 
-Building a useful LLM involves three broad stages, each with distinct implications for code security. [TODO write a bit more, that will lead that training tuning and prompntg will be sdescribed]
+A transformer architecture on its own is simply a parameterised function; it becomes useful only through training.  Building a capable LLM involves three broad stages, each operating at a different scale and serving a different purpose.  \emph{Pre-training} exposes the model to vast quantities of text to learn general-purpose representations.  \emph{Fine-tuning} adapts these representations to specific tasks or desired behaviours.  \emph{Prompting} shapes the model's output at inference time through instructions and examples, without modifying any parameters.  The following subsections describe each stage in turn.
+
 
 \subsection{Pre-training}
 \label{subsec:pretraining}
 
 Pre-training exposes the model to massive text corpora using self-supervised objectives that require no human labelling.  For decoder-only models, the objective is \emph{next-token prediction} (causal language modelling): given a prefix $x_1, \ldots, x_{t-1}$, maximise $\log P(x_t \mid x_1, \ldots, x_{t-1})$ summed over all positions and all documents in the corpus.  For encoder-only models like BERT~\cite{devlin2019bert}, the objective is \emph{masked language modelling}: randomly mask a fraction of tokens and train the model to recover them from bidirectional context.
 
-TODO about it reuires alot of harsare and it is very expensive, alot of data and othe drawbacks, that make this way very inefecient in todays reality.
+The simplicity of these objectives belies the enormous computational cost of pre-training.  State-of-the-art models are trained on corpora containing trillions of tokens, using thousands of GPUs or TPUs running continuously for weeks or months.  Cottier et al.~\cite{cottier2025risingcosts} estimate that the amortised hardware and energy cost of training frontier models has grown at a rate of roughly 2.4$\times$ per year since 2016, with the largest runs already exceeding hundreds of millions of dollars and projections suggesting the billion-dollar threshold will be crossed by 2027.  The dominant cost components are AI accelerator chips and R\&D staff, each accounting for roughly a third to a half of total expenditure.  Beyond hardware, assembling and curating a high-quality training corpus is itself a major undertaking: the data must be diverse enough to cover the breadth of human knowledge, yet filtered to remove low-quality, duplicated, or toxic content.
+
+These costs mean that pre-training a frontier dense model from scratch is feasible only for a handful of well-resourced organisations.  However, architectural innovations---particularly Mixture-of-Experts (discussed in Section~\ref{subsec:moe})---have begun to challenge this assumption: DeepSeek-V3~\cite{deepseekai2025deepseekv3} demonstrated frontier-level performance at a fraction of the cost of comparable dense models.  For most practitioners and researchers, the practical path remains to start from an existing pre-trained model and adapt it through fine-tuning---a far more accessible process that we turn to next.
 
 
 \subsection{Fine-tuning}
 \label{subsec:finetuning}
 
-Fine-tuning adapts a pre-trained model to specific downstream tasks by continuing training on a smaller, curated dataset.  The most common modern approach is supervised fine-tuning on instruction–response pairs, which teaches the model to follow user intent reliably.
+Fine-tuning adapts a pre-trained model to specific downstream tasks by continuing training on a smaller, curated dataset.  The most common modern approach is \emph{supervised fine-tuning} (SFT) on instruction--response pairs, which teaches the model to follow user intent reliably.  By exposing the model to examples of the desired input--output behaviour, fine-tuning can bias it toward structured outputs, improve adherence to constraints, and sharpen performance on domain-specific tasks---all without the cost of training from scratch.
 
-For security auditing, fine-tuning can improve output quality in two key ways: it can bias the model toward structured reporting (severity, evidence, remediation steps) and it can improve adherence to epistemic constraints such as ``only claim what you can justify with code evidence.''  However, fine-tuning also risks overfitting to narrow datasets.  For this thesis, we treat fine-tuning as complementary rather than required: grounding through retrieval and tool integration can improve reliability even when using general-purpose models.
+However, fine-tuning is not without risks.  Training on a narrow dataset can cause \emph{catastrophic forgetting}, where the model loses general capabilities it acquired during pre-training.  Overfitting is also a concern: a model fine-tuned on a small, homogeneous dataset may perform well on similar examples but generalise poorly to novel inputs.
 
-\textbf{Parameter-efficient methods} have made fine-tuning accessible even for large models.  LoRA (Low-Rank Adaptation)~\cite{hu2022lora} freezes the pre-trained weights and injects small trainable low-rank matrices, reducing the number of trainable parameters by orders of magnitude.  QLoRA~\cite{dettmers2023qlora} combines LoRA with 4-bit quantisation of the frozen weights.  These techniques are widely used in the smart contract domain: for instance, ParaVul~\cite{huang2025paravul} extends QLoRA with sparse connections (SLoRA) for vulnerability detection, and LLM-BSCVM~\cite{llmbscvm2025} fine-tunes CodeLlama-13B with LoRA adapters for multi-agent vulnerability management.
+\textbf{Parameter-efficient methods} have made fine-tuning accessible even for large models.  Full fine-tuning updates every parameter in the model, which for billion-parameter architectures requires substantial GPU memory and risks overfitting.  LoRA (Low-Rank Adaptation)~\cite{hu2022lora} offers an elegant alternative: it freezes the pre-trained weights entirely and injects small trainable low-rank matrices into each layer, reducing the number of trainable parameters by orders of magnitude while preserving most of the model's original knowledge.  QLoRA~\cite{dettmers2023qlora} extends this further by combining LoRA with 4-bit quantisation of the frozen weights, making it possible to fine-tune models with tens of billions of parameters on a single consumer GPU.
+
 
 \subsubsection*{Reinforcement Learning from Human Feedback}
 
-After SFT, many production LLMs undergo alignment via \emph{Reinforcement Learning from Human Feedback} (RLHF)~\cite{ouyang2022training}.  The process has three stages:
+Supervised fine-tuning teaches a model \emph{what} to say, but not necessarily \emph{how} to say it in a way that aligns with human preferences.  Reinforcement Learning from Human Feedback (RLHF)~\cite{ouyang2022training} addresses this gap by optimising the model's outputs to match human judgements of quality.  The process has three stages:
 
 \begin{enumerate}
-    \item \textbf{Reward model training.}  Human annotators rank multiple model outputs for the same prompt.  A reward model is trained on these preference pairs to predict which outputs humans would prefer.
+    \item \textbf{Reward model training.}  Human annotators rank multiple model outputs for the same prompt.  A separate reward model is trained on these preference pairs to predict which outputs humans would prefer.
     
-    \item \textbf{Policy optimisation.}  The language model is treated as a reinforcement learning agent whose ``action'' at each step is the next token.  Using Proximal Policy Optimisation (PPO)~\cite{schulman2017proximal}, the model is fine-tuned to maximise the reward model's score while staying close to the SFT policy (via a KL-divergence penalty).
+    \item \textbf{Policy optimisation.}  The language model is treated as a reinforcement learning agent whose ``action'' at each step is the next token.  Using Proximal Policy Optimisation (PPO)~\cite{schulman2017proximal}, the model is fine-tuned to maximise the reward model's score while staying close to the SFT policy via a KL-divergence penalty, which prevents the model from drifting too far from coherent language.
     
-    \item \textbf{Iteration.}  The process repeats: new outputs are collected, annotators provide fresh rankings, and the reward model and policy are updated.
+    \item \textbf{Iteration.}  The process repeats: new outputs are collected, annotators provide fresh rankings, and both the reward model and the policy are updated.
 \end{enumerate}
 
 \begin{figure}[!h]
@@ -715,53 +736,59 @@ After SFT, many production LLMs undergo alignment via \emph{Reinforcement Learni
     \label{fig:rlhf_diagram}
 \end{figure}
 
-An alternative gaining traction is \textbf{Direct Preference Optimization (DPO)}~\cite{rafailov2024}, which eliminates the separate reward model by directly optimising the language model on preference pairs.  Smart-LLaMA-DPO~\cite{yu2025smart} uses this approach for smart contract vulnerability detection, applying DPO on paired high-quality and low-quality vulnerability explanations to improve both detection accuracy and explanation quality.
+While RLHF has proven effective, it is complex to implement: it requires training and maintaining a separate reward model, carefully tuning the KL penalty, and managing the instability inherent in reinforcement learning.  An increasingly popular alternative is \textbf{Direct Preference Optimisation (DPO)}~\cite{rafailov2024}, which eliminates the separate reward model entirely.  DPO reformulates the RLHF objective so that the language model can be optimised directly on preference pairs---pairs of ``preferred'' and ``dispreferred'' outputs for the same prompt---using a simple classification-style loss.  This simplification reduces training complexity while achieving comparable or superior alignment quality, and has been adopted in several recent models.
 
-[TODO tell more about it]
+\subsubsection*{Reinforcement Learning with Verifiable Rewards}
+
+A major development in 2025 was the emergence of \emph{Reinforcement Learning with Verifiable Rewards} (RLVR), demonstrated most prominently by DeepSeek-R1~\cite{deepseekai2025deepseekr1}.  Where RLHF and DPO rely on human preference judgements, RLVR uses \emph{programmatically verifiable} signals---for example, whether generated code compiles and passes tests, or whether a mathematical derivation produces the correct answer.  DeepSeek-R1 showed that applying large-scale RL directly to a base model, using the Group Relative Policy Optimisation (GRPO) algorithm and only accuracy and format rewards, could induce sophisticated reasoning behaviours---self-reflection, verification, and dynamic strategy adaptation---without any supervised fine-tuning on human-written reasoning traces.  The resulting model achieved performance competitive with the best proprietary systems on mathematics, coding, and STEM benchmarks.
+
+This result has broad implications.  Because verifiable rewards can be generated automatically and at scale, RLVR removes the bottleneck of expensive human annotation that constrains both RLHF and DPO.  It also demonstrated that \emph{inference-time scaling}---allowing the model to spend more computation on harder problems by generating longer chains of thought---can be a powerful complement to training-time scaling.  Reasoning models like DeepSeek-R1 and OpenAI's o-series represent a shift in how LLM capabilities are improved: rather than relying solely on larger models or better training data, substantial gains come from teaching models to \emph{think longer} at inference time~\cite{snell2024scaling}.
+
 
 \subsection{Prompting}
 \label{subsec:prompting}
 
-\emph{Prompting} shapes model behavior at inference time through instructions, context, and examples without changing any model weights.  Brown et al.~\cite{brown2020languagemodelsfewshotlearners} demonstrated that including a few input–output examples (\emph{few-shot prompting}) can elicit task-specific behaviour from large decoder-only models without any fine-tuning at all. [TODO it opens for us also different methods, how use all benefits of prompting emgineering.]
+While pre-training and fine-tuning adjust model parameters, \emph{prompting} shapes model behaviour at inference time through instructions, context, and examples---without changing any weights.  Brown et al.~\cite{brown2020languagemodelsfewshotlearners} demonstrated that including a few input--output examples (\emph{few-shot prompting}) can elicit task-specific behaviour from large decoder-only models without any fine-tuning at all.  This discovery opened the door to a rich set of techniques, collectively known as \emph{prompt engineering}, that exploit the model's in-context learning capabilities.
 
-\textbf{Task decomposition} breaks a complex task into smaller sub-tasks. Each sub-task has narrower scope and clearer success criteria. [TODO smth]
+\textbf{Task decomposition} breaks a complex problem into smaller sub-tasks, each with narrower scope and clearer success criteria.  Rather than asking a model to solve a difficult problem in one step, the prompt guides it through a sequence of manageable steps whose outputs compose into a final answer.  This approach reduces the cognitive burden on any single inference call and makes it easier to verify intermediate results.
 
-\textbf{Chain-of-thought (CoT)} prompting~\cite{wei2023chain} elicits intermediate reasoning steps and improves performance on multi-step tasks.  In security settings, however, the goal is not free-form reasoning traces but \emph{checkable} reasoning: claims should be tied to specific code locations or retrieved evidence.  ReVul-CoT~\cite{chen2025revulcot} demonstrates this principle by guiding LLMs through structured step-by-step CVSS assessment grounded in retrieved vulnerability records.
+\textbf{Chain-of-thought (CoT)} prompting~\cite{wei2023chain} is a specific form of task decomposition in which the model is encouraged to produce intermediate reasoning steps before arriving at a final answer.  By including examples that show step-by-step reasoning, the prompt elicits similar behaviour from the model, which has been shown to improve performance on arithmetic, commonsense reasoning, and other multi-step tasks.
 
-\textbf{Few-shot learning} calibrates what ``good'' output looks like.  In auditing, examples are most valuable when they mirror the desired report structure (severity, impact, evidence, remediation) and when they demonstrate appropriate epistemic caution—preferring ``uncertain, needs further evidence'' over confident speculation.  This approach is compatible with retrieval: retrieved vulnerability reports become dynamic few-shot demonstrations tailored to the contract under analysis.
+\textbf{Few-shot learning} calibrates what ``good'' output looks like by providing concrete examples in the prompt.  The model uses these examples to infer the desired format, style, level of detail, and reasoning strategy, then applies these inferred patterns to the actual query.  Few-shot prompting is particularly powerful when combined with retrieval: instead of relying on fixed examples, relevant demonstrations can be retrieved dynamically from a knowledge base, tailoring the prompt to each specific input.
+
+Together, these prompting techniques allow practitioners to adapt a single general-purpose model to a wide range of tasks at inference time, complementing the more permanent adaptations achieved through fine-tuning.
 
 
 % ============================================================
 \section{Embeddings}
-\label{sec:code-models}
+\label{sec:embeddings}
 % ============================================================
-What common is rom all approaches for LLM? It treats a text as numbers. [ TODO Start talk about embeddings]
 
-General-purpose LLMs treat code as just another form of text, but models explicitly pre-trained or fine-tuned on source code develop richer representations of programming constructs.  These specialised models matter for smart contract analysis in two ways: they produce better \emph{embeddings} for retrieval and similarity search, and they achieve stronger performance on code understanding tasks.
+All of the approaches described so far---whether based on RNNs or transformers, whether pre-trained or fine-tuned---share a common foundation: they represent discrete symbols as continuous vectors~\cite{goodfellow2016deep}.  An \emph{embedding} is a fixed-dimensional vector representation of an input, produced by passing it through a model and extracting an intermediate or final hidden state (typically via mean pooling or a special classification token).  The key property of a good embedding is that inputs with similar meaning or function should be mapped to nearby points in vector space, enabling operations like nearest-neighbour search, clustering, and analogy reasoning to be performed directly on the representations.
 
-An \emph{embedding} is a fixed-dimensional vector representation of a code snippet, produced by passing the snippet through an encoder model and extracting the hidden state (typically via mean pooling or the \texttt{[CLS]} token).  Two code fragments with similar semantics should have embeddings that are close in vector space, enabling nearest-neighbour retrieval over large code corpora.
-
-The quality of embeddings depends critically on the pre-training data and objective.  General text embeddings conflate semantically different code that happens to use similar natural-language identifiers; code-aware embeddings trained on programming-language corpora better capture structural and functional similarity.
+The quality of embeddings depends critically on the pre-training data and objective.  A model trained exclusively on English prose will embed text according to the semantic relationships present in natural language, which may not capture the structural and functional relationships that matter in other domains.  This observation motivated the development of domain-specific embedding models, particularly for source code.
 
 
 \subsection{Encoder Models}
 \label{subsec:encoder-models}
 
-\textbf{CodeBERT}~\cite{feng2020codebert} was one of the first models to pre-train a BERT-style encoder on both natural language and source code across six programming languages.  It uses both masked language modelling and replaced-token detection on NL–PL pairs, learning alignments between code and its documentation.  CodeBERT embeddings have become a standard baseline for code search, clone detection, and vulnerability classification.
+General-purpose text encoders like BERT~\cite{devlin2019bert} produce strong representations for natural language tasks, but they treat source code as just another form of text, missing the structural regularities that distinguish programming languages.  Code-specialised encoder models address this gap.
 
-\textbf{GraphCodeBERT}~\cite{guo2021graphcodebert} extends CodeBERT by incorporating data flow graphs into the pre-training objective, explicitly modelling variable definition-use chains.  This structural awareness improves performance on tasks that require understanding data dependencies—precisely the kind of reasoning needed to trace the flow of tainted data in a smart contract.
+\textbf{CodeBERT}~\cite{feng2020codebert} was one of the first models to pre-train a BERT-style encoder on both natural language and source code across six programming languages.  It uses both masked language modelling and replaced-token detection on NL--PL pairs, learning alignments between code and its documentation.  CodeBERT embeddings have become a standard baseline for code search, clone detection, and vulnerability classification.
 
-For smart contract vulnerability detection specifically, several studies have used encoder models as feature extractors.  Lightning Cat~\cite{lightningcat2023} uses CodeBERT preprocessing to achieve F1~scores above 93\% on the SolidiFI benchmark.  A comprehensive benchmark study by Sendner et al.~\cite{sendner2025firetries} compared seven pre-trained language models—BERT, CodeBERT, GraphCodeBERT, DeBERTa, RoBERTa, DistilBERT, and Longformer—for multi-label vulnerability detection across approximately 18,000 Ethereum smart contracts.
+\textbf{GraphCodeBERT}~\cite{guo2021graphcodebert} extends CodeBERT by incorporating data flow graphs into the pre-training objective, explicitly modelling variable definition-use chains.  This structural awareness improves performance on tasks that require understanding data dependencies---precisely the kind of reasoning needed to trace the flow of values through a program.
+
+For smart contract vulnerability detection specifically, several studies have used encoder models as feature extractors.  Lightning Cat~\cite{lightningcat2023} uses CodeBERT preprocessing to achieve F1~scores above 93\% on the SolidiFI benchmark.  Sendner et al.~\cite{sendner2025firetries} conducted a comprehensive comparison of seven pre-trained language models---BERT, CodeBERT, GraphCodeBERT, DeBERTa, RoBERTa, DistilBERT, and Longformer---for multi-label vulnerability detection across approximately 18,000 Ethereum smart contracts.
 
 
 \subsection{Seq2Seq Models}
 \label{subsec:seq2seq}
 
-\textbf{T5} (Text-to-Text Transfer Transformer)~\cite{raffel2020exploring} frames every NLP task as a text-to-text problem, enabling a single model architecture to handle classification, translation, summarisation, and generation.
+\textbf{T5} (Text-to-Text Transfer Transformer)~\cite{raffel2020exploring} frames every NLP task as a text-to-text problem, enabling a single model architecture to handle classification, translation, summarisation, and generation through a unified interface.
 
-\textbf{CodeT5}~\cite{wang2021codet5} adapts the T5 architecture for code, using an identifier-aware pre-training objective that masks and recovers code identifiers rather than random tokens.  Its successor, \textbf{CodeT5+}~\cite{wang2023codet5p}, scales the model and adds contrastive learning objectives.  BreachT5~\cite{breacht5_2024} demonstrated that fine-tuned CodeT5+ ensembles can perform multi-label SWC classification over large smart contract datasets, though the model's 512-token input limit constrains analysis of longer contracts.
+\textbf{CodeT5}~\cite{wang2021codet5} adapts the T5 architecture for code, using an identifier-aware pre-training objective that masks and recovers code identifiers rather than random tokens.  This targeted masking forces the model to learn the roles of variables and functions within their context.  Its successor, \textbf{CodeT5+}~\cite{wang2023codet5p}, scales the model and adds contrastive learning objectives for improved representation quality.  BreachT5~\cite{breacht5_2024} demonstrated that fine-tuned CodeT5+ ensembles can perform multi-label SWC classification over large smart contract datasets, though the model's 512-token input limit constrains analysis of longer contracts.
 
-These encoder–decoder models are particularly well-suited for tasks framed as sequence-to-sequence transformation: given vulnerable code, generate a description of the vulnerability; or given a natural-language specification, generate a formal property for verification.  PropertyGPT~\cite{liu2025propertygpt} exploits this capability by using RAG over human-written verification properties to generate new formal specifications, uncovering 12 zero-day vulnerabilities that earned \$8,256 in bug bounties.
+These encoder--decoder models are particularly well-suited for tasks framed as sequence-to-sequence transformation: given a piece of code, generate a description of its behaviour; or given a natural-language specification, generate a corresponding formal property.  PropertyGPT~\cite{liu2025propertygpt} exploits this capability by using RAG over human-written verification properties to generate new formal specifications, uncovering 12~zero-day vulnerabilities that earned \$8,256 in bug bounties.
 
 
 % ============================================================
@@ -769,20 +796,7 @@ These encoder–decoder models are particularly well-suited for tasks framed as 
 \label{sec:llm-auditing}
 % ============================================================
 
-The application of LLMs to smart contract security has evolved rapidly since 2023, with approaches spanning four broad categories: prompt-only and agentic pipelines, fine-tuned detection models, RAG-augmented frameworks, and hybrid systems that combine multiple strategies.
-
-% ── PLACEHOLDER ──────────────────────────────────────────────
-% FIGURE: Timeline/taxonomy diagram showing the four paradigms 
-% and key papers in each, arranged chronologically from 2023–2025.
-% \begin{figure}[!htbp]
-%     \centering
-%     \includegraphics[width=\textwidth]{images/llm_auditing_taxonomy.pdf}
-%     \caption{Taxonomy of LLM-based smart contract auditing approaches (2023–2025), 
-%              organised by primary strategy.  Hybrid approaches that combine multiple 
-%              paradigms are increasingly common.}
-%     \label{fig:llm-taxonomy}
-% \end{figure}
-% ─────────────────────────────────────────────────────────────
+The application of LLMs to smart contract security has evolved rapidly since 2023, with approaches spanning four broad categories: prompt-only and agentic pipelines, fine-tuned detection models, RAG-augmented frameworks, and hybrid systems that combine multiple strategies.  Each category represents a different trade-off between accessibility, precision, and the amount of domain-specific engineering required.
 
 
 \subsection{Prompt-Only and Agentic Auditing Pipelines}
@@ -796,6 +810,7 @@ More structured prompt-based approaches improve on this baseline.  \textbf{GPTLe
 
 These results collectively establish that general-purpose LLMs can identify security issues in smart contracts but lack the precision needed for production use without additional grounding mechanisms.
 
+
 \subsection{Fine-Tuned Models for Smart Contract Vulnerability Detection}
 \label{subsec:fine-tuned}
 
@@ -805,7 +820,7 @@ Fine-tuning domain-specific models on labelled vulnerability datasets produces s
 
 \textbf{Smart-LLaMA-DPO}~\cite{yu2025smartllama} applies three-stage training to LLaMA-3.1-8B: continual pre-training on smart contract code, supervised fine-tuning, then Direct Preference Optimisation using paired quality explanations.  The result surpasses GPT-4o (accuracy 58.91\%) and iAudit (accuracy 64.42\%) with improvements of +10.43\% in F1 and +7.87\% in accuracy over the previous state of the art.
 
-Bu et al.~\cite{bu2025dapp} fine-tuned Llama3-8B on 4,998 real DApp contracts with full-parameter fine-tuning and random oversampling, reaching F1~=~0.83 and precision~0.97 for price manipulation vulnerabilities—up from F1~=~0.20 without fine-tuning.
+Bu et al.~\cite{bu2025dapp} fine-tuned Llama3-8B on 4,998 real DApp contracts with full-parameter fine-tuning and random oversampling, reaching F1~=~0.83 and precision~0.97 for price manipulation vulnerabilities---up from F1~=~0.20 without fine-tuning.
 
 \textbf{LLMBugScanner}~\cite{yuan2024llmbugscanner} takes an ensemble approach, combining multiple LoRA-fine-tuned models from the OpenCode leaderboard through weighted voting.  This reduces the impact of individual model weaknesses but introduces complexity in deployment.
 
@@ -813,25 +828,9 @@ Bu et al.~\cite{bu2025dapp} fine-tuned Llama3-8B on 4,998 real DApp contracts wi
 \subsection{RAG-Augmented Detection Frameworks}
 \label{subsec:rag-augmented}
 
-Retrieval-Augmented Generation (RAG) addresses the fundamental limitation that LLMs cannot ``know'' about vulnerability patterns not present in their training data, and that their context windows may be insufficient for analysing entire protocols.  Several RAG frameworks have emerged for smart contract security.
+Retrieval-Augmented Generation (RAG) addresses a fundamental limitation of LLMs: they cannot ``know'' about vulnerability patterns not present in their training data, and their fixed context windows may be insufficient for analysing entire protocols.  By retrieving relevant external knowledge at inference time, RAG frameworks augment the model's capabilities without retraining.
 
 \textbf{ParaVul}~\cite{huang2025paravul} represents the most architecturally sophisticated approach.  It runs a SLoRA-fine-tuned LLaMA-13B detector and a hybrid RAG detector (combining dense embedding retrieval with BM25 lexical matching) in parallel, fusing their outputs through a meta-learning gated verification module.  The system achieves F1 scores of 0.9398 (single-label) and 0.9330 (multi-label), outperforming both standalone fine-tuning and standalone retrieval.  A final stage generates vulnerability reports using chain-of-thought prompts fed to a cloud-based LLM.
-
-% ── PLACEHOLDER ──────────────────────────────────────────────
-% FIGURE: ParaVul architecture diagram — four stages:
-% (1) SLoRA fine-tuned detector
-% (2) Hybrid RAG detector (dense + BM25)
-% (3) Meta-learning fusion module
-% (4) CoT report generation
-% \begin{figure}[!htbp]
-%     \centering
-%     \includegraphics[width=0.9\textwidth]{images/paravul_architecture.pdf}
-%     \caption{ParaVul architecture~\cite{huang2025paravul}.  A fine-tuned LLM path and a hybrid 
-%              RAG path operate in parallel; their predictions are fused by a meta-learning gate 
-%              before chain-of-thought report generation.}
-%     \label{fig:paravul}
-% \end{figure}
-% ─────────────────────────────────────────────────────────────
 
 \textbf{SmartLLM}~\cite{smartllm2025} combines RAG with fine-tuned LLaMA~3.1, integrating ERC documentation for domain context.  It achieves 100\% recall with 62.5\% precision (F1~=~76.9\%), demonstrating how retrieval of standard documentation can reduce false negatives.
 
@@ -841,68 +840,9 @@ Retrieval-Augmented Generation (RAG) addresses the fundamental limitation that L
 
 The most comprehensive framework is \textbf{LLM-BSCVM}~\cite{llmbscvm2025}, which implements a full vulnerability management lifecycle using a ``Decompose-Retrieve-Generate'' pipeline with multi-agent collaboration and LoRA-fine-tuned CodeLlama-13B, achieving 91\% accuracy with a 5.1\% false positive rate.
 
-While not targeting smart contracts specifically, \textbf{ReVul-CoT}~\cite{chen2025revulcot} demonstrates the RAG+CoT paradigm's effectiveness for general software vulnerability severity assessment.  Using retrieval from NVD and CWE databases combined with structured chain-of-thought reasoning, it achieved 87.50\% accuracy and 83.75\% Macro-F1 on 12,070 vulnerability records—improvements exceeding 10 percentage points over all baselines.  Its architecture provides a transferable blueprint for smart contract severity assessment.
-
-% ── PLACEHOLDER ──────────────────────────────────────────────
-% TABLE: Comparison of LLM-based smart contract auditing approaches.
-% Columns: Method | Approach | Base Model | Key Metric | Benchmark
-% Rows: GPTScan, iAudit, Smart-LLaMA-DPO, ParaVul, SmartGuard, LLM-BSCVM
-% \begin{table}[!htbp]
-%     \centering
-%     \caption{Comparison of LLM-based smart contract vulnerability detection approaches.}
-%     \label{tab:llm-comparison}
-%     \begin{tabular}{lllll}
-%     \toprule
-%     \textbf{Method} & \textbf{Approach} & \textbf{Base Model} & \textbf{Best F1} & \textbf{Benchmark} \\
-%     \midrule
-%     GPTScan       & Prompt + SA   & GPT-4        & >0.90 (precision) & Token contracts \\
-%     iAudit        & Fine-tune     & LLaMA        & —                  & Custom \\
-%     Smart-LLaMA-DPO & FT + DPO   & LLaMA-3.1-8B & +10.43\% over SOTA & Custom \\
-%     ParaVul       & FT + RAG      & LLaMA-13B    & 0.9398             & Custom \\
-%     SmartGuard    & RAG + CoT     & —            & 0.9495             & SolidiFI \\
-%     LLM-BSCVM     & RAG + agents  & CodeLlama-13B & 0.91 (acc)        & Custom \\
-%     \bottomrule
-%     \end{tabular}
-% \end{table}
-% ─────────────────────────────────────────────────────────────
+While not targeting smart contracts specifically, \textbf{ReVul-CoT}~\cite{chen2025revulcot} demonstrates the effectiveness of the RAG+CoT paradigm for general software vulnerability severity assessment.  Using retrieval from NVD and CWE databases combined with structured chain-of-thought reasoning, it achieved 87.50\% accuracy and 83.75\% Macro-F1 on 12,070 vulnerability records---improvements exceeding 10 percentage points over all baselines.  Its architecture provides a transferable blueprint for smart contract severity assessment.
 
 
-% ============================================================
-\section{Challenges and Limitations}
-\label{sec:llm-challenges}
-% ============================================================
-
-Despite rapid progress, LLM-based smart contract auditing faces fundamental challenges that constrain its reliability in production settings.
-
-\subsection*{Hallucinations}
-\label{subsec:hallucinations}
-
-LLMs can produce plausible-sounding but factually incorrect outputs --- \emph{hallucination}.  In code generation, this manifests as references to non-existent libraries, fabricated API calls, and invented vulnerability reports.  Spracklen et al.~\cite{spracklen2025package} tested 16~LLMs generating 576,000 code samples and found that 19.7\% of the 2.23~million referenced packages were hallucinated (non-existent), creating a direct supply-chain attack vector.
-
-For security specifically, the consequences are severe.  Pearce et al.~\cite{pearce2022asleep} found that approximately 40\% of GitHub Copilot's code completions contained vulnerabilities.  Perry et al.~\cite{perry2023users} demonstrated that users with AI coding assistant access wrote significantly less secure code while being more confident in its correctness—a dangerous automation bias.
-
-In the smart contract domain, Chen et al.~\cite{chen2024chatgpt} identified several hallucination patterns: ``Protected Mechanism Bias'' (the model assumes protective code exists when it does not), ``Development Intent Bias'' (the model assumes developers followed best practices), and ``Lack of Understanding of Actual Meaning'' of Solidity-specific constructs like \texttt{msg.value}.
-
-The primary mitigation is to require \emph{grounded evidence} for every finding.  Each reported vulnerability should reference specific code locations, static analysis outputs, or retrieved documentation rather than relying on the model's ``intuition'' alone.  RAG-based systems consistently reduce hallucination rates: LLM-BSCVM reduced false positives from 7.2\% to 5.1\% through retrieval-grounded multi-agent collaboration~\cite{llmbscvm2025}.
-
-
-\subsection*{Context Window Limitations}
-\label{subsec:context-window-limits}
-
-Even with context windows reaching hundreds of thousands of tokens, real smart contract systems can exceed what is reasonable to include in a single prompt.  Imported libraries, interface definitions, deployment configurations, and cross-contract dependencies all contribute to the token budget.  Moreover, models have a fixed training cutoff: new vulnerability classes and evolving best practices emerge continuously but are absent from the model's parametric knowledge.
-
-RAG partially addresses both issues by retrieving up-to-date, task-relevant information at inference time and by focusing the prompt on high-signal content~\cite{lewis2021}.
-
-
-\subsection*{Security}
-\label{subsec:security}
-
-When LLM agents can call external tools, additional safety concerns arise.  Prompt injection in retrieved documents could manipulate the agent's behavior, and unrestricted tool access could enable unintended actions. [TODO add a bit more bout security] 
-
-This chapter traced the mathematical foundations of sequence modeling through the transformer architecture and its modern extensions, arriving at a clear picture of where LLMs excel and where they fall short for smart contract auditing. [TODO a bit more]
-
-
-After having the overview about Ethereum, Code Analysis and LLMs, we can move to framework Wake, which comnined all of this for security purposes. [TODO write it better]
 
 \chapter{The Wake Framework}
 \label{chap:wake}
@@ -1143,11 +1083,10 @@ Despite its capabilities, Wake-AI faces several limitations:
 
 Some of these limitations merit attention and can be addressed through alternative approaches. Others, such as hallucination risk and non-determinism, cannot be fully resolved due to the inherent nature of LLMs. This thesis focuses on one of the most critical limitations: knowledge cutoff. The following chapter presents a proposed solution designed to increase the detection of genuine security issues while reducing false positives. This is achieved by providing the LLM with similar historical issues, enabling it to make more informed judgments about vulnerabilities.
 
-
 \chapter{Proposed Methodology}
 \label{ch:methodology}
 
-The previous chapters established the theoretical and practical foundations for this work: blockchain and Ethereum fundamentals (Chapter~\ref{ch:ethereum}), code analysis techniques ranging from static analysis to formal verification (Chapter~\ref{ch:code-analysis}), large language models and their application to smart contract auditing (Chapter~\ref{ch:llm}), and the Wake framework with its AI extension and identified limitations (Chapter~\ref{chap:wake}). This chapter synthesises these elements into a concrete methodology for augmenting LLM-based smart contract auditing with Retrieval-Augmented Generation. We present the design goals that drive all subsequent decisions, formalise the RAG framework, describe the system architecture, detail the knowledge base construction, explain the retrieval pipeline (including embedding strategies, multi-mode search, and re-ranking), specify the integration with Wake through the Model Context Protocol, and discuss the prompt engineering strategy that ties the components together.
+The previous chapters established the theoretical and practical foundations for this work: blockchain and Ethereum fundamentals (Chapter~\ref{ch:ethereum}), code analysis techniques ranging from static analysis to formal verification (Chapter~\ref{ch:code-analysis}), large language models and their application to smart contract auditing (Chapter~\ref{ch:llm}), and the Wake framework with its AI extension and identified limitations (Chapter~\ref{chap:wake}). This chapter synthesises these elements into a concrete methodology for augmenting LLM-based smart contract auditing with Retrieval-Augmented Generation. We present the design goals, formalise the RAG framework, describe the system architecture, detail the knowledge base construction, explain the retrieval pipeline (including embedding strategies, multi-mode search, and re-ranking), specify the integration with Wake through the Model Context Protocol, and discuss the prompt engineering strategy that ties the components together.
 
 
 \section{Design Goals}
@@ -1194,7 +1133,7 @@ where $\theta$ denotes the generator parameters (the LLM weights). The full outp
     \label{eq:rag-marginal}
 \end{equation}
 
-In our setting, $x$ is a compound query consisting of the Solidity code under analysis, a description of the suspected vulnerability, and an optional vulnerability label. The retrieved passages~$z$ are historical audit findings from the knowledge base (Section~\ref{sec:knowledge-base}). The generator is a general-purpose LLM (e.g., GPT-4o-mini) that reasons about whether the suspected vulnerability truly exists, grounding its analysis in the retrieved evidence.
+In our setting, $x$ is a compound query consisting of the Solidity code under analysis, a description of the suspected vulnerability, and an optional vulnerability label. The retrieved passages~$z$ are historical audit findings from the knowledge base (Section~\ref{sec:knowledge-base}). The generator is GPT-4o-mini (temperature~0) that reasons about whether the suspected vulnerability truly exists, grounding its analysis in the retrieved evidence.
 
 \subsection{Adaptation to Smart Contract Auditing}
 \label{subsec:rag-adaptation}
@@ -1202,13 +1141,13 @@ In our setting, $x$ is a compound query consisting of the Solidity code under an
 Standard RAG architectures retrieve documents based on a single query and inject them into a single prompt. Our domain requires several adaptations:
 
 \begin{itemize}
-    \item \textbf{Multi-modal queries.} A vulnerability may be characterised by its natural-language description, by the code pattern that exhibits it, or by its category label. We therefore support multiple query strategies (description-based, code-based, description-with-label) and multiple search modes (text, code, hybrid) that exploit different embedding spaces.
+    \item \textbf{Multi-modal queries.} A vulnerability may be characterised by its natural-language description, by the code pattern that exhibits it, or by its category label. We support four query strategies (description, code, description-with-label, hybrid BM25) and multiple search modes (text, code, hybrid) that exploit different embedding spaces.
 
-    \item \textbf{Structured retrieval output.} Rather than returning raw text chunks, our retriever returns rich metadata: finding title, vulnerability label, severity, summary, and code blocks. This structured output enables the prompt to present findings in a format that mirrors real audit reports, making it easier for the LLM to draw accurate parallels.
+    \item \textbf{Structured retrieval output.} Rather than returning raw text chunks, our retriever returns rich metadata: finding title, vulnerability label, severity, summary, and code blocks. This structured output enables the prompt to present findings in a format that mirrors real audit reports.
 
-    \item \textbf{Two-stage retrieval.} An initial broad retrieval (e.g., top-50 candidates) is followed by a re-ranking stage that uses a more expensive cross-encoder model to re-score candidates. Only the top-$k$ after re-ranking are injected into the prompt. This two-stage approach balances recall and precision.
+    \item \textbf{Two-stage retrieval.} An initial broad retrieval (top-50 candidates) is followed by a cross-encoder re-ranking stage. Only the top-$k$ after re-ranking are injected into the prompt.
 
-    \item \textbf{Hybrid retrieval.} Dense vector search excels at capturing semantic similarity but may miss lexically important terms (e.g., specific Solidity function names). BM25 keyword search complements dense retrieval by matching on exact terms. The two are merged via Reciprocal Rank Fusion (RRF)~\cite{cormack2009rrf}, producing a single ranked list that benefits from both approaches.
+    \item \textbf{Hybrid retrieval.} Dense vector search excels at capturing semantic similarity but may miss lexically important terms (e.g., specific Solidity function names like \texttt{delegatecall}). BM25 keyword search complements dense retrieval by matching on exact terms. The two are merged via Reciprocal Rank Fusion (RRF)~\cite{cormack2009rrf}.
 \end{itemize}
 
 
@@ -1217,7 +1156,52 @@ Standard RAG architectures retrieve documents based on a single query and inject
 
 The proposed system extends Wake-AI (Section~\ref{sec:wake-ai}) with a retrieval module that connects a domain-specific knowledge base to the LLM reasoning pipeline via the Model Context Protocol (MCP). The architecture is composed of four main layers.
 
-[TODO: Architecture diagram showing the four layers: (1) Knowledge Base layer (Solodit API $\rightarrow$ preprocessing $\rightarrow$ PostgreSQL/pgvector), (2) Retrieval layer (embedding models, vector store, BM25 index, fusion, re-ranker), (3) MCP Integration layer (MCP server exposing search/retrieve tools to Wake-AI), (4) Reasoning layer (LLM with structured prompts, verdict generation). Arrows show data flow from left to right: KB $\rightarrow$ Retrieval $\rightarrow$ MCP $\rightarrow$ LLM $\rightarrow$ Structured Report.]
+% \begin{figure}[htbp]
+% \centering
+% \begin{tikzpicture}[
+%     layer/.style={draw, rounded corners, minimum width=13cm, minimum height=1.6cm, align=center, font=\small},
+%     component/.style={draw, rounded corners=2pt, fill=white, minimum height=0.7cm, align=center, font=\footnotesize},
+%     arrow/.style={-{Stealth[length=3mm]}, thick},
+%     layerlabel/.style={font=\small\bfseries, anchor=east},
+% ]
+
+% % Layer 4: Reasoning
+% \node[layer, fill=red!8] (L4) at (0, 6) {};
+% \node[layerlabel] at (-6.8, 6) {Reasoning};
+% \node[component] at (-3.5, 6) {Structured Prompts};
+% \node[component] at (0, 6) {LLM (GPT-4o-mini)};
+% \node[component] at (3.5, 6) {Verdict Generation};
+
+% % Layer 3: MCP Integration
+% \node[layer, fill=yellow!10] (L3) at (0, 4) {};
+% \node[layerlabel] at (-6.8, 4) {MCP};
+% \node[component] at (-2, 4) {MCP Server};
+% \node[component] at (2, 4) {search / retrieve tools};
+
+% % Layer 2: Retrieval
+% \node[layer, fill=blue!8] (L2) at (0, 2) {};
+% \node[layerlabel] at (-6.8, 2) {Retrieval};
+% \node[component] at (-4, 2) {Embedding};
+% \node[component] at (-1.3, 2) {Vector Store};
+% \node[component] at (1.5, 2) {BM25 + RRF};
+% \node[component] at (4.2, 2) {Re-ranker};
+
+% % Layer 1: Knowledge Base
+% \node[layer, fill=green!8] (L1) at (0, 0) {};
+% \node[layerlabel] at (-6.8, 0) {Knowledge Base};
+% \node[component] at (-4, 0) {Solodit API};
+% \node[component] at (-1, 0) {Preprocessing};
+% \node[component] at (2.5, 0) {PostgreSQL / pgvector};
+
+% % Arrows between layers
+% \draw[arrow] (0, 0.8) -- (0, 1.2);
+% \draw[arrow] (0, 2.8) -- (0, 3.2);
+% \draw[arrow] (0, 4.8) -- (0, 5.2);
+
+% \end{tikzpicture}
+% \caption{System architecture. Data flows upward from the knowledge base through retrieval and MCP integration to the reasoning layer.}
+% \label{fig:architecture}
+% \end{figure}
 
 \subsection{High-Level Workflow}
 \label{subsec:workflow}
@@ -1225,248 +1209,401 @@ The proposed system extends Wake-AI (Section~\ref{sec:wake-ai}) with a retrieval
 The end-to-end pipeline proceeds as follows:
 
 \begin{enumerate}
-    \item \textbf{Ingestion.} New vulnerability findings are fetched from the Solodit platform via its REST API, processed (text cleaning, code block extraction, summarisation, label assignment), and stored in a PostgreSQL database with pgvector extension.
+    \item \textbf{Ingestion.} New vulnerability findings are fetched from the Solodit platform via its REST API, processed (text cleaning, code block extraction, summarisation, label assignment), and stored in a PostgreSQL~17 database with the pgvector extension.
 
-    \item \textbf{Embedding.} Each finding is embedded twice: its textual summary is encoded with a text embedding model (nomic-embed-text-v1.5), and its code blocks are encoded with a code-specialised model (CodeRankEmbed). Both embeddings are stored alongside the finding record.
+    \item \textbf{Embedding.} Each finding is embedded along two modalities: its textual summary is encoded with nomic-embed-text-v1.5 (768 dimensions), and its code blocks are encoded with CodeRankEmbed (768 dimensions). Both vectors are stored in the \texttt{finding\_embeddings} table using pgvector's \texttt{vector(768)} type.
 
-    \item \textbf{Query formulation.} Given a piece of Solidity code and a suspected vulnerability, the system constructs a query using one of several strategies (description, code, description with label, or hybrid BM25).
+    \item \textbf{Query formulation.} Given a piece of Solidity code and a suspected vulnerability, the system constructs a query using one of four strategies: description, code, description-with-label, or hybrid BM25.
 
-    \item \textbf{Retrieval.} The query is embedded and used to search the vector store. Depending on the configured search mode, the system performs text-only, code-only, hybrid (text + code merged by max-score), or hybrid BM25 (text vectors fused with BM25 keyword scores via RRF) search.
+    \item \textbf{Retrieval.} The query is embedded and used to search the vector store via PostgreSQL functions (\texttt{search\_findings\_by\_text\_ranked}, \texttt{search\_findings\_by\_code\_ranked}). In hybrid BM25 mode, dense results are fused with BM25 keyword scores via RRF.
 
-    \item \textbf{Re-ranking.} An optional cross-encoder re-ranker refines the initial candidate set, improving precision before final top-$k$ selection.
+    \item \textbf{Re-ranking.} An optional cross-encoder re-ranker (default: \texttt{cross-encoder/ms-marco-MiniLM-L-6-v2}, 22M parameters) refines the initial candidate set, improving precision before final top-$k$ selection.
 
-    \item \textbf{Context assembly.} The top-$k$ findings are formatted into a structured context block that includes each finding's title, label, severity, summary, and relevant code blocks.
+    \item \textbf{Context assembly.} The top-$k$ findings are formatted into a structured context block with each finding's title, label, severity, summary, and code blocks, separated by horizontal rules.
 
-    \item \textbf{LLM reasoning.} The assembled context, along with the Solidity code and issue description, is injected into a structured prompt. The LLM generates a verdict (VULNERABLE or SAFE), a confidence level (HIGH, MEDIUM, LOW), and a detailed reasoning trace that references specific retrieved findings.
+    \item \textbf{LLM reasoning.} The assembled context, along with the Solidity code and issue description, is injected into a structured prompt. GPT-4o-mini generates a JSON response containing a verdict (\texttt{VULNERABLE} or \texttt{SAFE}), a confidence level (\texttt{HIGH}, \texttt{MEDIUM}, \texttt{LOW}), and a reasoning trace that references specific retrieved findings.
 
-    \item \textbf{Evaluation.} Both the retrieval quality and the generation quality are evaluated against ground-truth labels and reference answers, producing quantitative metrics stored alongside the experiment configuration for reproducibility.
+    \item \textbf{Evaluation.} Both the retrieval quality and the generation quality are evaluated against ground-truth labels and reference answers, producing quantitative metrics stored in the \texttt{evaluation\_results} table alongside the experiment configuration.
 \end{enumerate}
 
 
 \section{Knowledge Base}
 \label{sec:knowledge-base}
 
-The quality of a RAG system is bounded by the quality and coverage of its knowledge base. Our knowledge base is constructed from publicly available smart contract audit findings, supplemented by private audit reports where available.
+The quality of a RAG system is bounded by the quality and coverage of its knowledge base. Our knowledge base contains 16{,}780 audit findings from the Solodit aggregator, producing 44{,}002 embedding vectors (16{,}780 text + 27{,}222 code).
 
 \subsection{Data Source: Solodit}
 \label{subsec:solodit}
 
-Solodit\footnote{\url{https://solodit.cyfrin.io}} is a comprehensive aggregator of smart contract audit findings, maintained by Cyfrin. It indexes findings from major audit firms (Trail of Bits, OpenZeppelin, Spearbit, Code4rena, Sherlock, and others) and provides a searchable, categorised repository of historical vulnerabilities. Each finding includes a title, a detailed markdown content (with vulnerability description, proof of concept, recommended mitigation, and often inline Solidity code), a severity classification (Critical, High, Medium, Low, Informational), source metadata (audit firm, report date, links), and community-contributed tags.
+Solodit\footnote{\url{https://solodit.cyfrin.io}} is a comprehensive aggregator of smart contract audit findings, maintained by Cyfrin. It indexes findings from major audit firms (Trail of Bits, OpenZeppelin, Spearbit, Code4rena, Sherlock, and others). Each finding includes a title, a detailed markdown content (with vulnerability description, proof of concept, recommended mitigation, and inline Solidity code), a severity classification, source metadata, and community-contributed tags.
 
-We access Solodit through its REST API, which supports paginated queries filtered by severity level. Our ingestion pipeline fetches findings sorted by recency, stopping upon finding an already-ingested record (incremental ingestion). This ensures the knowledge base grows monotonically without duplication.
+We access Solodit through its paginated REST API. The ingestion pipeline (\texttt{run\_incremental\_ingest}) fetches findings sorted by recency, stopping upon finding an already-ingested slug (incremental ingestion). This ensures the knowledge base grows monotonically without duplication.
 
-\paragraph{Filtering.} We restrict ingestion to findings with severity \texttt{HIGH} or \texttt{MEDIUM}. Lower-severity findings (e.g., gas optimisations, informational notes) tend to describe code-quality issues rather than exploitable vulnerabilities, diluting the semantic coherence of the embedding space. This filtering ensures that retrieved findings are likely to describe genuine security issues relevant to vulnerability assessment.
+\paragraph{Filtering.} We restrict ingestion to findings with severity \texttt{HIGH} or \texttt{MEDIUM}. Lower-severity findings (gas optimisations, informational notes) dilute the semantic coherence of the embedding space.
 
 \subsection{Preprocessing Pipeline}
 \label{subsec:preprocessing}
 
-Raw audit findings vary widely in format, length, and quality. Our preprocessing pipeline normalises findings into a uniform representation suitable for embedding and retrieval.
+Raw audit findings vary widely in format, length, and quality. The preprocessing pipeline normalises findings into a uniform representation.
 
-[TODO: Preprocessing pipeline diagram showing the flow: Raw API finding $\rightarrow$ text sanitisation (null byte removal) $\rightarrow$ code block extraction (regex) $\rightarrow$ whitespace collapse $\rightarrow$ LLM-based preprocessing (optional) $\rightarrow$ Output: summary, summary\_for\_embeddings, custom\_label, code\_blocks\_for\_embeddings]
+% \begin{figure}[htbp]
+% \centering
+% \begin{tikzpicture}[
+%     box/.style={draw, rounded corners=3pt, minimum height=0.9cm, minimum width=2.4cm, align=center, font=\footnotesize},
+%     arrow/.style={-{Stealth[length=2.5mm]}, thick},
+%     outputbox/.style={draw, rounded corners=3pt, fill=gray!10, minimum height=0.7cm, align=center, font=\footnotesize\itshape},
+% ]
+
+% % Pipeline stages (top row)
+% \node[box, fill=blue!10] (raw) at (0, 0) {Raw API\\Finding};
+% \node[box, fill=green!10] (sanitise) at (3.2, 0) {Text\\Sanitisation};
+% \node[box, fill=green!10] (extract) at (6.4, 0) {Code Block\\Extraction};
+% \node[box, fill=green!10] (collapse) at (9.6, 0) {Whitespace\\Collapse};
+% \node[box, fill=orange!15] (llm) at (12.8, 0) {LLM-based\\Preprocessing};
+
+% % Arrows
+% \draw[arrow] (raw) -- (sanitise);
+% \draw[arrow] (sanitise) -- (extract);
+% \draw[arrow] (extract) -- (collapse);
+% \draw[arrow] (collapse) -- (llm);
+
+% % Output fields (bottom row)
+% \node[outputbox] (o1) at (9.6, -1.6) {summary};
+% \node[outputbox] (o2) at (11.4, -1.6) {summary\_for\_emb};
+% \node[outputbox] (o3) at (13.4, -1.6) {custom\_label};
+% \node[outputbox] (o4) at (15.6, -1.6) {code\_blocks\_for\_emb};
+
+% \draw[arrow] (llm.south) -- ++(0, -0.4) -| (o1.north);
+% \draw[arrow] (llm.south) -- ++(0, -0.4) -| (o2.north);
+% \draw[arrow] (llm.south) -- ++(0, -0.4) -| (o3.north);
+% \draw[arrow] (llm.south) -- ++(0, -0.4) -| (o4.north);
+
+% % Annotations
+% \node[font=\scriptsize, anchor=north] at (3.2, -0.55) {null bytes};
+% \node[font=\scriptsize, anchor=north] at (6.4, -0.55) {regex};
+% \node[font=\scriptsize, anchor=north] at (12.8, -0.55) {GPT-4o-mini};
+
+% \end{tikzpicture}
+% \caption{Preprocessing pipeline. Green stages are deterministic; orange indicates optional LLM-based processing.}
+% \label{fig:preprocessing}
+% \end{figure}
 
 \subsubsection*{Text Sanitisation}
-Raw content from the API may contain null bytes and other control characters that cause problems with database storage and text processing. These are stripped before any further processing.
+Raw content from the API may contain null bytes that cause problems with PostgreSQL storage. The \texttt{\_sanitize\_text} function strips these before further processing. Whitespace is collapsed via regex (\texttt{re.sub(r"\textbackslash s+", " ", text).strip()}).
 
 \subsubsection*{Code Block Extraction}
-Fenced code blocks (delimited by triple backticks in the markdown source) are extracted using regular expression matching and stored separately from the textual content. This separation serves two purposes: it enables code-specific embedding using a dedicated code model, and it allows the textual summary to focus on the vulnerability description without code noise.
+Fenced code blocks (delimited by triple backticks) are extracted using regular expression matching and stored separately in the \texttt{code\_blocks} JSONB column. This separation serves two purposes: it enables code-specific embedding using CodeRankEmbed, and it allows the textual summary to focus on the vulnerability description without code noise.
 
 \subsubsection*{Summary Generation}
-Each finding requires a concise summary for display and a keyword-dense variant optimised for embedding-based retrieval. We support two summarisation strategies:
+Each finding requires two summaries: a human-readable summary and a keyword-dense variant optimised for embedding retrieval (\texttt{summary\_for\_embeddings}). We support two strategies:
 
 \begin{itemize}
-    \item \textbf{LLM-based summarisation.} When enabled, an LLM (e.g., GPT-4o-mini at temperature 0) receives the finding title and content (truncated to 8{,}000 characters) and produces a JSON object containing three fields: (i)~a human-readable summary of 2--4 sentences, (ii)~a dense, keyword-rich summary optimised for semantic search that includes vulnerability type, affected components, attack vectors, and impact without filler words, and (iii)~a vulnerability label selected from a predefined taxonomy.
+    \item \textbf{LLM-based summarisation.} When enabled, GPT-4o-mini (temperature~0) receives the finding title and content (truncated to 8{,}000 characters) and produces a JSON object containing: (i)~a human-readable summary of 2--4 sentences, (ii)~a dense keyword-rich summary optimised for semantic search including vulnerability type, affected components, attack vectors, and impact, and (iii)~a vulnerability label selected from the predefined taxonomy.
 
-    \item \textbf{Heuristic fallback.} When LLM preprocessing is disabled or fails, the system strips code blocks and markdown formatting from the content and truncates the result to a maximum of 2{,}000 characters. The summary for embeddings is then derived by lowercasing the summary, removing articles (a, an, the), and collapsing whitespace---a simple normalisation that reduces surface variation without semantic loss.
+    \item \textbf{Heuristic fallback.} When LLM preprocessing is disabled or fails, the system strips code blocks and markdown formatting from the content and truncates to 2{,}000 characters. The embedding summary is derived by lowercasing, removing articles (a, an, the), and collapsing whitespace.
 \end{itemize}
 
 \subsubsection*{Label Assignment}
 \label{subsubsec:labeling}
 
-Each finding is assigned a vulnerability label from a predefined taxonomy of 23 categories, including Access Control, Reentrancy, Logic Error, Denial of Service, Arithmetics, Front-running, Data Validation, and others. Labels enable filtered retrieval (e.g., when the issue description mentions reentrancy, the system can retrieve only reentrancy-labelled findings) and provide a semantic signal for evaluation.
+Each finding is assigned a vulnerability label from a predefined taxonomy of 23 categories defined in \texttt{config.py}: Access Control, Arithmetics, Code Quality, Configuration, Data Validation, Denial of Service, Front-running, Function Visibility, Fund Loss, Gas Optimization, Griefing, Logic Error, Logging, Overflow/Underflow, Reentrancy, Reinitialization, Replay Attack, Standards Violation, Storage Clashes, Trust Model, Unused Code, Initialization, Error Handling, and Memory Management.
 
-When LLM preprocessing is enabled, the label is extracted jointly with the summary. A separate lightweight label-assignment endpoint is available for batch-labelling existing findings: it sends each finding's summary to the LLM with the complete label list and expects an exact match as output. Labels that do not match the predefined list are discarded to ensure consistency.
+The corpus label distribution (Table~\ref{tab:label-dist}) is dominated by Logic Error (4{,}522 findings, 27\%), followed by Fund Loss (2{,}832, 17\%) and Access Control (2{,}720, 16\%).
+
+\begin{table}[ht]
+\centering
+\caption{Top-10 vulnerability label distribution in the knowledge base (16{,}780 findings).}
+\label{tab:label-dist}
+\begin{tabular}{lr}
+\toprule
+\textbf{Label} & \textbf{Count} \\
+\midrule
+Logic error & 4{,}522 \\
+Fund loss & 2{,}832 \\
+Access control & 2{,}720 \\
+Denial of service & 1{,}304 \\
+Data validation & 1{,}221 \\
+Front-running & 635 \\
+Arithmetics & 483 \\
+Standards violation & 407 \\
+Overflow/Underflow & 368 \\
+Configuration & 346 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \subsubsection*{Code Block Normalisation}
-Extracted code blocks are normalised for embedding by flattening each block into a single line (replacing newlines and tabs with spaces, collapsing duplicate whitespace) and truncating to 5{,}000 characters. This normalisation reduces syntactic variation, that does not affect semantic meaning in the embedding space.
+Extracted code blocks are normalised for embedding by flattening each block into a single line (replacing newlines and tabs with spaces, collapsing duplicate whitespace) and truncating to 5{,}000 characters. A single finding may yield multiple code embedding vectors (one per block), which explains the asymmetry between 16{,}780 text embeddings and 27{,}222 code embeddings.
+
+\subsection{Database Schema}
+\label{subsec:db-schema}
+
+The system uses PostgreSQL~17 with the pgvector extension. The schema comprises five tables (Figure~\ref{fig:erd}).
+
+% \begin{figure}[htbp]
+% \centering
+% \begin{tikzpicture}[
+%     entity/.style={draw, rectangle, rounded corners=2pt, minimum width=4.8cm, align=left, font=\footnotesize, inner sep=6pt},
+%     pk/.style={font=\footnotesize\bfseries},
+%     fk/.style={font=\footnotesize\itshape},
+%     rel/.style={-{Stealth[length=2.5mm]}, thick},
+%     rellabel/.style={font=\scriptsize, fill=white, inner sep=1pt},
+% ]
+
+% % findings
+% \node[entity, fill=green!8] (findings) at (0, 0) {
+%     \textbf{findings}\\[2pt]
+%     \underline{id} : UUID (PK)\\
+%     slug : TEXT (UNIQUE)\\
+%     title : TEXT\\
+%     content : TEXT\\
+%     summary : TEXT\\
+%     summary\_for\_embeddings : TEXT\\
+%     code\_blocks : JSONB\\
+%     code\_blocks\_for\_embeddings : JSONB\\
+%     custom\_label : TEXT\\
+%     impact : TEXT\\
+%     created\_at : TIMESTAMP
+% };
+
+% % finding_embeddings
+% \node[entity, fill=blue!8] (embeddings) at (7.5, 0) {
+%     \textbf{finding\_embeddings}\\[2pt]
+%     \underline{id} : UUID (PK)\\
+%     \textit{finding\_id} : UUID (FK)\\
+%     source : TEXT\\
+%     text\_content : TEXT\\
+%     embedding\_model : TEXT\\
+%     content\_mode : TEXT\\
+%     embedding\_sm : vector(768)\\
+%     embedding : vector(1536)\\
+%     embedding\_lg : vector(3072)\\
+%     created\_at : TIMESTAMP
+% };
+
+% % evaluation_cases
+% \node[entity, fill=yellow!10] (cases) at (0, -7) {
+%     \textbf{evaluation\_cases}\\[2pt]
+%     \underline{id} : UUID (PK)\\
+%     solidity\_code : TEXT\\
+%     issue\_description : TEXT\\
+%     label : TEXT\\
+%     expected\_verdict : TEXT\\
+%     reference\_answer : TEXT\\
+%     reference\_finding\_ids : JSONB\\
+%     metadata : JSONB\\
+%     created\_at : TIMESTAMP
+% };
+
+% % experiments
+% \node[entity, fill=orange!10] (experiments) at (7.5, -5.2) {
+%     \textbf{experiments}\\[2pt]
+%     \underline{id} : UUID (PK)\\
+%     name : TEXT (UNIQUE)\\
+%     description : TEXT\\
+%     config\_snapshot : JSONB\\
+%     \textit{parent\_id} : UUID (FK $\rightarrow$ self)\\
+%     git\_commit\_hash : TEXT\\
+%     created\_at : TIMESTAMP
+% };
+
+% % evaluation_results
+% \node[entity, fill=red!8] (results) at (7.5, -9.5) {
+%     \textbf{evaluation\_results}\\[2pt]
+%     \underline{id} : UUID (PK)\\
+%     \textit{experiment\_id} : UUID (FK)\\
+%     \textit{case\_id} : UUID (FK, nullable)\\
+%     phase : TEXT\\
+%     metric\_name : TEXT\\
+%     score : FLOAT\\
+%     details : JSONB\\
+%     created\_at : TIMESTAMP
+% };
+
+% % Relationships
+% \draw[rel] (embeddings.west) -- node[rellabel, above] {N:1} (findings.east);
+% \draw[rel] (results.north) -- node[rellabel, right] {N:1} (experiments.south);
+% \draw[rel] (results.west) -- node[rellabel, above] {N:1} (cases.east);
+
+% % Self-referencing FK for experiments
+% \draw[rel] (experiments.east) -- ++(0.8, 0) |- ([yshift=0.4cm]experiments.east) node[rellabel, right, pos=0.25] {parent};
+
+% \end{tikzpicture}
+% \caption{Entity-relationship diagram of the evaluation database. Primary keys are underlined; foreign keys are italicised. The \texttt{evaluation\_results} table is the central join point linking experiments to optional evaluation cases.}
+% \label{fig:erd}
+% \end{figure}
+
+\begin{itemize}
+    \item \textbf{\texttt{findings}} --- The core knowledge base table. Each row stores a finding's \texttt{slug} (unique identifier from Solodit), \texttt{title}, raw \texttt{content}, \texttt{summary}, \texttt{summary\_for\_embeddings} (keyword-dense variant), \texttt{code\_blocks} (JSONB array), \texttt{code\_blocks\_for\_embeddings} (normalised JSONB), \texttt{custom\_label}, and \texttt{impact} (severity). All primary keys are UUID v4.
+
+    \item \textbf{\texttt{finding\_embeddings}} --- Stores vector embeddings with a foreign key to \texttt{findings}. Columns include \texttt{source} (text provenance), \texttt{text\_content} (the text that was embedded), \texttt{embedding\_model} (e.g., \texttt{nomic-text-v1.5} or \texttt{nomic-code}), \texttt{content\_mode} (\texttt{text} or \texttt{code}), and three vector columns: \texttt{embedding\_sm} (\texttt{vector(768)}, used for current models), \texttt{embedding} (\texttt{vector(1536)}), and \texttt{embedding\_lg} (\texttt{vector(3072)}). The multi-column design accommodates future model upgrades without schema migration.
+
+    \item \textbf{\texttt{evaluation\_cases}} --- Stores structured test inputs: \texttt{solidity\_code}, \texttt{issue\_description}, \texttt{label}, \texttt{expected\_verdict} (VULNERABLE or SAFE), \texttt{reference\_answer}, \texttt{reference\_finding\_ids} (JSONB array of UUIDs for reference-based retrieval metrics), and a \texttt{metadata} JSONB column.
+
+    \item \textbf{\texttt{experiments}} --- Each evaluation run is recorded with a unique \texttt{name}, optional \texttt{description}, a \texttt{config\_snapshot} (JSONB containing all settings serialised with secrets stripped), optional \texttt{parent\_id} (self-referencing FK for incremental experiments), and \texttt{git\_commit\_hash} for code traceability.
+
+    \item \textbf{\texttt{evaluation\_results}} --- Links an experiment to its metric scores. Each row contains \texttt{experiment\_id} (FK), optional \texttt{case\_id} (FK, nullable for golden evaluations and aggregates), \texttt{phase} (e.g., \texttt{retrieval}, \texttt{generation}, \texttt{golden\_retrieval}), \texttt{metric\_name}, \texttt{score} (float), and \texttt{details} (JSONB with per-result metadata such as retrieved IDs, LLM reasoning, query strategy).
+\end{itemize}
+
+\paragraph{Indexes.} HNSW indexes (\texttt{vector\_cosine\_ops}) are created on \texttt{embedding\_sm} and \texttt{embedding} columns for approximate nearest-neighbour search. Composite indexes on \texttt{(embedding\_model, content\_mode)} accelerate filtered vector queries. B-tree indexes on \texttt{custom\_label}, \texttt{impact}, \texttt{experiment\_id}, and \texttt{case\_id} support the filtering and join patterns used by the evaluation pipeline.
+
+\paragraph{Search functions.} Four PostgreSQL functions encapsulate the similarity search logic: \texttt{search\_findings\_by\_text\_ranked} and \texttt{search\_findings\_by\_code\_ranked} accept a query vector, $k$, a similarity threshold, and an optional label filter. Similarity is computed as $1 - d_{\text{cosine}}$ using pgvector's \texttt{<=>} operator. The functions join \texttt{finding\_embeddings} with \texttt{findings}, filter by model and mode, apply the threshold, and return ranked results with full finding metadata.
+
 
 \subsection{Indexing and Embeddings}
 \label{subsec:indexing-embeddings}
 
-Each finding is embedded independently along two modalities---text and code---using different embedding models selected for their respective strengths.
+Each finding is embedded independently along two modalities using models from the \texttt{EMBEDDING\_MODELS} registry in \texttt{config.py}.
 
 \subsubsection*{Text Embeddings}
-
-The textual summary of each finding is embedded using \textbf{nomic-embed-text-v1.5}~\cite{nussbaum2024nomic}, a 768-dimensional embedding model from the Nomic AI family. This model is trained with task-specific prefixes: documents are prefixed with \texttt{"search\_document: "} during indexing, and queries are prefixed with \texttt{"search\_query: "} during retrieval, allowing the model to distinguish between the embedding objectives.
-
-We chose nomic-embed-text-v1.5 for several reasons: (i)~its 768-dimensional output provides a good balance between embedding quality and storage/computation cost; (ii)~it is runnable locally via sentence-transformers without requiring API calls, supporting reproducibility and offline operation; and (iii)~its prefix-aware training aligns well with the asymmetric retrieval setting where queries are short vulnerability descriptions and documents are longer audit finding summaries.
-
-All embeddings are L2-normalised at encoding time (\texttt{normalize\_embeddings=True}), which converts cosine similarity into a simple inner product and enables efficient similarity search using pgvector's inner-product operator.
+The textual summary is embedded using \textbf{nomic-embed-text-v1.5}~\cite{nussbaum2024nomic} (\texttt{nomic-ai/nomic-embed-text-v1.5}), a 768-dimensional model. It uses task-specific prefixes: documents are prefixed with \texttt{"search\_document: "} during indexing, and queries with \texttt{"search\_query: "} during retrieval. All embeddings are L2-normalised (\texttt{normalize\_embeddings=True}), converting cosine similarity into inner product for efficient pgvector search.
 
 \subsubsection*{Code Embeddings}
-
-Code blocks extracted from findings are embedded using \textbf{CodeRankEmbed}~\cite{nomic2024coderank}, a 768-dimensional model from the Nomic AI family specifically trained for code search tasks. This model uses the prefix \texttt{"Represent this query for searching relevant code: "} for query embedding. Code embeddings enable a retrieval mode where the query is a Solidity code snippet rather than a natural-language description, directly matching code patterns across findings.
+Code blocks are embedded using \textbf{CodeRankEmbed}~\cite{nomic2024coderank} (\texttt{nomic-ai/CodeRankEmbed}), a 768-dimensional model trained for code search. It uses the prefix \texttt{"Represent this query for searching relevant code: "} for query embedding. Code embeddings enable retrieval where the query is a Solidity code snippet, directly matching code patterns across findings.
 
 \subsubsection*{Storage}
-
-All embeddings are stored in PostgreSQL using the \textbf{pgvector} extension, which supports vector similarity operations (cosine distance, inner product, L2 distance) natively within SQL queries. Each finding embedding is stored as a row in the \texttt{finding\_embeddings} table with columns for the source modality (\texttt{text} or \texttt{code}), the embedding model identifier, the content mode indicator, and vector columns for 768-, 1536-, and 3072-dimensional embeddings. This multi-column design accommodates future model upgrades without schema migration.
-
-The database exposes dedicated search functions (\texttt{search\_findings\_by\_text\_ranked} and \texttt{search\_findings\_by\_code\_ranked}) that accept a query vector, $k$, a similarity threshold, and an optional label filter, returning ranked results with full finding metadata. These SQL functions encapsulate the similarity computation and filtering logic, keeping the application code clean and making retrieval behaviour transparent and auditable.
+Both models produce 768-dimensional vectors stored in the \texttt{embedding\_sm} column. The current knowledge base contains 16{,}780 text embeddings and 27{,}222 code embeddings (multiple code blocks per finding).
 
 
 \section{Retrieval Pipeline}
 \label{sec:retrieval}
 
-The retrieval pipeline transforms a query (vulnerability description, code snippet, or both) into a ranked list of the $k$ most relevant historical findings. The pipeline supports four search modes, each combining the available retrieval signals differently.
+The retrieval pipeline transforms a query into a ranked list of the $k$ most relevant historical findings. It is implemented in \texttt{SearchService} (production API) and \texttt{evaluate\_retrieval} (evaluation harness).
 
 \subsection{Query Strategies}
 \label{subsec:query-strategies}
 
-The way a query is constructed from an evaluation case significantly affects retrieval quality. We define four query strategies:
+The query strategy determines how an evaluation case is transformed into an embedding query. Four strategies are implemented in \texttt{resolve\_query}:
 
 \begin{enumerate}
-    \item \textbf{Description-based (\texttt{description}).} The issue description is embedded with the text embedding model. This is the most natural strategy: the query is a natural-language description of a vulnerability, and the retriever searches for semantically similar finding summaries.
+    \item \textbf{Description (\texttt{description}).} The \texttt{issue\_description} is embedded with nomic-embed-text-v1.5. The most natural strategy: the query is a natural-language vulnerability description.
 
-    \item \textbf{Code-based (\texttt{code}).} The Solidity code snippet is embedded with the code embedding model. This strategy matches code structural patterns directly, bypassing the natural-language intermediary. It is effective when the vulnerability is better characterised by its code pattern than by a verbal description.
+    \item \textbf{Code (\texttt{code}).} The \texttt{solidity\_code} is embedded with CodeRankEmbed. Matches code structural patterns directly, bypassing the natural-language intermediary.
 
-    \item \textbf{Description with label (\texttt{description\_label}).} The issue description is concatenated with the vulnerability label (e.g., ``Reentrancy'') and embedded with the text model. The label narrows the retrieval to a specific vulnerability class, improving precision at the cost of recall for edge cases that span multiple categories.
+    \item \textbf{Description with label (\texttt{description\_label}).} The issue description is concatenated with ``\texttt{Vulnerability type: \{label\}}'' and embedded with the text model. The label narrows retrieval to a specific vulnerability class.
 
-    \item \textbf{Hybrid BM25 (\texttt{hybrid\_bm25}).} The issue description is used for both dense vector retrieval and sparse BM25 keyword retrieval. The two ranked lists are merged via Reciprocal Rank Fusion (Section~\ref{subsec:rrf}). This strategy combines the semantic understanding of dense retrieval with the lexical precision of keyword matching.
+    \item \textbf{Hybrid BM25 (\texttt{hybrid\_bm25}).} The issue description is used for both dense vector retrieval and BM25 keyword retrieval. The two ranked lists are merged via Reciprocal Rank Fusion.
 \end{enumerate}
 
 \subsection{Dense Vector Search}
 \label{subsec:vector-search}
 
-For dense retrieval, the query is embedded using the appropriate model (text or code) and compared against stored embeddings using inner-product similarity (equivalent to cosine similarity for normalised vectors). PostgreSQL's pgvector extension performs this computation within the database, avoiding the need for a separate vector search service.
+For dense retrieval, the query is embedded and compared against stored embeddings using cosine similarity computed inside PostgreSQL. The \texttt{PgVectorStore.search} method delegates to the appropriate SQL function depending on \texttt{search\_mode}:
 
-In the \textbf{hybrid} search mode (not to be confused with hybrid BM25), the system performs both text and code searches independently, then merges the results by finding ID, keeping the higher score when a finding appears in both result sets. The merged list is sorted by descending score and truncated to~$k$.
+\begin{itemize}
+    \item \texttt{search\_findings\_by\_text\_ranked} --- filters on \texttt{embedding\_model = 'nomic-text-v1.5'} and \texttt{content\_mode = 'text'}
+    \item \texttt{search\_findings\_by\_code\_ranked} --- filters on \texttt{embedding\_model = 'nomic-code'} and \texttt{content\_mode = 'code'}
+\end{itemize}
+
+In \textbf{hybrid} mode (text+code), the system performs both searches independently, then merges results by \texttt{finding\_id}, keeping the higher score when a finding appears in both result sets.
 
 \subsection{BM25 Keyword Search}
 \label{subsec:bm25}
 
-BM25 (Okapi BM25~\cite{robertson2009probabilistic}) is a term-frequency-based ranking function that scores documents by their lexical overlap with the query. Our BM25 implementation builds an in-memory index over finding summaries using the \texttt{rank-bm25} library. The index uses \texttt{summary\_for\_embeddings} (the keyword-dense variant) when available, falling back to the standard summary.
+The \texttt{BM25Store} builds an in-memory BM25 index over all 16{,}780 finding summaries using the \texttt{rank-bm25} library (BM25Okapi variant). The index uses \texttt{summary\_for\_embeddings} when available, falling back to \texttt{summary}. Tokenisation is minimal: text is lowercased and split on non-alphanumeric characters, filtering out single-character tokens. This preserves domain-specific identifiers (\texttt{delegatecall}, \texttt{msg.sender}, \texttt{ERC20}) that are critical for smart contract vulnerability retrieval.
 
-Tokenisation is minimal: text is lowercased and split on non-alphanumeric characters, filtering out single-character tokens. This lightweight approach preserves domain-specific identifiers (e.g., \texttt{delegatecall}, \texttt{msg\_sender}, \texttt{ERC20}) that are critical for smart contract vulnerability retrieval.
-
-BM25 compensates for a known weakness of dense retrieval: semantic embedding models may map queries and documents with similar meaning but different terminology to nearby vectors, yet miss findings that use the exact Solidity identifier mentioned in the query. For example, a query about \texttt{transferFrom} reentrancy should retrieve findings mentioning \texttt{transferFrom} by name, even if their summaries describe the vulnerability using different phrasing.
+BM25 compensates for a known weakness of dense retrieval: semantic models may miss findings that use the exact Solidity identifier mentioned in the query. For example, a query about \texttt{transferFrom} reentrancy should retrieve findings mentioning \texttt{transferFrom} by name, even if their summaries use different phrasing.
 
 \subsection{Reciprocal Rank Fusion}
 \label{subsec:rrf}
 
-When combining results from multiple retrieval systems (e.g., dense vectors and BM25), the scores are on different scales and cannot be directly compared. Reciprocal Rank Fusion~\cite{cormack2009rrf} provides a principled, parameter-light method for merging ranked lists.
-
-For each result appearing in any ranked list, the RRF score is computed as:
+When combining results from dense vectors and BM25, the scores are on different scales and cannot be directly compared. Reciprocal Rank Fusion~\cite{cormack2009rrf} merges ranked lists:
 \begin{equation}
     \text{RRF}(d) = \sum_{i=1}^{L} \frac{1}{k_{\text{rrf}} + r_i(d)},
     \label{eq:rrf}
 \end{equation}
-where $L$ is the number of ranked lists, $r_i(d)$ is the rank of document~$d$ in list~$i$ (starting from 1), and $k_{\text{rrf}}$ is a smoothing constant (default 60, following the original paper). Documents not appearing in a given list are simply omitted from the sum for that list. After fusion, results are sorted by descending RRF score and truncated to the desired top-$n$.
-
-RRF has two practical advantages: it requires no calibration of score distributions across systems, and it is robust to outlier scores in individual lists. In our system, the hybrid BM25 mode fetches a configurable number of candidates (default 50) from each retrieval source before applying RRF.
+where $L$ is the number of ranked lists, $r_i(d)$ is the rank of document~$d$ in list~$i$ (1-indexed), and $k_{\text{rrf}} = 60$ (default from the original paper). Documents not appearing in a given list are omitted from the sum. The implementation in \texttt{fusion.py} fetches 50 candidates from each source (configurable via \texttt{BM25Settings.bm25\_candidates}), applies RRF, and returns the fused ranking.
 
 \subsection{Re-ranking}
 \label{subsec:reranking}
 
-Initial retrieval (whether dense, BM25, or fused) produces a broad candidate set optimised for recall. A \emph{re-ranker} refines this set by scoring each candidate more carefully, optimising for precision. Our system supports a two-stage retrieve-then-rerank pipeline.
+Initial retrieval produces a broad candidate set optimised for recall. A re-ranker refines this set for precision. The system implements the Strategy pattern: all re-rankers implement the abstract \texttt{Reranker} base class with a \texttt{rerank(query, results, k)} method.
 
 \subsubsection*{Cross-Encoder Re-ranking}
-Unlike bi-encoder (embedding) retrieval, which encodes query and document independently and compares their vectors, a cross-encoder processes the (query, document) pair jointly through a single transformer forward pass. This joint encoding captures fine-grained interaction features that bi-encoders miss, at the cost of being too slow for exhaustive search over large corpora~\cite{nogueira2020passage}.
-
-Our system supports several cross-encoder models:
+The \texttt{CrossEncoderReranker} processes (query, document) pairs jointly through a transformer. The default model is \texttt{cross-encoder/ms-marco-MiniLM-L-6-v2} (22M parameters), suitable for CPU inference. The system also supports:
 \begin{itemize}
-    \item \texttt{cross-encoder/ms-marco-MiniLM-L-6-v2} --- a lightweight 6-layer model suitable for CPU inference.
-    \item \texttt{cross-encoder/ms-marco-MiniLM-L-12-v2} --- a 12-layer variant with higher accuracy.
-    \item \texttt{BAAI/bge-reranker-v2-m3} and \texttt{BAAI/bge-reranker-v2-gemma} --- models from the BGE family with multilingual and large-scale capabilities.
+    \item \texttt{cross-encoder/ms-marco-MiniLM-L-12-v2} --- 33M parameters, balanced
+    \item \texttt{BAAI/bge-reranker-v2-m3} --- 568M parameters, multilingual
+    \item \texttt{BAAI/bge-reranker-v2-gemma} --- 2.5B parameters, most accurate
 \end{itemize}
 
-During re-ranking, the query and each candidate's summary are fed as a sentence pair to the cross-encoder, which outputs a relevance score. Candidates are re-sorted by this score, and only the top-$k$ are retained for prompt construction.
+During re-ranking, each candidate's content (truncated to 4{,}096 characters) is paired with the query and scored in a single batch. Candidates are re-sorted by descending score and truncated to~$k$.
 
 \subsubsection*{Cloud Re-ranking}
-As an alternative to local cross-encoder inference, the system supports cloud-based re-ranking via the Cohere Rerank API\footnote{\url{https://cohere.com/rerank}}. The Cohere re-ranker (\texttt{rerank-v3.5}) is a proprietary cross-encoder model optimised for relevance scoring. It accepts the query and a batch of documents, returning relevance scores and re-ordered indices. This option is useful when GPU hardware is unavailable for local cross-encoder inference.
+The \texttt{CohereReranker} uses the Cohere Rerank API (\texttt{rerank-v3.5}) as an alternative when GPU hardware is unavailable.
 
 \subsubsection*{No-Op Baseline}
-A passthrough re-ranker (no-op) is provided as a baseline: it simply truncates the candidate list to~$k$ without re-scoring. This enables controlled ablation experiments that isolate the contribution of re-ranking from other pipeline components.
+The \texttt{NoOpReranker} simply truncates the candidate list to~$k$ without re-scoring, enabling ablation experiments that isolate the contribution of re-ranking.
 
 
 \section{Model Context Protocol Integration}
 \label{sec:mcp-integration}
 
-The Model Context Protocol (MCP)\footnote{\url{https://modelcontextprotocol.io/}} is an open standard for connecting AI models with external tools and data sources. It defines a structured interface through which an LLM-based agent can discover available tools, invoke them with typed inputs, and receive structured outputs. MCP separates the agent's reasoning from tool implementation, enabling modular architectures where tools can be developed, tested, and replaced independently.
+The Model Context Protocol (MCP)\footnote{\url{https://modelcontextprotocol.io/}} is an open standard for connecting AI models with external tools and data sources. It defines a structured interface through which an LLM-based agent can discover available tools, invoke them with typed inputs, and receive structured outputs.
 
 \subsection{Integration with Wake-AI}
 \label{subsec:mcp-wake}
 
-Wake-AI already uses MCP to expose Wake's static analysis capabilities (IR queries, CFG traversal, detector invocation) to the LLM agent. Our RAG system extends this MCP surface with additional tools for knowledge base search and retrieval:
+Wake-AI uses MCP to expose Wake's static analysis capabilities (IR queries, CFG traversal, detector invocation) to the LLM agent. Our RAG system extends this MCP surface with additional tools for knowledge base search and retrieval:
 
 \begin{itemize}
-    \item \textbf{Search tool.} Accepts a natural-language query (and optional parameters: $k$, threshold, label filter, search mode) and returns a ranked list of similar findings with full metadata (title, summary, label, severity, code blocks, similarity score).
+    \item \textbf{Search tool.} Accepts a natural-language query (and optional parameters: $k$, threshold, label filter, search mode) and returns a ranked list of similar findings with full metadata (title, summary, label, severity, code blocks, similarity score). Implemented via \texttt{SearchService.search()}.
 
-    \item \textbf{Retrieve details tool.} Given a finding identifier (slug), returns the complete finding content, enabling the agent to request full details after an initial search returned summaries.
+    \item \textbf{Retrieve details tool.} Given a finding slug, returns the complete finding content, enabling the agent to request full details after an initial search returned summaries.
 \end{itemize}
 
-This design allows the LLM agent to iteratively refine its retrieval: it might first search broadly for ``reentrancy in ERC-20 transfer'', inspect the returned summaries, then retrieve full details for the most promising findings, and finally use that information to ground its vulnerability analysis. The iterative retrieval pattern is more token-efficient than pre-loading all potentially relevant documents into the prompt.
+This design allows the LLM agent to iteratively refine its retrieval: it might first search broadly for ``reentrancy in ERC-20 transfer'', inspect the returned summaries, then retrieve full details for the most promising findings. The iterative retrieval pattern is more token-efficient than pre-loading all potentially relevant documents into the prompt.
 
 \subsection{Security Considerations}
 \label{subsec:mcp-security}
 
-Exposing external tools to an LLM agent introduces security risks that must be addressed:
-
 \begin{itemize}
-    \item \textbf{Read-only surface.} All MCP tools in the RAG module are strictly read-only: they query the knowledge base but cannot modify it. This eliminates the risk of the agent corrupting the knowledge base through unintended tool calls.
+    \item \textbf{Read-only surface.} All MCP tools are strictly read-only: they query the knowledge base but cannot modify it.
 
-    \item \textbf{Input sanitisation.} Query strings passed to the search tool are used as embedding inputs and BM25 tokenisation inputs. Neither pathway evaluates queries as code or SQL, eliminating injection vectors. The pgvector search functions use parameterised queries, preventing SQL injection.
+    \item \textbf{Input sanitisation.} Query strings are used as embedding inputs and BM25 tokenisation inputs. Neither pathway evaluates queries as code or SQL. The pgvector search functions use parameterised queries, preventing SQL injection.
 
-    \item \textbf{Timeouts and rate limiting.} MCP tool calls are subject to configurable timeouts. If a search takes too long (e.g., due to a very large candidate set or slow database), the tool returns an error rather than blocking the agent indefinitely.
+    \item \textbf{Empty results.} The system returns an explicit ``no relevant findings found'' message rather than an empty string, preventing the LLM from hallucinating findings.
 
-    \item \textbf{Empty results.} The system gracefully handles empty result sets (e.g., when the knowledge base contains no findings matching the query). The LLM receives an explicit ``no relevant findings found'' message rather than an empty string, preventing it from hallucinating findings.
-
-    \item \textbf{Deterministic logging.} All MCP tool invocations, inputs, and outputs are logged with timestamps, enabling post-hoc auditing of the agent's retrieval behaviour. This logging is essential for reproducibility and for diagnosing cases where retrieval quality affects the final verdict.
+    \item \textbf{Deterministic logging.} All MCP tool invocations, inputs, and outputs are logged with timestamps for post-hoc auditing.
 \end{itemize}
 
 
 \section{Prompt Engineering}
 \label{sec:prompt-engineering}
 
-Prompt design governs how the LLM interprets the retrieved context and generates its analysis. Our prompt strategy follows three principles: \emph{structured input} (clear separation of code, issue description, label, and retrieved findings), \emph{structured output} (machine-parseable verdict format), and \emph{evidence requirements} (explicit instruction to reference retrieved findings).
+Prompt design governs how the LLM interprets the retrieved context and generates its analysis. Our strategy follows three principles: \emph{structured input} (clear separation of code, issue description, label, and retrieved findings), \emph{structured output} (machine-parseable JSON verdict), and \emph{evidence requirements} (explicit instruction to reference retrieved findings).
 
 \subsection{System Prompt}
 \label{subsec:system-prompt}
 
-The system prompt establishes the LLM's role and output constraints:
+The system prompt (\texttt{REASONING\_SYSTEM\_PROMPT} in \texttt{runner.py}) establishes the LLM's role and output constraints. It instructs the model to:
 
-\begin{quote}
-\small
-\textit{You are a smart contract security auditor. You are given: (1) a Solidity code snippet, (2) a description of a potential vulnerability, (3) similar past audit findings retrieved from a knowledge base. Based on the evidence from similar findings, decide whether the potential vulnerability truly exists in the provided code. Reference specific findings when they support your reasoning. Respond with: VERDICT: VULNERABLE or SAFE; CONFIDENCE: HIGH, MEDIUM, or LOW; REASONING: detailed explanation referencing the similar findings.}
-\end{quote}
+\begin{enumerate}
+    \item Examine the code for the specific vulnerability pattern described.
+    \item Compare the code against retrieved past findings --- do they share the same root cause, similar constructs, or related attack vectors?
+    \item Check whether protections are already in place (modifiers, require checks, safe libraries) that prevent the vulnerability.
+    \item Be cautious about false positives --- only classify as \texttt{VULNERABLE} with concrete evidence.
+    \item If no retrieved findings are relevant, base the verdict solely on code analysis and state this clearly.
+\end{enumerate}
 
-This prompt enforces three design goals: groundedness (the LLM must reference findings), structured output (machine-parseable verdict), and epistemic humility (the confidence field encourages the LLM to express uncertainty rather than defaulting to high-confidence assertions).
+The required output format is a JSON object: \texttt{\{"verdict": "VULNERABLE"|"SAFE", "confidence": "HIGH"|"MEDIUM"|"LOW", "reasoning": "..."\}}.
 
 \subsection{User Prompt}
 \label{subsec:user-prompt}
 
-The user prompt assembles the concrete analysis inputs using a template with four sections:
+The user prompt (\texttt{REASONING\_USER\_PROMPT}) assembles four sections:
 
 \begin{enumerate}
-    \item \textbf{Solidity Code.} The code snippet under analysis, enclosed in a fenced code block for clear delineation.
-    \item \textbf{Potential Issue.} The natural-language description of the suspected vulnerability.
-    \item \textbf{Assigned Label.} The vulnerability category label (e.g., ``Reentrancy'', ``Access control''), if available, or ``Not assigned'' otherwise.
-    \item \textbf{Similar Past Findings.} The structured context assembled from the top-$k$ retrieved findings, with each finding presented under headers indicating its title, label, severity, and summary, followed by relevant code blocks.
+    \item \textbf{Solidity Code Under Review} --- the code snippet in a fenced code block.
+    \item \textbf{Potential Vulnerability} --- the natural-language issue description.
+    \item \textbf{Vulnerability Category} --- the label (e.g., ``Reentrancy'') or ``Not assigned''.
+    \item \textbf{Similar Past Audit Findings} --- the structured context from the top-$k$ retrieved findings, assembled by \texttt{\_build\_rich\_context}. Each finding is formatted with a markdown header containing title, label, and impact, followed by the finding content, with findings separated by horizontal rules.
 \end{enumerate}
 
-This structured layout ensures that the LLM can easily distinguish between the code it should analyse, the issue it should investigate, and the evidence it should use for grounding.
+\subsection{File-Level Hypothesis Generation}
+\label{subsec:hypothesis-generation}
 
-\subsection{Context Assembly}
-\label{subsec:context-assembly}
-
-The context block is constructed by concatenating the top-$k$ retrieved findings in a structured format. Each finding entry includes:
-
-\begin{itemize}
-    \item A header with the finding title.
-    \item Metadata: vulnerability label and severity/impact classification.
-    \item The finding summary (2--4 sentences).
-    \item Code blocks from the finding, if available.
-\end{itemize}
-
-This rich context gives the LLM multiple anchor points for grounding its analysis: it can compare code patterns, reference vulnerability descriptions, and cite finding titles by name in its reasoning.
+For end-to-end file evaluation (\texttt{file\_eval.py}), the system first generates a vulnerability hypothesis from source code before retrieval. The hypothesis prompt (\texttt{HYPOTHESIS\_SYSTEM}) instructs the LLM to identify the most likely security vulnerability in a given Solidity function, focusing on specific patterns: reentrancy, access control, arithmetic issues, logic errors, data validation, fund loss, and front-running. The LLM responds with a concise 2--3 sentence hypothesis in plain text, which is then used as the retrieval query. This mirrors the real audit workflow: code $\rightarrow$ hypothesis $\rightarrow$ evidence retrieval $\rightarrow$ verdict.
 
 
 \section{Chapter Summary}
@@ -1474,7 +1611,7 @@ This rich context gives the LLM multiple anchor points for grounding its analysi
 
 This chapter presented the complete design of our RAG-augmented smart contract auditing methodology. The system is built around five design goals---groundedness, token efficiency, modularity, reproducibility, and audit usefulness---that address the limitations of standalone LLM-based analysis identified in earlier chapters.
 
-The methodology comprises a knowledge base of historical audit findings from Solodit, a dual-embedding strategy for text and code, a multi-mode retrieval pipeline with BM25 fusion and cross-encoder re-ranking, MCP-based integration with Wake-AI, and a structured prompting strategy that enforces evidence-grounded reasoning.
+The implementation comprises a knowledge base of 16{,}780 historical audit findings from Solodit (with 44{,}002 embedding vectors across two modalities), a multi-mode retrieval pipeline with BM25 fusion and cross-encoder re-ranking, MCP-based integration with Wake-AI, and structured prompting that enforces evidence-grounded JSON-format reasoning.
 
 The following chapter presents the evaluation framework designed to measure the effectiveness of this methodology across both retrieval quality and end-to-end vulnerability detection accuracy.
 
@@ -1482,7 +1619,7 @@ The following chapter presents the evaluation framework designed to measure the 
 \chapter{Evaluation}
 \label{ch:evaluation}
 
-This chapter defines the evaluation framework for the RAG-augmented smart contract auditing system described in Chapter~\ref{ch:methodology}. We establish the research questions, describe the dataset and experimental setup, define the metrics for both retrieval and generation quality, outline the planned experiments (including ablation studies), and discuss threats to validity.
+This chapter defines the evaluation framework for the RAG-augmented smart contract auditing system described in Chapter~\ref{ch:methodology}. We establish the research questions, describe the datasets, define the metrics for both retrieval and generation quality, present the experimental setup, and discuss threats to validity. Experimental results are presented in Chapter~\ref{ch:results}.
 
 
 \section{Research Questions}
@@ -1491,208 +1628,211 @@ This chapter defines the evaluation framework for the RAG-augmented smart contra
 The evaluation is structured around four research questions:
 
 \begin{description}
-    \item[RQ1: Retrieval quality.] How effectively does the retrieval pipeline surface relevant historical findings for a given vulnerability query? We measure this across query strategies (description, code, description+label, hybrid BM25), search modes (text, code, hybrid), and with/without re-ranking.
+    \item[RQ1: Retrieval quality.] How effectively does the retrieval pipeline surface relevant historical findings for a given vulnerability query? We measure this across query strategies (description, code, description+label, hybrid BM25), with and without re-ranking, and using both reference-based and LLM-judged metrics.
 
-    \item[RQ2: Detection accuracy.] Does augmenting the LLM with retrieved findings improve its ability to correctly classify vulnerabilities (VULNERABLE vs.\ SAFE) compared to a prompt-only baseline without retrieval context?
+    \item[RQ2: Detection accuracy.] Does augmenting the LLM with retrieved findings improve its ability to correctly classify vulnerabilities (VULNERABLE vs.\ SAFE)? We compare RAG-augmented verdicts against ground truth on a curated golden dataset of 40 real-world findings.
 
     \item[RQ3: Groundedness and reasoning quality.] Are the LLM's explanations faithful to the retrieved evidence? Does the system reduce hallucinated vulnerability reports compared to ungrounded analysis?
 
-    \item[RQ4: Component contributions.] What is the individual contribution of each pipeline component (re-ranking, BM25 fusion, label filtering, code embeddings)? Ablation experiments isolate the effect of removing or swapping each component.
+    \item[RQ4: Component contributions.] What is the individual contribution of each pipeline component (re-ranking, BM25 fusion, self-retrieval)? Ablation experiments isolate the effect of removing or enabling each component.
 \end{description}
 
 
-\section{Dataset}
+\section{Datasets}
 \label{sec:dataset}
 
 \subsection{Knowledge Base Corpus}
 \label{subsec:kb-corpus}
 
-The knowledge base is populated by incrementally ingesting findings from the Solodit API, filtered to HIGH and MEDIUM severity. Each finding undergoes the preprocessing pipeline described in Section~\ref{subsec:preprocessing}, producing a normalised record with summary, summary for embeddings, vulnerability label, and extracted code blocks. The corpus size, label distribution, and source-firm distribution will be reported as part of the experimental results.
+The knowledge base contains 16{,}780 findings from the Solodit API, filtered to HIGH and MEDIUM severity. Each finding underwent the preprocessing pipeline described in Section~\ref{subsec:preprocessing}, producing 16{,}780 text embeddings (nomic-embed-text-v1.5) and 27{,}222 code embeddings (CodeRankEmbed). The label distribution is shown in Table~\ref{tab:label-dist}.
 
 \subsection{Evaluation Cases}
 \label{subsec:eval-cases}
 
-Evaluation cases are structured test inputs, each consisting of:
+44 evaluation cases are stored in the \texttt{evaluation\_cases} table. Each case consists of:
 
 \begin{itemize}
-    \item \textbf{Solidity code.} A code snippet exhibiting (or not exhibiting) a vulnerability.
-    \item \textbf{Issue description.} A natural-language description of the suspected vulnerability.
-    \item \textbf{Label.} The vulnerability category (e.g., ``Reentrancy'', ``Access control'').
-    \item \textbf{Expected verdict.} The ground-truth classification: VULNERABLE or SAFE.
-    \item \textbf{Reference answer.} An expert-written explanation of why the code is or is not vulnerable, serving as a reference for answer correctness evaluation.
-    \item \textbf{Reference finding IDs.} UUIDs of findings in the knowledge base that are known to be relevant to this case, enabling reference-based retrieval metrics.
+    \item \textbf{Solidity code} --- a code snippet exhibiting (or not exhibiting) a vulnerability.
+    \item \textbf{Issue description} --- a natural-language description of the suspected vulnerability.
+    \item \textbf{Label} --- the vulnerability category (e.g., ``Reentrancy'').
+    \item \textbf{Expected verdict} --- ground-truth classification: VULNERABLE or SAFE.
+    \item \textbf{Reference answer} --- an expert-written explanation serving as reference for answer correctness evaluation.
+    \item \textbf{Reference finding IDs} --- UUIDs of findings known to be relevant, enabling reference-based retrieval metrics (context precision and context recall).
 \end{itemize}
 
-Evaluation cases are loaded from structured files (JSON or YAML) and stored in the \texttt{evaluation\_cases} table. They are designed to cover a range of vulnerability types, code patterns, and difficulty levels, including both true positives (code with genuine vulnerabilities) and true negatives (code that superficially resembles a vulnerability but is actually safe).
+\subsection{Golden Dataset}
+\label{subsec:golden-dataset}
 
-
-\section{Experimental Setup}
-\label{sec:experimental-setup}
-
-\subsection{Baselines}
-\label{subsec:baselines}
-
-We compare the RAG-augmented pipeline against the following baselines:
-
-\begin{enumerate}
-    \item \textbf{Prompt-only LLM.} The same LLM (e.g., GPT-4o-mini) receives the Solidity code and issue description \emph{without} any retrieved context. This baseline isolates the LLM's parametric knowledge.
-
-    \item \textbf{Wake detectors.} Wake's built-in static analysis detectors are run on the same code. This baseline represents traditional rule-based analysis without LLM involvement.
-
-    \item \textbf{Slither.} An external static analysis tool~\cite{feist2019slither} is run as an additional baseline for comparison with a widely used industry tool.
-\end{enumerate}
-
-\subsection{Metrics}
-\label{subsec:metrics}
-
-We define metrics for two pipeline phases: retrieval quality and generation quality.
-
-\subsubsection*{Retrieval Metrics}
+A curated golden dataset of 40 real-world findings (all with \texttt{expected\_verdict = vulnerable}) is stored in \texttt{data/golden\_dataset/findings.json}. Each entry includes the finding slug (linking to the knowledge base), the vulnerable function's source code, the issue description, a reference answer, and the vulnerability label. The golden dataset spans 8 vulnerability categories and multiple projects (TraitForge, reNFT, Tapioca, Arrakis, Puffer, EigenLayer, Basin, Napier, and others). It is used for two evaluation types:
 
 \begin{itemize}
-    \item \textbf{Context precision} (reference-based). The fraction of retrieved findings that appear in the ground-truth relevant set:
+    \item \textbf{Golden retrieval} --- given only the source code, the LLM generates a vulnerability hypothesis, which is used as the retrieval query. The target is to find the exact finding in the top-$k$ results. This measures real retrieval quality: can the system find the right vulnerability given only code, not the answer itself?
+
+    \item \textbf{Golden generation} --- the full RAG pipeline is executed for each golden finding: retrieval, context assembly, LLM analysis, and verdict evaluation across multiple quality metrics. The finding itself can optionally be excluded from retrieved context to prevent trivial self-matching.
+\end{itemize}
+
+\subsection{File-Level Test Contract}
+\label{subsec:test-contract}
+
+A purpose-built Solidity contract (\texttt{VulnerableVault.sol}) with ground-truth labels (\texttt{VulnerableVault\_labels.json}) provides an end-to-end evaluation target. The contract contains 9 functions: 4 with known vulnerabilities and 5 that are safe, covering reentrancy, access control, arithmetic, and logic error patterns.
+
+
+\section{Metrics}
+\label{sec:metrics}
+
+\subsection{Retrieval Metrics}
+\label{subsec:retrieval-metrics}
+
+\subsubsection*{Reference-Based Metrics}
+Available when evaluation cases include \texttt{reference\_finding\_ids}:
+\begin{itemize}
+    \item \textbf{Context precision.} Fraction of retrieved findings that appear in the ground-truth relevant set:
     \begin{equation}
         \text{ContextPrecision} = \frac{|\text{retrieved} \cap \text{relevant}|}{|\text{retrieved}|}.
-        \label{eq:ctx-precision}
     \end{equation}
 
-    \item \textbf{Context recall} (reference-based). The fraction of ground-truth relevant findings that were successfully retrieved:
+    \item \textbf{Context recall.} Fraction of ground-truth relevant findings that were retrieved:
     \begin{equation}
         \text{ContextRecall} = \frac{|\text{retrieved} \cap \text{relevant}|}{|\text{relevant}|}.
-        \label{eq:ctx-recall}
     \end{equation}
+\end{itemize}
 
-    \item \textbf{Label match ratio.} The fraction of retrieved findings whose vulnerability label matches the query label. This metric measures how well the retriever respects category boundaries:
+\subsubsection*{Label-Based Metric}
+\begin{itemize}
+    \item \textbf{Label match ratio.} Fraction of retrieved findings whose \texttt{custom\_label} matches the query label (case-insensitive). Returns \texttt{None} when no query label is provided:
     \begin{equation}
         \text{LabelMatch} = \frac{|\{r \in \text{retrieved} : \text{label}(r) = \text{label}(q)\}|}{|\text{retrieved}|}.
-        \label{eq:label-match}
     \end{equation}
-
-    \item \textbf{Context relevance} (LLM-judged, holistic). An LLM judge evaluates the entire retrieved set for its relevance to the query vulnerability, scoring on a 0--1 scale with structured feedback on coverage (full/partial/none) and specificity (high/medium/low).
-
-    \item \textbf{Context precision} (LLM-judged, per-chunk). Each retrieved finding is independently evaluated for relevance (binary: relevant or not). The per-chunk precision is the fraction of individually relevant findings in the retrieved set. This metric is more costly (one LLM call per finding) but provides fine-grained diagnostic information.
 \end{itemize}
 
-\subsubsection*{Generation Metrics}
+\subsubsection*{LLM-Judged Metrics}
+\begin{itemize}
+    \item \textbf{Context relevance (holistic).} An LLM judge evaluates the entire retrieved set, scoring on a 0--1 scale with structured feedback on coverage (\texttt{full/partial/none}) and specificity (\texttt{high/medium/low}).
+
+    \item \textbf{Context precision (per-chunk).} Each retrieved finding is independently evaluated for binary relevance (verdict 0 or 1). The metric is the fraction of individually relevant findings. This requires one LLM call per retrieved finding but provides fine-grained diagnostics.
+\end{itemize}
+
+\subsubsection*{Golden Retrieval Metrics}
+For the golden dataset (known-target evaluation):
+\begin{itemize}
+    \item \textbf{Hit Rate@$k$} --- binary: did the target finding appear in the top-$k$?
+    \item \textbf{Mean Reciprocal Rank (MRR)} --- $\frac{1}{|Q|}\sum_{q \in Q} \frac{1}{\text{rank}(q)}$
+    \item \textbf{NDCG@$k$} --- simplified for single relevant item: $\frac{1}{\log_2(\text{rank} + 1)}$
+    \item \textbf{Label Hit Rate} --- fraction of queries where at least one retrieved finding shares the target's vulnerability label
+\end{itemize}
+
+\subsection{Generation Metrics}
+\label{subsec:generation-metrics}
 
 \begin{itemize}
-    \item \textbf{Verdict accuracy} (deterministic). Binary comparison between the predicted verdict (VULNERABLE/SAFE) and the expected verdict. This metric requires no LLM judge.
+    \item \textbf{Verdict accuracy} (deterministic). Binary comparison between predicted and expected verdict. No LLM judge required.
 
-    \item \textbf{Faithfulness} (LLM-judged). Measures whether the analysis is grounded in the retrieved findings. The LLM judge counts the total factual claims in the analysis and the number supported by the retrieved context, producing a grounded-claims ratio on a 0--1 scale.
+    \item \textbf{Faithfulness} (LLM-judged). The judge counts total factual claims in the analysis and the number supported by retrieved context, producing a grounded-claims ratio on 0--1. The response includes \texttt{claim\_count} and \texttt{supported\_count}.
 
-    \item \textbf{Reasoning quality} (LLM-judged). Evaluates how well the analysis references similar past findings, draws accurate parallels, and provides a clear, well-supported verdict. Scored on a 0--1 scale with structured feedback on evidence usage (strong/adequate/weak/none).
+    \item \textbf{Reasoning quality} (LLM-judged). Evaluates how well the analysis references past findings, draws accurate parallels, and supports its verdict. Scored 0--1 with evidence usage feedback (\texttt{strong/adequate/weak/none}).
 
-    \item \textbf{Answer correctness} (LLM-judged). Compares the generated analysis against a reference answer, checking whether the same verdict was reached, whether the same root cause was identified, and whether the explanation is technically accurate. Available only for cases with reference answers.
+    \item \textbf{Context utilization} (LLM-judged). Evaluates whether the analysis explicitly cites retrieved findings, draws parallels between past and current code, and logically derives the verdict from evidence. The response includes \texttt{citations\_count}, \texttt{parallels\_drawn}, and \texttt{verdict\_supported}.
+
+    \item \textbf{Answer correctness} (LLM-judged). Compares the generated analysis against a reference answer: same verdict, same root cause, technically accurate explanation. Available only for cases with reference answers.
 \end{itemize}
 
-\subsubsection*{Aggregate Classification Metrics}
+\subsection{Aggregate Classification Metrics}
+\label{subsec:classification-metrics}
 
-Across all evaluation cases, we compute standard binary classification metrics by treating VULNERABLE as the positive class:
+Across all evaluation cases, standard binary classification metrics are computed by treating VULNERABLE as the positive class:
 
 \begin{itemize}
     \item \textbf{Precision}: $\text{TP} / (\text{TP} + \text{FP})$
     \item \textbf{Recall}: $\text{TP} / (\text{TP} + \text{FN})$
     \item \textbf{F1}: $2 \cdot \text{Precision} \cdot \text{Recall} / (\text{Precision} + \text{Recall})$
     \item \textbf{False positive rate}: $\text{FP} / (\text{FP} + \text{TN})$
-    \item \textbf{Accuracy}: $(\text{TP} + \text{TN}) / (\text{TP} + \text{FP} + \text{TN} + \text{FN})$
+    \item \textbf{Accuracy}: $(\text{TP} + \text{TN}) / N$
 \end{itemize}
 
 Reducing the false positive rate is a primary objective, as prior work has shown that ungrounded LLM analysis produces ${\sim}80\%$ false positives~\cite{chen2024chatgpt}.
 
+
+\section{Experimental Setup}
+\label{sec:experimental-setup}
+
+\subsection{Infrastructure}
+\label{subsec:infrastructure}
+
+All experiments run on a single machine with Apple Silicon (MPS backend for sentence-transformers). PostgreSQL~17 with pgvector serves as both knowledge base and experiment store. The LLM (GPT-4o-mini, temperature~0) is accessed via the OpenAI API. Embedding models (nomic-embed-text-v1.5, CodeRankEmbed) and the cross-encoder re-ranker (ms-marco-MiniLM-L-6-v2) run locally via sentence-transformers.
+
 \subsection{Experiment Tracking}
 \label{subsec:experiment-tracking}
 
-Each experiment run is recorded as an \texttt{Experiment} entity with a unique name, optional description, a full configuration snapshot (all settings serialised to JSON, excluding secrets), an optional parent experiment ID (for incremental experiments), and a Git commit hash for code traceability. All evaluation results are stored as \texttt{EvaluationResult} rows linked to the experiment and evaluation case, with phase (retrieval or generation), metric name, score, and structured details in JSON format. This design enables post-hoc comparison of arbitrary experiment pairs and trend analysis across pipeline iterations.
+Each experiment run is recorded as an \texttt{Experiment} entity with a unique name, a full \texttt{config\_snapshot} (all settings serialised to JSON, excluding API keys), and a Git commit hash. All evaluation results are stored as \texttt{EvaluationResult} rows linked to the experiment, with phase, metric name, score, and structured JSON details. This design enables post-hoc comparison of arbitrary experiment pairs.
 
+\subsection{Experiment Grid}
+\label{subsec:experiment-grid}
 
-\section{Experiments}
-\label{sec:experiments}
+The evaluation comprises three suites totalling 12 experiments:
 
-\subsection{Retrieval Quality}
-\label{subsec:exp-retrieval}
-
-The first experiment evaluates the retrieval component in isolation. For each evaluation case, we run all four query strategies (description, code, description+label, hybrid BM25) and measure retrieval metrics at $k = 5$.
+\subsubsection*{Suite 1: Retrieval (8 experiments)}
 
 \begin{itemize}
-    \item \textbf{Hypothesis.} The hybrid BM25 strategy achieves the highest context relevance by combining semantic understanding with lexical precision. The description+label strategy achieves the highest label match ratio by constraining retrieval to the correct vulnerability class.
+    \item \textbf{Golden retrieval} (2 experiments): LLM generates vulnerability hypothesis from code, uses it as retrieval query. Measures Hit Rate@5, MRR, NDCG@5, Label Hit Rate.
+    \begin{itemize}
+        \item \texttt{golden-text-k5} --- dense text search, $k=5$
+        \item \texttt{golden-hybrid-k5} --- hybrid BM25, $k=5$
+    \end{itemize}
 
-    \item \textbf{Variants.} Each strategy is tested with and without cross-encoder re-ranking, producing $4 \times 2 = 8$ experiment configurations. A batch evaluation command runs all three main strategies (description, code, description+label) in sequence under a shared name prefix and logs separate experiments for each.
+    \item \textbf{Case-based retrieval} (6 experiments): Uses 44 evaluation cases with reference finding IDs. Measures context precision, recall, label match, context relevance (LLM), context precision per-chunk (LLM).
+    \begin{itemize}
+        \item \texttt{ret-text-k5} / \texttt{ret-text-k5-rerank} --- text mode $\pm$ cross-encoder
+        \item \texttt{ret-code-k5} / \texttt{ret-code-k5-rerank} --- code mode $\pm$ cross-encoder
+        \item \texttt{ret-hybrid-bm25-k5} / \texttt{ret-hybrid-bm25-k5-rerank} --- hybrid BM25 $\pm$ cross-encoder
+    \end{itemize}
 \end{itemize}
 
-[TODO: Table skeleton showing the experimental grid: rows = query strategies (description, code, description+label, hybrid\_bm25), columns = metrics (context\_precision, context\_recall, label\_match, context\_relevance\_llm, context\_precision\_llm), with/without reranking]
+\subsubsection*{Suite 2: Generation (3 experiments)}
 
-\subsection{End-to-End Vulnerability Detection}
-\label{subsec:exp-e2e}
-
-The second experiment evaluates the full retrieve-rerank-reason pipeline against baselines.
+Golden generation on 40 findings. For each finding: retrieve context $\rightarrow$ generate LLM analysis $\rightarrow$ evaluate via LLM-judge (verdict accuracy, faithfulness, reasoning quality, context utilization, answer correctness).
 
 \begin{itemize}
-    \item \textbf{RAG pipeline.} The best-performing retrieval configuration (determined in the previous experiment) is used to retrieve context, which is injected into the LLM prompt.
-
-    \item \textbf{Prompt-only baseline.} The same LLM receives the same code and issue description without any retrieved context.
-
-    \item \textbf{Static analysis baselines.} Wake detectors and Slither are run on the same code snippets; their outputs are mapped to VULNERABLE/SAFE verdicts for comparison.
+    \item \texttt{golden-gen-k5} --- exclude self from retrieved context (realistic scenario)
+    \item \texttt{golden-gen-k5-rerank} --- exclude self + cross-encoder re-ranking
+    \item \texttt{golden-gen-k5-self} --- include self in retrieved context (upper bound on what perfect retrieval would achieve)
 \end{itemize}
 
-The primary metrics are detection precision, recall, F1, and false positive rate. We expect the RAG pipeline to maintain comparable or higher recall (by providing the LLM with evidence of similar vulnerabilities) while significantly improving precision (by grounding the analysis and reducing hallucinated findings).
-
-\subsection{Ablation Study}
-\label{subsec:exp-ablation}
-
-The third experiment isolates the contribution of individual pipeline components through controlled ablation:
-
-\begin{enumerate}
-    \item \textbf{Remove re-ranking.} Replace the cross-encoder re-ranker with the no-op passthrough. Measures the precision gain from re-ranking.
-
-    \item \textbf{Remove BM25.} Use dense vector search only (no BM25 fusion). Measures the contribution of keyword matching to retrieval quality.
-
-    \item \textbf{Remove label filtering.} Do not pass the vulnerability label as part of the query or as a filter. Measures how much label information helps narrow retrieval.
-
-    \item \textbf{Remove code embeddings.} Disable the code search mode, using only text embeddings. Measures whether code-specific embeddings improve retrieval for code-pattern-based queries.
-
-    \item \textbf{Swap embedding model.} Replace nomic-embed-text-v1.5 with an alternative embedding model to measure sensitivity to the embedding model choice.
-\end{enumerate}
-
-Each ablation produces a complete set of retrieval and generation metrics, enabling pairwise comparison with the full pipeline.
-
-\subsection{Qualitative Case Studies}
-\label{subsec:exp-case-studies}
-
-The fourth component is a qualitative analysis of selected cases that illustrate system strengths, weaknesses, and interesting failure modes:
+\subsubsection*{Suite 3: End-to-End File Evaluation (1 experiment)}
 
 \begin{itemize}
-    \item \textbf{Success case.} A vulnerability correctly identified with high confidence, where the retrieved findings provide strong supporting evidence and the LLM's reasoning accurately references them.
-
-    \item \textbf{Failure case.} A vulnerability missed or a false positive, with analysis of whether the failure originated in retrieval (irrelevant findings retrieved) or generation (LLM ignored relevant findings or hallucinated).
-
-    \item \textbf{Borderline case.} A case where retrieval provided partially relevant findings and the LLM's analysis was correct but with lower confidence, illustrating the system's ability to express uncertainty.
+    \item \texttt{file-vault-k5} --- Full pipeline on \texttt{VulnerableVault.sol}: extract 9 functions $\rightarrow$ generate hypothesis per function $\rightarrow$ retrieve $\rightarrow$ generate verdict $\rightarrow$ compare against ground-truth labels. Measures precision, recall, F1.
 \end{itemize}
+
+Full numerical results for all 12 experiments, including per-metric breakdowns, ablation comparisons, and the Wake-AI integration audit, are presented in Chapter~\ref{ch:results}.
 
 
 \section{Threats to Validity}
 \label{sec:threats}
 
-Several factors may limit the validity and generalisability of our evaluation:
-
 \begin{itemize}
-    \item \textbf{Dataset bias.} The knowledge base is sourced from Solodit, which aggregates findings from specific audit firms. Vulnerability patterns and reporting styles may not be representative of all smart contract vulnerabilities. Novel vulnerability classes or protocols not covered by past audits will have no relevant findings in the knowledge base.
+    \item \textbf{Dataset bias.} The knowledge base is sourced exclusively from Solodit, which aggregates findings from specific audit firms. Novel vulnerability classes not covered by past audits will have no relevant findings.
 
-    \item \textbf{Label quality.} Vulnerability labels are assigned either by an LLM or by community contributors. Label errors---both misclassifications and inconsistencies across findings describing similar issues---introduce noise into label-based metrics and label-filtered retrieval.
+    \item \textbf{Label quality.} Vulnerability labels are assigned by GPT-4o-mini. Label errors introduce noise into label-based metrics and label-filtered retrieval. The ``Logic error'' category (27\% of corpus) may be over-broad, conflating distinct vulnerability patterns.
 
-    \item \textbf{Prompt sensitivity.} LLM outputs are sensitive to prompt phrasing. While we use fixed prompt templates, small modifications to wording might produce different verdicts. We mitigate this by using temperature~0 (greedy decoding) to reduce randomness, but non-determinism from API-side batching may still occur.
+    \item \textbf{Prompt sensitivity.} LLM outputs are sensitive to prompt phrasing. We mitigate this by using temperature~0 (greedy decoding) and fixed prompt templates, but non-determinism from API-side batching may still occur.
 
-    \item \textbf{LLM-as-judge limitations.} Several metrics (faithfulness, reasoning quality, context relevance) rely on an LLM judge. The judge itself may hallucinate or apply inconsistent scoring criteria. We mitigate this by using structured JSON output formats that constrain the judge's responses and by providing detailed evaluation criteria in the judge prompts.
+    \item \textbf{LLM-as-judge limitations.} Faithfulness, reasoning quality, context utilization, and answer correctness rely on GPT-4o-mini as both generator and judge. The judge may apply inconsistent scoring criteria. We mitigate this by requiring structured JSON output with specific subfields (e.g., \texttt{claim\_count}, \texttt{supported\_count} for faithfulness; \texttt{citations\_count}, \texttt{parallels\_drawn} for context utilization).
 
-    \item \textbf{Evaluation case coverage.} The evaluation case set may not cover all vulnerability types or code patterns. Results on a limited test set may not generalise to the full diversity of real-world smart contracts.
+    \item \textbf{Golden dataset composition.} All 40 golden findings have \texttt{expected\_verdict = vulnerable}. The dataset contains no true negatives, so false positive rates cannot be measured from golden evaluation alone. The file-level evaluation (\texttt{VulnerableVault.sol}) compensates by including both vulnerable and safe functions.
 
-    \item \textbf{Reproducibility.} While we log all configurations and results, exact reproduction depends on deterministic LLM behaviour (which API providers do not always guarantee) and on the knowledge base state at evaluation time (which grows with ongoing ingestion).
+    \item \textbf{Self-retrieval confound.} In golden retrieval, the target finding exists in the knowledge base. A hit may reflect lexical overlap between the LLM-generated hypothesis and the finding's summary rather than genuine semantic understanding. The golden generation suite with \texttt{exclude\_self=True} addresses this for the generation phase.
+
+    \item \textbf{Reproducibility.} While all configurations and results are logged, exact reproduction depends on deterministic LLM behaviour (which OpenAI does not guarantee) and on the knowledge base state at evaluation time.
 \end{itemize}
 
 
 \section{Summary}
 \label{sec:eval-summary}
 
-This chapter defined the evaluation framework for our RAG-augmented auditing system. Four research questions structure the evaluation around retrieval quality, detection accuracy, reasoning groundedness, and component contributions. The metric suite covers both retrieval (reference-based and LLM-judged precision, recall, relevance) and generation (verdict accuracy, faithfulness, reasoning quality, answer correctness, and aggregate classification metrics). The experimental design includes retrieval-only evaluation across query strategies, end-to-end comparison with baselines, ablation studies isolating component contributions, and qualitative case studies. Threats to validity are acknowledged and mitigated where possible. The results of these experiments are presented in the subsequent sections as they become available.
+This chapter defined the evaluation framework for our RAG-augmented auditing system. Four research questions structure the evaluation around retrieval quality, detection accuracy, reasoning groundedness, and component contributions. The metric suite covers retrieval (reference-based precision/recall, LLM-judged relevance, golden Hit Rate/MRR/NDCG) and generation (verdict accuracy, faithfulness, reasoning quality, context utilization, answer correctness, and aggregate classification metrics). The experimental design comprises 12 experiments across three suites: retrieval quality (golden + case-based), generation quality (golden with/without self-retrieval), and end-to-end file evaluation. Threats to validity are acknowledged, with particular attention to LLM-as-judge limitations and golden dataset composition.
+
+
+
 
 
 \chapter{Conclusion}
