@@ -576,7 +576,7 @@ Recurrent Neural Networks (RNNs) offered the first neural solution to variable-l
     \label{eq:rnn}
 \end{equation}
 
-where $f$ is a nonlinearity such as $\tanh$ or \footnote{\url{https://en.wikipedia.org/wiki/Rectified_linear_unit}}, and $\mathbf{W}_h$, $\mathbf{W}_x$ are learned weight matrices.  The conditional distribution for the next token is then read off from $\mathbf{h}_t$ \cite{Goodfellow-et-al-2016}.
+where $f$ is a nonlinearity such as $\tanh$ or ReLU\footnote{\url{https://en.wikipedia.org/wiki/Rectified_linear_unit}}, and $\mathbf{W}_h$, $\mathbf{W}_x$ are learned weight matrices.  The conditional distribution for the next token is then read off from $\mathbf{h}_t$ \cite{Goodfellow-et-al-2016}.
 
 \begin{figure}[!h]
     \centering
@@ -601,16 +601,18 @@ Despite this advance, a fundamental bottleneck remained: processing is strictly 
 \label{sec:transformers}
 % ============================================================
 
-The transformer, introduced by Vaswani et al.\ in 2017~\cite{vaswani2023attentionneed}, addressed both limitations of recurrent models in a single architectural innovation.  It replaced the sequential hidden-state chain with a mechanism that lets every token attend directly to every other token---\emph{self-attention}.  The result is a model that can be trained in parallel across all positions and that provides short, direct gradient paths between any pair of tokens regardless of their distance in the sequence.
+The transformer, introduced by Vaswani et al.\ in 2017, addressed both limitations of recurrent models in a single architectural innovation~\cite{vaswani2023attentionneed}. It replaced the sequential hidden-state chain with a mechanism that lets every token attend directly to every other token --- \emph{self-attention}. The result is a model that can be trained in parallel across all positions and that provides short, direct gradient paths between any pair of tokens regardless of their distance in the sequence.
 
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=0.7\linewidth]{images/transformer.png}
-    \caption{The original encoder--decoder transformer architecture~\cite{vaswani2023attentionneed}.  The encoder (left) processes the input sequence bidirectionally, while the decoder (right) generates the output sequence autoregressively.  Modern LLMs typically use only one half: decoder-only models for generation, or encoder-only models for representation learning.}
+    \caption{The original encoder--decoder transformer architecture~\cite{vaswani2023attentionneed}.
+    % The encoder (left) processes the input sequence bidirectionally, while the decoder (right) generates the output sequence autoregressively.  Modern LLMs typically use only one half: decoder-only models for generation, or encoder-only models for representation learning.
+    }
     \label{fig:transformer}
 \end{figure}
 
-The full architecture, shown in Figure~\ref{fig:transformer}, consists of an encoder--decoder stack.  The encoder maps an input sequence to a sequence of continuous representations, which the decoder then uses to generate output tokens one at a time.  However, most models relevant to contemporary NLP and code analysis use only one half of this design.  Encoder-only models such as BERT~\cite{devlin2019bert} and CodeBERT~\cite{feng2020codebert} produce contextual embeddings useful for classification and retrieval.  Decoder-only models in the GPT family~\cite{radford2019language, brown2020language} generate text autoregressively and form the backbone of today's chat-capable LLMs (GPT-5~\cite{openai2025gpt5}, Claude~\cite{anthropic2025claude}, DeepSeek~\cite{deepseekai2025deepseekv3}, Qwen~\cite{qwen2025qwen3}).  Encoder--decoder models such as T5~\cite{raffel2020exploring} and CodeT5~\cite{wang2021codet5} excel at sequence-to-sequence tasks like summarisation and translation.
+The full architecture, shown in Figure~\ref{fig:transformer}, consists of an encoder--decoder stack. The encoder maps an input sequence to a sequence of continuous representations, which the decoder then uses to generate output tokens one at a time.  However, most models relevant to contemporary NLP and code analysis use only one half of this design.  Encoder-only models such as BERT~\cite{devlin2019bert} and CodeBERT~\cite{feng2020codebert} produce contextual embeddings useful for classification and retrieval.  Decoder-only models in the GPT family~\cite{radford2019language, brown2020language} generate text autoregressively and form the backbone of today's chat-capable LLMs (GPT-5~\cite{openai2025gpt5}, Claude~\cite{anthropic2025claude}, DeepSeek~\cite{deepseekai2025deepseekv3}, Qwen~\cite{qwen2025qwen3}).  Encoder--decoder models such as T5~\cite{raffel2020exploring} and CodeT5~\cite{wang2021codet5} excel at sequence-to-sequence tasks like summarisation and translation. 
 
 The remainder of this section examines the two mechanisms that make the transformer work: self-attention, which allows tokens to exchange information regardless of distance, and positional encoding, which injects the notion of order into an otherwise position-agnostic architecture.
 
@@ -618,7 +620,7 @@ The remainder of this section examines the two mechanisms that make the transfor
 \subsection{Self-Attention Mechanism}
 \label{subsec:self-attention}
 
-Self-attention is the core operation that gives transformers their representational power.  The central idea is to let each token in a sequence compute a weighted combination of all other tokens, where the weights are determined by learned compatibility functions.  Concretely, each token's embedding is projected into three vectors---a \emph{query}~$\mathbf{q}$, a \emph{key}~$\mathbf{k}$, and a \emph{value}~$\mathbf{v}$---through learned linear maps:
+Self-attention is the core operation that gives transformers their representational power.  The central idea is to let each token in a sequence compute a weighted combination of all other tokens, where the weights are determined by learned compatibility functions.  Concretely, each token's embedding [TODO do not use embedings here, they wre not explained yet] is projected into three vectors --- a \emph{query}~$\mathbf{q}$, a \emph{key}~$\mathbf{k}$, and a \emph{value}~$\mathbf{v}$---through learned linear maps:
 
 \begin{equation}
     \mathbf{Q} = \mathbf{X}\mathbf{W}^Q, \qquad
@@ -660,7 +662,7 @@ The motivation for multiple heads is that a single attention function can only c
 \subsection{Positional Encoding}
 \label{subsec:pos-enc}
 
-Self-attention is \emph{permutation-equivariant}: if the input tokens are shuffled, the outputs are shuffled in exactly the same way, with no change in their values.  Since token order carries critical semantic information---both in natural language and in structured formats---the model must be given explicit information about position.  This is the role of \emph{positional encoding}, which is added to the input embeddings before they enter the attention layers.
+Self-attention is \emph{permutation-equivariant}: if the input tokens are shuffled, the outputs are shuffled in exactly the same way, with no change in their values.  Since token order carries critical semantic information, both in natural language and in structured formats, the model must be given explicit information about position. This is the role of \emph{positional encoding}, which is added to the input embeddings before they enter the attention layers.
 
 The original transformer~\cite{vaswani2023attentionneed} used fixed sinusoidal functions to encode position.  For each position $\text{pos}$ and each dimension $i$ of the embedding:
 
@@ -682,7 +684,6 @@ Standard transformers are \emph{dense}: every parameter is involved in processin
 
 This idea has moved from a niche research topic to the dominant architecture for frontier LLMs.  The Switch Transformer~\cite{fedus2022switch} demonstrated that routing each token to a single expert could scale efficiently to trillion-parameter models.  Mixtral~\cite{jiang2024mixtral} brought MoE to open-weight models with strong performance.  Most significantly, the DeepSeek model family~\cite{deepseekai2025deepseekv3} introduced fine-grained expert segmentation---splitting experts into many smaller units and activating more of them per token---alongside shared experts that capture common knowledge across tasks, an auxiliary-loss-free load-balancing strategy, and Multi-head Latent Attention (MLA) for efficient inference.  DeepSeek-V3, with 671~billion total parameters but only 37~billion activated per token, was reportedly trained for approximately \$5.6~million---an order of magnitude less than comparable dense models---while achieving competitive performance with the best proprietary systems.
 
-By 2025, MoE had become the architecture of choice for the majority of frontier models, adopted by DeepSeek, Mistral, Qwen, and others~\cite{nvidia2025moe}.  The key insight is that sparsity allows models to grow much larger---and thus to store more knowledge and develop more specialised internal representations---without a corresponding increase in inference cost.
 
 With self-attention providing the ability to relate tokens across arbitrary distances, positional encoding supplying the necessary notion of order, and MoE enabling efficient scaling, the transformer has the representational machinery to model complex sequential structure at enormous scale.  The next question is how to turn this architecture into a capable model---that is, how to train it.
 
@@ -692,39 +693,36 @@ With self-attention providing the ability to relate tokens across arbitrary dist
 \label{sec:training}
 % ============================================================
 
-A transformer architecture on its own is simply a parameterised function; it becomes useful only through training.  Building a capable LLM involves three broad stages, each operating at a different scale and serving a different purpose.  \emph{Pre-training} exposes the model to vast quantities of text to learn general-purpose representations.  \emph{Fine-tuning} adapts these representations to specific tasks or desired behaviours.  \emph{Prompting} shapes the model's output at inference time through instructions and examples, without modifying any parameters.  The following subsections describe each stage in turn.
+A transformer architecture on its own is simply a parameterised function; it becomes useful only through training. Building a capable LLM involves three broad stages, each operating at a different scale and serving a different purpose. \emph{Pre-training} exposes the model to vast quantities of text to learn general-purpose representations. \emph{Fine-tuning} adapts these representations to specific tasks or desired behaviours. \emph{Prompting} shapes the model's output at inference time through instructions and examples, without modifying any parameters. The following subsections describe each stage in turn.
 
 
 \subsection{Pre-training}
 \label{subsec:pretraining}
 
-Pre-training exposes the model to massive text corpora using self-supervised objectives that require no human labelling.  For decoder-only models, the objective is \emph{next-token prediction} (causal language modelling): given a prefix $x_1, \ldots, x_{t-1}$, maximise $\log P(x_t \mid x_1, \ldots, x_{t-1})$ summed over all positions and all documents in the corpus.  For encoder-only models like BERT~\cite{devlin2019bert}, the objective is \emph{masked language modelling}: randomly mask a fraction of tokens and train the model to recover them from bidirectional context.
+Pre-training exposes the model to massive text corpora using self-supervised objectives that require no human labeling. For decoder-only models, the objective is \emph{next-token prediction} (causal language modelling): given a prefix $x_1, \ldots, x_{t-1}$, maximise $\log P(x_t \mid x_1, \ldots, x_{t-1})$ summed over all positions and all documents in the corpus.  For encoder-only models like BERT~\cite{devlin2019bert}, the objective is \emph{masked language modelling}: randomly mask a fraction of tokens and train the model to recover them from bidirectional context.
 
-The simplicity of these objectives belies the enormous computational cost of pre-training.  State-of-the-art models are trained on corpora containing trillions of tokens, using thousands of GPUs or TPUs running continuously for weeks or months.  Cottier et al.~\cite{cottier2025risingcosts} estimate that the amortised hardware and energy cost of training frontier models has grown at a rate of roughly 2.4$\times$ per year since 2016, with the largest runs already exceeding hundreds of millions of dollars and projections suggesting the billion-dollar threshold will be crossed by 2027.  The dominant cost components are AI accelerator chips and R\&D staff, each accounting for roughly a third to a half of total expenditure.  Beyond hardware, assembling and curating a high-quality training corpus is itself a major undertaking: the data must be diverse enough to cover the breadth of human knowledge, yet filtered to remove low-quality, duplicated, or toxic content.
-
-These costs mean that pre-training a frontier dense model from scratch is feasible only for a handful of well-resourced organisations.  However, architectural innovations---particularly Mixture-of-Experts (discussed in Section~\ref{subsec:moe})---have begun to challenge this assumption: DeepSeek-V3~\cite{deepseekai2025deepseekv3} demonstrated frontier-level performance at a fraction of the cost of comparable dense models.  For most practitioners and researchers, the practical path remains to start from an existing pre-trained model and adapt it through fine-tuning---a far more accessible process that we turn to next.
+The simplicity of these objectives belies the enormous computational cost of pre-training.  State-of-the-art models are trained on corpora containing trillions of tokens, using thousands of GPUs or TPUs running continuously for weeks or months. These costs mean that pre-training a frontier dense model from scratch is feasible only for a handful of well-resourced organizations.  However, architectural innovations like Mixture-of-Experts (discussed in Section~\ref{subsec:moe}) --- have begun to challenge this assumption: DeepSeek-V3~\cite{deepseekai2025deepseekv3} demonstrated frontier-level performance at a fraction of the cost of comparable dense models. For most practitioners and researchers, the practical path remains to start from an existing pre-trained model and adapt it through fine-tuning, a far more accessible process that we turn to next.
 
 
 \subsection{Fine-tuning}
 \label{subsec:finetuning}
 
-Fine-tuning adapts a pre-trained model to specific downstream tasks by continuing training on a smaller, curated dataset.  The most common modern approach is \emph{supervised fine-tuning} (SFT) on instruction--response pairs, which teaches the model to follow user intent reliably.  By exposing the model to examples of the desired input--output behaviour, fine-tuning can bias it toward structured outputs, improve adherence to constraints, and sharpen performance on domain-specific tasks---all without the cost of training from scratch.
+Fine-tuning adapts a pre-trained model to specific downstream tasks by continuing training on a smaller, curated dataset.  The most common modern approach is Supervised Fine-tuning (SFT) on instruction-response pairs, which teaches the model to follow user intent reliably. By exposing the model to examples of the desired input-output behavior, fine-tuning can bias it toward structured output, improve adherence to constraints, and sharpen performance on domain-specific tasks.
 
-However, fine-tuning is not without risks.  Training on a narrow dataset can cause \emph{catastrophic forgetting}, where the model loses general capabilities it acquired during pre-training.  Overfitting is also a concern: a model fine-tuned on a small, homogeneous dataset may perform well on similar examples but generalise poorly to novel inputs.
+However, fine-tuning is not without risks. Training on a narrow dataset can cause \emph{catastrophic forgetting} [TODO maybe just underfitting/overfitting], where the model loses general capabilities it acquired during pre-training.  Overfitting is also a concern: a model fine-tuned on a small, homogeneous dataset may perform well on similar examples but generalise poorly to novel inputs.
 
-\textbf{Parameter-efficient methods} have made fine-tuning accessible even for large models.  Full fine-tuning updates every parameter in the model, which for billion-parameter architectures requires substantial GPU memory and risks overfitting.  LoRA (Low-Rank Adaptation)~\cite{hu2022lora} offers an elegant alternative: it freezes the pre-trained weights entirely and injects small trainable low-rank matrices into each layer, reducing the number of trainable parameters by orders of magnitude while preserving most of the model's original knowledge.  QLoRA~\cite{dettmers2023qlora} extends this further by combining LoRA with 4-bit quantisation of the frozen weights, making it possible to fine-tune models with tens of billions of parameters on a single consumer GPU.
-
+\textbf{Parameter-efficient methods} have made fine-tuning accessible even for large models. Full fine-tuning updates every parameter in the model, which for billion-parameter architectures requires substantial GPU memory and risks overfitting. LoRA (Low-Rank Adaptation)offers an elegant alternative: it freezes the pre-trained weights entirely and injects small trainable low-rank matrices into each layer, reducing the number of trainable parameters by orders of magnitude while preserving most of the model's original knowledge. QLoRA extends this further by combining LoRA with 4-bit quantization of the frozen weights, making it possible to fine-tune models with tens of billions of parameters on a single consumer GPU~\cite{hu2021lora, xu2023qalora}.
 
 \subsubsection*{Reinforcement Learning from Human Feedback}
 
-Supervised fine-tuning teaches a model \emph{what} to say, but not necessarily \emph{how} to say it in a way that aligns with human preferences.  Reinforcement Learning from Human Feedback (RLHF)~\cite{ouyang2022training} addresses this gap by optimising the model's outputs to match human judgements of quality.  The process has three stages:
+Supervised fine-tuning teaches a model \emph{what} to say, but not necessarily \emph{how} to say it in a way that aligns with human preferences. Reinforcement Learning from Human Feedback (RLHF) addresses this gap by optimizing the model's output to match human judgments of quality~\cite{ouyang2022training}. The process has three stages:
 
 \begin{enumerate}
-    \item \textbf{Reward model training.}  Human annotators rank multiple model outputs for the same prompt.  A separate reward model is trained on these preference pairs to predict which outputs humans would prefer.
+    \item \textbf{Reward model training.} Human annotators rank multiple model outputs for the same prompt.  A separate reward model is trained on these preference pairs to predict which outputs humans would prefer.
     
-    \item \textbf{Policy optimisation.}  The language model is treated as a reinforcement learning agent whose ``action'' at each step is the next token.  Using Proximal Policy Optimisation (PPO)~\cite{schulman2017proximal}, the model is fine-tuned to maximise the reward model's score while staying close to the SFT policy via a KL-divergence penalty, which prevents the model from drifting too far from coherent language.
+    \item \textbf{Policy optimization.} The language model is treated as a reinforcement learning agent whose "action" at each step is the next token. Using Proximal Policy Optimization (PPO), the model is fine-tuned to maximize the reward model's score while staying close to the SFT policy via a KL-divergence penalty, which prevents the model from drifting too far from coherent language~\cite{schulman2017proximal}.
     
-    \item \textbf{Iteration.}  The process repeats: new outputs are collected, annotators provide fresh rankings, and both the reward model and the policy are updated.
+    \item \textbf{Iteration.} The process repeats: new outputs are collected, annotators provide fresh rankings, and both the reward model and the policy are updated.
 \end{enumerate}
 
 \begin{figure}[!h]
@@ -734,25 +732,20 @@ Supervised fine-tuning teaches a model \emph{what} to say, but not necessarily \
     \label{fig:rlhf_diagram}
 \end{figure}
 
-While RLHF has proven effective, it is complex to implement: it requires training and maintaining a separate reward model, carefully tuning the KL penalty, and managing the instability inherent in reinforcement learning.  An increasingly popular alternative is \textbf{Direct Preference Optimisation (DPO)}~\cite{rafailov2024}, which eliminates the separate reward model entirely.  DPO reformulates the RLHF objective so that the language model can be optimised directly on preference pairs---pairs of ``preferred'' and ``dispreferred'' outputs for the same prompt---using a simple classification-style loss.  This simplification reduces training complexity while achieving comparable or superior alignment quality, and has been adopted in several recent models.
-
-\subsubsection*{Reinforcement Learning with Verifiable Rewards}
-
-A major development in 2025 was the emergence of \emph{Reinforcement Learning with Verifiable Rewards} (RLVR), demonstrated most prominently by DeepSeek-R1~\cite{deepseekai2025deepseekr1}.  Where RLHF and DPO rely on human preference judgements, RLVR uses \emph{programmatically verifiable} signals---for example, whether generated code compiles and passes tests, or whether a mathematical derivation produces the correct answer.  DeepSeek-R1 showed that applying large-scale RL directly to a base model, using the Group Relative Policy Optimisation (GRPO) algorithm and only accuracy and format rewards, could induce sophisticated reasoning behaviours---self-reflection, verification, and dynamic strategy adaptation---without any supervised fine-tuning on human-written reasoning traces.  The resulting model achieved performance competitive with the best proprietary systems on mathematics, coding, and STEM benchmarks.
-
-This result has broad implications.  Because verifiable rewards can be generated automatically and at scale, RLVR removes the bottleneck of expensive human annotation that constrains both RLHF and DPO.  It also demonstrated that \emph{inference-time scaling}---allowing the model to spend more computation on harder problems by generating longer chains of thought---can be a powerful complement to training-time scaling.  Reasoning models like DeepSeek-R1 and OpenAI's o-series represent a shift in how LLM capabilities are improved: rather than relying solely on larger models or better training data, substantial gains come from teaching models to \emph{think longer} at inference time~\cite{snell2024scaling}.
+[TODO even the pipeline in Figure \ref{fig:rlhf_diagram} does not seem complex, it is still smth...]. That is why sometimes the most easiest way to interact/change LLM behavior (another word) is prompts.
 
 
 \subsection{Prompting}
 \label{subsec:prompting}
 
-While pre-training and fine-tuning adjust model parameters, \emph{prompting} shapes model behaviour at inference time through instructions, context, and examples---without changing any weights.  Brown et al.~\cite{brown2020languagemodelsfewshotlearners} demonstrated that including a few input--output examples (\emph{few-shot prompting}) can elicit task-specific behaviour from large decoder-only models without any fine-tuning at all.  This discovery opened the door to a rich set of techniques, collectively known as \emph{prompt engineering}, that exploit the model's in-context learning capabilities.
+While pre-training and fine-tuning adjust model parameters, \emph{prompting} shapes model behavior at inference time through instructions, context, and examples without changing any weights. Brown et al.~\cite{brown2020languagemodelsfewshotlearners} demonstrated that including a few input--output examples (\emph{few-shot prompting}) can elicit task-specific behaviour from large decoder-only models without any fine-tuning at all.  This discovery opened the door to a rich set of techniques, collectively known as \emph{prompt engineering}, that exploit the model's in-context learning capabilities. [TODO rephrase this pragapragh, because ending of previous zoom us comes to this thiought] + [TODO do not use construction Brown at el]
 
 \textbf{Task decomposition} breaks a complex problem into smaller sub-tasks, each with narrower scope and clearer success criteria.  Rather than asking a model to solve a difficult problem in one step, the prompt guides it through a sequence of manageable steps whose outputs compose into a final answer.  This approach reduces the cognitive burden on any single inference call and makes it easier to verify intermediate results.
 
-\textbf{Chain-of-thought (CoT)} prompting~\cite{wei2023chain} is a specific form of task decomposition in which the model is encouraged to produce intermediate reasoning steps before arriving at a final answer.  By including examples that show step-by-step reasoning, the prompt elicits similar behaviour from the model, which has been shown to improve performance on arithmetic, commonsense reasoning, and other multi-step tasks.
+\textbf{Chain-of-thought (CoT)} prompting~\cite{wei2023chain} is a specific form of task decomposition in which the model is encouraged to produce intermediate reasoning steps before arriving at a final answer.  By including examples that show step-by-step reasoning, the prompt elicits similar behavio
+r from the model, which has been shown to improve performance on arithmetic, commonsense reasoning, and other multi-step tasks.
 
-\textbf{Few-shot learning} calibrates what ``good'' output looks like by providing concrete examples in the prompt.  The model uses these examples to infer the desired format, style, level of detail, and reasoning strategy, then applies these inferred patterns to the actual query.  Few-shot prompting is particularly powerful when combined with retrieval: instead of relying on fixed examples, relevant demonstrations can be retrieved dynamically from a knowledge base, tailoring the prompt to each specific input.
+\textbf{Few-shot learning} calibrates what "good" output looks like by providing concrete examples in the prompt.  The model uses these examples to infer the desired format, style, level of detail, and reasoning strategy, then applies these inferred patterns to the actual query.  Few-shot prompting is particularly powerful when combined with retrieval: instead of relying on fixed examples, relevant demonstrations can be retrieved dynamically from a knowledge base, tailoring the prompt to each specific input.
 
 Together, these prompting techniques allow practitioners to adapt a single general-purpose model to a wide range of tasks at inference time, complementing the more permanent adaptations achieved through fine-tuning.
 
@@ -762,15 +755,15 @@ Together, these prompting techniques allow practitioners to adapt a single gener
 \label{sec:embeddings}
 % ============================================================
 
-All of the approaches described so far---whether based on RNNs or transformers, whether pre-trained or fine-tuned---share a common foundation: they represent discrete symbols as continuous vectors~\cite{goodfellow2016deep}.  An \emph{embedding} is a fixed-dimensional vector representation of an input, produced by passing it through a model and extracting an intermediate or final hidden state (typically via mean pooling or a special classification token).  The key property of a good embedding is that inputs with similar meaning or function should be mapped to nearby points in vector space, enabling operations like nearest-neighbour search, clustering, and analogy reasoning to be performed directly on the representations.
+All of the approaches described so far, whether based on RNNs or transformers, whether pre-trained or fine-tuned, share a common foundation: they represent discrete symbols as continuous vectors~\cite{Goodfellow-et-al-2016}. An \emph{embedding} is a fixed-dimensional vector representation of an input, produced by passing it through a model and extracting an intermediate or final hidden state (typically via mean pooling or a special classification token). The key property of a good embedding is that inputs with similar meaning or function should be mapped to nearby points in vector space, enabling operations like nearest-neighbor search, clustering, and analogy reasoning to be performed directly on the representations.
 
-The quality of embeddings depends critically on the pre-training data and objective.  A model trained exclusively on English prose will embed text according to the semantic relationships present in natural language, which may not capture the structural and functional relationships that matter in other domains.  This observation motivated the development of domain-specific embedding models, particularly for source code.
+The quality of embeddings depends critically on the pre-training data and objective.  A model trained exclusively on English prose will embed text according to the semantic relationships present in natural language, which may not capture the structural and functional relationships that matter in other domains.  This observation motivated the development of domain-specific embedding models.
 
 
 \subsection{Encoder Models}
 \label{subsec:encoder-models}
 
-General-purpose text encoders like BERT~\cite{devlin2019bert} produce strong representations for natural language tasks, but they treat source code as just another form of text, missing the structural regularities that distinguish programming languages.  Code-specialised encoder models address this gap.
+General-purpose text encoders like BERT~\cite{devlin2019bert} produce strong representations for natural language tasks, but they treat source code as just another form of text, missing the structural regularities that distinguish programming languages. Code-specialized encoder models address this gap.
 
 \textbf{CodeBERT}~\cite{feng2020codebert} was one of the first models to pre-train a BERT-style encoder on both natural language and source code across six programming languages.  It uses both masked language modelling and replaced-token detection on NL--PL pairs, learning alignments between code and its documentation.  CodeBERT embeddings have become a standard baseline for code search, clone detection, and vulnerability classification.
 
@@ -840,6 +833,45 @@ The most comprehensive framework is \textbf{LLM-BSCVM}~\cite{llmbscvm2025}, whic
 
 While not targeting smart contracts specifically, \textbf{ReVul-CoT}~\cite{chen2025revulcot} demonstrates the effectiveness of the RAG+CoT paradigm for general software vulnerability severity assessment.  Using retrieval from NVD and CWE databases combined with structured chain-of-thought reasoning, it achieved 87.50\% accuracy and 83.75\% Macro-F1 on 12,070 vulnerability records---improvements exceeding 10 percentage points over all baselines.  Its architecture provides a transferable blueprint for smart contract severity assessment.
 
+
+\section{Challenges and Limitations}
+\label{sec:llm-challenges}
+% ============================================================
+
+Despite rapid progress, LLM-based smart contract auditing faces fundamental challenges that constrain its reliability in production settings.
+
+\subsection*{Hallucinations}
+\label{subsec:hallucinations}
+
+LLMs can produce plausible-sounding but factually incorrect outputs --- \emph{hallucination}.  In code generation, this manifests as references to non-existent libraries, fabricated API calls, and invented vulnerability reports.  Spracklen et al.~\cite{spracklen2025package} tested 16~LLMs generating 576,000 code samples and found that 19.7\% of the 2.23~million referenced packages were hallucinated (non-existent), creating a direct supply-chain attack vector.
+
+For security specifically, the consequences are severe.  Pearce et al.~\cite{pearce2022asleep} found that approximately 40\% of GitHub Copilot's code completions contained vulnerabilities.  Perry et al.~\cite{perry2023users} demonstrated that users with AI coding assistant access wrote significantly less secure code while being more confident in its correctness—a dangerous automation bias.
+
+In the smart contract domain, Chen et al.~\cite{chen2024chatgpt} identified several hallucination patterns: ``Protected Mechanism Bias'' (the model assumes protective code exists when it does not), ``Development Intent Bias'' (the model assumes developers followed best practices), and ``Lack of Understanding of Actual Meaning'' of Solidity-specific constructs like \texttt{msg.value}.
+
+The primary mitigation is to require \emph{grounded evidence} for every finding.  Each reported vulnerability should reference specific code locations, static analysis outputs, or retrieved documentation rather than relying on the model's ``intuition'' alone.  RAG-based systems consistently reduce hallucination rates: LLM-BSCVM reduced false positives from 7.2\% to 5.1\% through retrieval-grounded multi-agent collaboration~\cite{llmbscvm2025}.
+
+
+\subsection*{Context Window Limitations}
+\label{subsec:context-window-limits}
+
+Even with context windows reaching hundreds of thousands of tokens, real smart contract systems can exceed what is reasonable to include in a single prompt.  Imported libraries, interface definitions, deployment configurations, and cross-contract dependencies all contribute to the token budget.  Moreover, models have a fixed training cutoff: new vulnerability classes and evolving best practices emerge continuously but are absent from the model's parametric knowledge.
+
+RAG partially addresses both issues by retrieving up-to-date, task-relevant information at inference time and by focusing the prompt on high-signal content~\cite{lewis2021}.
+
+
+\subsection*{Security}
+\label{subsec:security}
+
+When LLM agents can call external tools, additional safety concerns arise.  Prompt injection in retrieved documents could manipulate the agent's behavior, and unrestricted tool access could enable unintended actions. [TODO add a bit more bout security] 
+
+This chapter traced the mathematical foundations of sequence modeling through the transformer architecture and its modern extensions, arriving at a clear picture of where LLMs excel and where they fall short for smart contract auditing. [TODO a bit more]
+
+
+After having the overview about Ethereum, Code Analysis and LLMs, we can move to framework Wake, which comnined all of this for security purposes. [TODO write it better]
+
+
+[TODO transition to Wake framework]
 
 
 \chapter{The Wake Framework}
