@@ -67,7 +67,7 @@ Tell a bit about what was done and list objectives that were fullfilled:
 
 \chapter{Ethereum}
 \label{ch:ethereum}
-This chapter introduces the foundations needed to understand Ethereum and its components, as this work is closely related to that platform. It first outlines the general principles of blockchain, then specializes in the Ethereum execution model through the Ethereum Virtual Machine (EVM) and the Solidity programming language. Finally, it summarizes common smart-contract vulnerability categories that repeatedly appear in practical audits.
+This chapter introduces the foundations needed to understand Ethereum and its components, as this work is closely related to that platform. It first outlines the general principles of blockchain, then specializes in the Ethereum execution model through the Ethereum Virtual Machine (EVM) and the Solidity programming language. Finally, it summarizes common smart-contract vulnerability categories that appear repeatedly in practical audits.
 
 
 \section{Overview}
@@ -78,23 +78,7 @@ Ethereum, launched in 2015, marked a significant evolution in blockchain technol
 \subsection{Blockchain}
 \label{subsec:blockchain}
 
-To understand Ethereum's role as a programmable state-transition system, 
-it is useful to begin with the blockchain foundation on which it operates. 
-A blockchain is a distributed ledger maintained by a network of 
-peer-to-peer nodes rather than a single central authority. It grows as an 
-ordered sequence of blocks, beginning with an initial block (commonly 
-called the \emph{genesis block}), where each subsequent block contains a 
-complete list of transaction records and a cryptographic link to its 
-predecessor. As additional blocks are appended, reversing or altering 
-earlier transactions becomes computationally infeasible. Participants 
-interact through addresses instead of real-world identities, enabling 
-transparency while preserving pseudonymity. Because every node stores a 
-copy of the chain and the full transaction history is publicly verifiable, 
-the system provides strong transparency: value flows can be traced, state 
-transitions inspected, and the integrity of past operations independently 
-confirmed. In short, from the initial genesis block through every appended 
-block, blockchain architecture combines decentralization, tamper-resistance, 
-and verifiable history in a single framework \cite{blockchain}.
+To understand Ethereum's role as a programmable state-transition system, it is useful to begin with the blockchain foundation on which it operates. A blockchain is a public distributed ledger maintained by a network of peer-to-peer nodes rather than a single central authority. It grows as an ordered sequence of blocks, beginning with an initial block (commonly called the \emph{genesis block}), where each subsequent block contains a complete list of transaction records and a cryptographic link to its predecessor. As additional blocks are appended, reversing or altering earlier transactions becomes computationally infeasible. Participants interact through addresses instead of real-world identities, enabling transparency while preserving pseudonymity. Because every node stores a copy of the chain and the full transaction history is publicly verifiable, the system provides strong transparency: value flows can be traced, state transitions inspected, and the integrity of past operations independently confirmed. In short, from the initial genesis block through every appended block, the blockchain architecture combines decentralization, tamper-resistance, and verifiable history in a single framework \cite{blockchain}.
 
 \begin{figure}[!htbp]
     \centering
@@ -103,85 +87,58 @@ and verifiable history in a single framework \cite{blockchain}.
     \label{fig:block_eth}
 \end{figure}
 
-As illustrated in Figure~\ref{fig:block_eth}, a blockchain block links to 
-its predecessor and successor by storing the cryptographic hash of the 
-previous block's header within its own header, forming an immutable and 
-ordered chain. Beyond this backward pointer, the block header contains 
-four key fields: the \emph{previous block hash}, a \emph{timestamp} 
-recording when the block was produced, a \emph{nonce} adjusted during the 
-consensus process, and the \emph{Merkle root}, a single hash that 
-compactly summarises all transactions contained in the block 
-\cite{blockchain_diagram_eth}.
+As illustrated in Figure~\ref{fig:block_eth}, a blockchain block links to its predecessor and successor by storing the cryptographic hash of the previous block's header within its own header, forming an immutable and ordered chain. Beyond this backward pointer, the block header contains four key fields: the \emph{previous block hash}, a \emph{timestamp} recording when the block was produced, a \emph{nonce} --- a 4-byte field adjusted during the consensus process, and the \emph{Merkle root}, a single hash that compactly summarizes all transactions contained in the block \cite{blockchain_diagram_eth}.
 
-A \emph{transaction} is the fundamental unit of state change in a 
-blockchain: a cryptographically signed instruction issued by a participant 
-that records the transfer of value or data between addresses. Each 
-transaction is broadcast to the network, validated by nodes, and 
-permanently written into a block, after which it becomes immutable.
+A \emph{transaction} is the fundamental unit of state change in a blockchain: a cryptographically signed instruction issued by a participant that records the transfer of value or data between addresses. Every user in the network possesses a key pair: a private key, which must be kept confidential, and a corresponding public key that serves as the user's verifiable identity. When a user wishes to issue a transaction, the process follows two phases. In the \emph{signing phase}, the sender encrypts the transaction data with their private key, producing a digital signature that is broadcast alongside the original payload. In the \emph{verification phase}, any recipient or node can validate the signature using the sender's public key, confirming both the authenticity of the sender and that the data has not been tampered with in transit. The algorithm most widely adopted for this purpose in blockchain systems is the Elliptic Curve Digital Signature Algorithm (ECDSA)\footnote{\url{https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm}}. Each signed transaction is broadcast to the network, validated by the nodes, and permanently written in a block, after which it becomes immutable.
 
 \subsubsection*{Merkle Tree}
 
-The lower portion of Figure~\ref{fig:block_eth} expands the block's 
-transaction set into a \emph{Merkle tree}: a binary tree in which each 
-leaf holds the cryptographic hash of an individual transaction and each 
-internal node holds the hash of its two children's concatenation. Leaf 
-hashes are combined pairwise and re-hashed level by level until a single 
-\emph{Merkle root} remains. Because every internal node is derived from 
-its children, any alteration to a transaction propagates deterministically 
-upward, changing the root and invalidating the block header --- making the 
-root a binding cryptographic commitment to the entire transaction set 
-\cite{merkle1987, nakamoto2008}.
+The lower portion of Figure~\ref{fig:block_eth} expands the block's transaction set into a \emph{Merkle tree}: a binary tree in which each leaf holds the cryptographic hash of an individual transaction and each internal node holds the hash of its two children's concatenation. Leaf hashes are combined pairwise and re-hashed level by level until a single \emph{Merkle root} remains. The integrity guaranties of this construction rest on three properties of the underlying hash function: \emph{preimage resistance}, which makes it computationally infeasible to recover an input from its digest; \emph{second-preimage resistance}, which prevents an attacker from substituting a different transaction that produces the same leaf hash; and \emph{collision resistance}, which ensures that no two distinct inputs can be found sharing a hash value. Because every internal node is derived from its children through such a function, any alteration of a transaction propagates deterministically upward, changing the root and invalidating the block header, making the root a binding cryptographic commitment to the entire transaction set \cite{merkle1987, nakamoto2008}.
 
-This design enables inclusion proofs of size $O(\log n)$: to 
-verify that a transaction belongs to a block, a verifier needs only the 
-transaction itself, the header's Merkle root, and the minimal set of 
-sibling hashes along the path from leaf to root --- not the full block. 
-This allows lightweight validation without downloading entire blocks, 
-saving bandwidth and storage. Furthermore, the previous-hash pointer in 
-each header secures global block ordering: any retroactive modification 
-breaks the chain link to all subsequent blocks, making tampering 
-immediately detectable by any honest node in the network 
-\cite{nakamoto2008, merkle_tree}.
+This design enables inclusion proofs of size $O(\log_2 n)$, where the amount of data blocks is denoted by \emph{n}. To verify that a transaction belongs to a block, a verifier needs only the transaction itself, the header's Merkle root, and the minimal set of sibling hashes along the path from leaf to root. By contrast, a naive linear hash chain would force the verifier to re-hash every element sequentially, resulting in $O(n)$ verification cost. This logarithmic efficiency allows lightweight validation without downloading entire blocks, saving bandwidth and storage. Furthermore, the previous-hash pointer in each header secures global block ordering. Any retroactive modification breaks the chain link to all subsequent blocks, making tampering immediately detectable by any honest node in the network \cite{merkle_tree}.
 
 
 \subsection{Consensus mechanisms}
 \label{subsec:consensus}
-Once the block structure is established, the network must agree on which block to append next --- a process governed by the \emph{consensus mechanism}, the design of which depends on the blockchain's trust model. Across different deployment models, two following dominant consensus families have emerged.
+Once the block structure is established, the network must agree on which block to append next. This process is governed by the \emph{consensus mechanism}, the design of which depends on the blockchain trust model. Across different deployment models, two dominant consensus families have emerged.
 
 \subsubsection*{Proof of Work}
-Proof-of-Work (PoW) is the oldest and most widely adopted consensus mechanism in blockchain networks, first introduced by Nakamoto as the backbone of Bitcoin \cite{nakamoto2008}. The fundamental principle of PoW is straightforward: nodes in a peer-to-peer network, commonly referred to as \textit{miners}, compete to solve a computationally intensive cryptographic puzzle. This puzzle requires finding a nonce value $x$ such that the hash of the block header $y = f(x)$ satisfies a predefined difficulty target --- typically that the resulting hash begins with a certain number of leading zeros. The first miner to find a valid solution broadcasts it to the network, and upon verification by other nodes, the new block is appended to the chain. The successful miner is rewarded with newly minted cryptocurrency, incentivising continued participation \cite{sabry2023}.
+Proof-of-Work (PoW) is the oldest and most widely adopted consensus mechanism in blockchain networks, first introduced by Nakamoto as the backbone of Bitcoin \cite{nakamoto2008}. The fundamental principle of PoW is straightforward: nodes in a peer-to-peer network, commonly referred to as \textit{miners}, compete to solve a computationally intensive cryptographic puzzle. This puzzle requires finding a nonce value $x$ such that the hash of the block header $y = f(x)$ satisfies a predefined difficulty target --- typically that the resulting hash begins with a certain number of leading zeros. The first miner to find a valid solution broadcasts it to the network, and upon verification by other nodes, the new block is appended to the chain. The successful miner is rewarded with newly minted cryptocurrency, incentivizing continued participation \cite{sabry2023}.
 
-Each block in the chain contains the cryptographic hash of the preceding block, a timestamped list of validated transactions, and the winning nonce. This chaining structure ensures immutability: altering any historical record would require recomputing the proof-of-work for that block and every subsequent block, a feat that is computationally infeasible for any actor lacking a majority of the network's hashing power \cite{sabry2023}.
-
-Despite its security guarantees, PoW carries a significant drawback: the competitive nature of the puzzle-solving process demands enormous and continuously growing energy consumption. As noted by Truby \cite{SCHINCKUS2021111682}, the vast majority of blockchain-based projects in the energy sector---49 out of 140 reviewed cases---relied on PoW, paradoxically consuming large amounts of electricity while simultaneously aiming to promote renewable energy adoption. This contradiction has prompted substantial debate around the environmental sustainability of PoW-based systems and has accelerated research into alternative or modified consensus protocols \cite{SCHINCKUS2021111682}.
- 
-
-\begin{figure}[!htbp]
+\begin{figure}[!h]
     \centering
     \includegraphics[width=0.9\linewidth]{images/PoW.jpg}
     \caption{Proof of Work mechanism flow \cite{pow_ledger}.}
     \label{fig:pow}
 \end{figure}
 
-Figure~\ref{fig:pow} illustrates the operational flow of the PoW mechanism. A network server broadcasts a cryptographic puzzle defined as finding $x$ such that $y = f(x)$ to a set of competing miners ($x_1$, $x_2$, $x_3$). Each miner independently attempts to solve the puzzle using their available computational resources and submits their proposed solution back to the network. The server then verifies each submission: in the example shown, only the solution provided by miner $x_2$ is deemed correct, while those of $x_1$ and $x_3$ are rejected. The winning miner is subsequently awarded a token reward, reflecting the incentive structure that underpins participation in the PoW process.
+Figure~\ref{fig:pow} illustrates this process concretely: a puzzle is broadcast to three competing miners ($x_1$, $x_2$, $x_3$), each of whom independently computes a candidate solution. Only the submission from $x_2$ satisfies the difficulty condition, while those of $x_1$ and $x_3$ are rejected --- demonstrating the inherently competitive and probabilistic nature of block production under PoW.
 
+Despite its security guarantees, PoW carries a significant drawback: the competitive puzzle-solving process demands enormous and continuously growing computational power. As the chain lengthens, information from past blocks feeds into each new cryptographic puzzle, making successive puzzles progressively harder and driving miners toward specialized hardware---from ordinary CPUs in Bitcoin's early days to purpose-built Application-Specific Integrated Circuits (ASICs) that cannot be repurposed once obsolete \cite{SCHINCKUS2021111682}. This escalating difficulty concentrates mining into large pools that synchronize their resources to remain competitive, and the electricity consumed by both the computation itself and the cooling infrastructure required by these facilities has reached the scale of entire nations---Bitcoin's annual consumption alone rivals that of Sweden \cite{SCHINCKUS2021111682}.
 
+The environmental cost extends beyond raw electricity. Schinckus \cite{SCHINCKUS2021111682} proposes a holistic Life Cycle Assessment that captures the full footprint of PoW mining:
+\begin{equation}
+    \mathrm{LCA}_t = F_{\mathrm{Cool},\,t} + F_{e\text{-waste},\,t} + F_{\mathrm{electricity},\,t} + \frac{dC_a}{dt},
+    \label{eq:lca_pow}
+\end{equation}
+where $F_{\mathrm{electricity},\,t}$ represents CO\textsubscript{2} emissions from the mining computation, $F_{\mathrm{Cool},\,t}$ accounts for the cooling systems that mining farms require, $F_{e\text{-waste},\,t}$ captures emissions from the rapidly obsolete ASIC hardware that cannot be reused as general-purpose components, and $\frac{dC_a}{dt}$ describes additional atmospheric CO\textsubscript{2} arising when new power plants---even renewable ones---are constructed specifically to serve mining demand. This last term is particularly subtle: while hydropower or solar installations do not burn fossil fuels during operation, their construction alters land use and natural habitats, affecting the capacity of ecosystems to act as carbon sinks \cite{SCHINCKUS2021111682}. These concerns have already prompted concrete policy responses, with China and Iran banning mining operations outright in 2021 due to their strain on national electricity grids and emissions targets \cite{SCHINCKUS2021111682}.
 
-\subsection{Proof of Stake}
+\subsubsection*{Proof of Stake}
+Proof-of-Stake (PoS) emerged as a direct response to the energy and scalability limitations of PoW. Instead of competing through computational power, validators lock up (\textit{stake}) a quantity of the network's native cryptocurrency as collateral, and the probability of being selected to propose the next block is proportional to the size of that stake~\cite{nguyen2019pos}. This design replaces electricity with economic commitment as the primary security mechanism, yielding several distinctive properties:
+\begin{itemize}
+    \item \textbf{Stake-weighted selection.} A validator's chance of proposing a block grows with the amount of cryptocurrency they have staked, aligning influence with economic exposure to the network.
+    \item \textbf{Fee-based rewards.} Unlike PoW miners, who receive newly minted coins as block rewards, PoS validators are primarily compensated through transaction fees collected from the blocks they validate.
+    \item \textbf{Energy efficiency at the cost of maturity.} PoS eliminates the need for specialized mining hardware and its associated electricity consumption, though the mechanism has a shorter track record and its long-term security guarantees are still being studied.
+\end{itemize}
 
-Proof-of-Stake (PoS) emerged as a direct response to the energy and scalability limitations inherent in Proof-of-Work. Rather than requiring participants to expend computational power, PoS achieves consensus by requiring validators to lock up, or \textit{stake}, a quantity of the network's native cryptocurrency as collateral~\cite{nguyen2019pos}. The probability of a node being selected to propose and validate the next block is proportional to the size of its stake. This fundamental shift replaces the physical resource of electricity with the economic stake as the primary security guaranty of the network.
+The most prominent real-world transition to PoS occurred on Ethereum. Under its original PoW design, the network consumed an estimated 113 terawatt-hours of electricity annually while processing only about 15 transactions per second---figures that proved unsustainable for a platform hosting a rapidly growing ecosystem of decentralized applications~\cite{mit_merge}. On 15 September 2022, the Ethereum development community completed \textit{The Merge}, a long-planned switch to PoS that proceeded without major disruption to the live network and reduced energy consumption by over 99\%\footnote{\url{https://en.wikipedia.org/wiki/Proof_of_stake}}.
 
-Ethereum originally operated on a PoW consensus mechanism, sharing its underlying architecture with Bitcoin. However, PoW imposed significant constraints on the network: Ethereum consumed an estimated 113 terawatt-hours of electricity annually, and its throughput was limited to approximately 15 transactions per second, which proved inadequate for the growing ecosystem of decentralized applications built on top of the platform~\cite{mit_merge}. To address these issues, the Ethereum development community pursued a long-planned transition to PoS, ultimately completed on 15 September 2022 in an event referred to as \textit{The Merge}. The transition went smoothly without major disruptions to the live network, and Ethereum's energy consumption was subsequently reduced by over 99\%\footnote{\url{https://en.wikipedia.org/wiki/Proof_of_stake}}.
-
-Under Ethereum's current PoS implementation, a validator must stake a minimum of 32~ETH into a dedicated smart contract in order to participate in the consensus process. Block proposers are selected pseudo-randomly using a mechanism called RANDAO, and once a block is broadcast, the remaining validators attest to its validity. Finality is achieved through the Casper Friendly Finality Gadget (Casper-FFG) protocol: a block becomes finalized when two consecutive checkpoint blocks have been justified by a supermajority (two-thirds) of all staked ETH. Reverting a finalized block would require an attacker to burn at least one-third of the total staked supply, making such an attack economically devastating and effectively infeasible~\cite{ethereum_pos}.
-
-
-
-
+Under Ethereum's current PoS implementation, a validator must deposit a minimum of 32~ETH into a dedicated smart contract. Block proposers are then selected pseudo-randomly and the remaining validators attest to each proposed block's validity. Finality is enforced by the Casper Friendly Finality Gadget (Casper-FFG): a block is considered final once two consecutive checkpoint blocks have been justified by a supermajority---two-thirds---of all staked ETH. Reverting a finalized block would require an attacker to burn at least one-third of the total staked supply, making such an attack economically devastating and practically infeasible~\cite{ethereum_pos}.
 
 With a solid understanding of how blocks are structured and how consensus mechanisms work, we can turn our attention to the next layer of the architecture: how transactions and smart contract code are actually executed.
 
 \section{Ethereum Virtual Machine}
+\label{sec:evm}
 The Ethereum Virtual Machine (EVM) is a deterministic state machine that executes the bytecode of the smart contract identically on all nodes \cite{wood2014yellow}. However, it is not Turing complete in the classical sense: execution is strictly resource-bounded by gas - every instruction has a metered gas cost, and execution halts once the supplied gas is exhausted. 
 This gas-bounded execution guarantees termination and prevents non-halting or deliberately expensive programs from stalling the network; accordingly, the EVM is often described as \emph{quasi–Turing complete} (computationally universal only under a finite gas budget) \cite{antonopoulos2018mastering, wood2014yellow}.
 
@@ -272,8 +229,9 @@ This subsection introduces types of attahc with vu;nerable examples of code. It 
 
 \subsubsection*{Reentrancy attack}
 
-This type of attack occurs when a contract makes an external call before it has finished updating its own state. The callee---which may be a contract under attacker control---can re-enter the caller inside the same transaction and observe or manipulate the intermediate, stale state~\cite{luu2016making, atzei2017survey}. The classic pattern involves a \texttt{withdraw} function that transfers Ether \emph{before} reducing the caller's recorded balance.
+This type of attack occurs when a contract makes an external call before it has finished updating its own state. The calleeб which may be a contract under attacker control, can re-enter the caller inside the same transaction and observe or manipulate the intermediate, stale state~\cite{luu2016making, atzei2017survey}. The classic pattern involves a \texttt{withdraw} function that transfers Ether before reducing the caller's recorded balance.
 
+\paragraph{Vulnerable victim contract}
 \begin{minted}[fontsize=\small,breaklines]{solidity}
 contract VulnerableVault {
     mapping(address => uint256) public balances;
@@ -321,24 +279,14 @@ contract Attacker {
 }
 \end{minted}
 
-The fix is straightforward: apply the \emph{checks-effects-interactions} (CEI) pattern---update all internal state \emph{before} making any external call. An additional defense is an explicit reentrancy guard\footnote{\url{TODO}}.
+The fix is straightforward: apply the \emph{checks-effects-interactions} pattern~---~update all internal states \emph{before} making any external call. An additional defense is an explicit reentrancy guard\footnote{\url{https://docs.openzeppelin.com/contracts/3.x/api/utils#ReentrancyGuard}}.
 
-The most consequential reentrancy exploit in Ethereum's history occurred on 17 June 2016, when an attacker drained approximately 3.6 million ETH (valued at \$60 million at the time) from \emph{The DAO}, a decentralized autonomous investment fund that had raised \$150 million from more than 11,000 contributors~\cite{dao_hack_coindesk, atzei2017survey}. The attacker exploited a recursive split function that transferred Ether before updating the caller's token balance. Because no checks-effects-interactions discipline was applied, the attacker's malicious contract could call back into the withdrawal function repeatedly within a single transaction. The incident was so severe that it caused the Ethereum community to execute a contentious hard fork at block 1,920,000, reverting the stolen transactions---an event that permanently split the network into Ethereum (ETH) and Ethereum Classic (ETC)~\cite{dao_hack_gemini}.
-
-%------------------------------------------------------------------
-\subsubsection*{Access Control}
-
-Access control vulnerabilities arise when sensitive functions lack sufficient authorization checks, or when those checks can be circumvented due to incorrect state, incorrect use of \texttt{msg.sender}, or unsafe delegation patterns~\cite{atzei2017survey, consensys_best_practices}. A common mistake in early Solidity code was naming a constructor incorrectly (using the contract name as a function name), effectively making the ``constructor'' a public function callable by anyone after deployment.
-
-
-
-In July 2017, an attacker exploited an access control flaw in Parity Technologies' multi-signature wallet contract to steal approximately 153,037 ETH (\$30 million at the time) from three high-profile ICO-funded projects: Aeternity, Edgeless, and Swarm City~\cite{parity_hack_openzeppelin}. The wallet contract separated its logic into a shared library using \texttt{delegatecall}, but the library's initialization function was left unprotected---callable by anyone. The attacker sent two transactions: the first claimed ownership of the multi-sig by calling the exposed initializer; the second moved all funds to an address under their control. The attack could have been prevented by not using \texttt{delegatecall} as a catch-all forwarding mechanism, and instead explicitly defining which library functions could be invoked externally. 
+% The most consequential reentrancy exploit in Ethereum's history occurred on 17 June 2016, when an attacker drained approximately 3.6 million ETH (valued at \$60 million at the time) from \emph{The DAO}, a decentralized autonomous investment fund that had raised \$150 million from more than 11,000 contributors~\cite{dao_hack_coindesk, atzei2017survey}. The attacker exploited a recursive split function that transferred Ether before updating the caller's token balance. Because no checks-effects-interactions discipline was applied, the attacker's malicious contract could call back into the withdrawal function repeatedly within a single transaction. The incident was so severe that it caused the Ethereum community to execute a contentious hard fork at block 1,920,000, reverting the stolen transactions---an event that permanently split the network into Ethereum (ETH) and Ethereum Classic (ETC)~\cite{dao_hack_gemini}.
 
 %------------------------------------------------------------------
 \subsubsection*{Denial of Service}
 
-\paragraph{Mechanism.}
-Denial of service (DoS) in Ethereum manifests as making a critical operation consistently revert or prohibitively expensive. One prevalent pattern involves iterating over an unbounded array to distribute funds or update state; an attacker who controls one entry in that array can cause the iteration to fail by forcing a revert, blocking all other participants~\cite{atzei2017survey}.
+Denial of service (DoS) in Ethereum manifests itself as making a critical operation consistently revert or prohibitively expensive. One prevalent pattern involves iterating over an unbounded array to distribute funds or update state; an attacker who controls one entry in that array can cause the iteration to fail by forcing a revert, blocking all other participants~\cite{atzei2017survey}.
 
 \begin{minted}[fontsize=\small,breaklines]{solidity}
 contract Distributor {
@@ -360,7 +308,7 @@ contract Distributor {
 
 The standard mitigation is a \emph{pull-payment} (withdrawal) pattern: instead of the contract pushing funds to all recipients in a loop, each recipient calls a \texttt{claimPayment()} function individually, so a malicious recipient can only block their own withdrawal.
 
- write smth that what can be wrong and maube it is nov very sufficient for attacker balance economically
+
 
 %------------------------------------------------------------------
 \subsubsection*{Front-running}
