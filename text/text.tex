@@ -215,17 +215,24 @@ Even this trivial piece of code captures the core model, where a transaction tri
 
 In Ethereum, security is not an add-on layer, but a property that must be deliberately engineered into every line of contract code. The EVM's execution model is transparent, deterministic, and adversarially accessible by design: any deployed contract can be inspected, called, and interacted with by anyone on the network. Unlike traditional software, deployed smart contracts are typically immutable, meaning that a discovered vulnerability cannot simply be patched with a software update. The financial stakes compound this risk: contracts routinely hold millions of dollars in assets, making them high-value targets that attract sophisticated adversaries. The history of Ethereum is therefore also a history of costly security failures, many of which trace back to a small set of recurring patterns. The following sections provide a structured treatment of these patterns, grounding each in concrete code, and reference notable real-world incidents in which they were exploited to steal significant funds.
 
-%------------------------------------------------------------------
-\subsection{Vulnerability Taxonomies}
-%------------------------------------------------------------------
+% %------------------------------------------------------------------
+% \subsection{Vulnerability Taxonomies}
+% %------------------------------------------------------------------
 
-Smart contract security research and industry practice have converged on shared classification frameworks for recurring vulnerability types. Two widely used resources are the Smart Contract Weakness Classification (SWC) registry and the OWASP Smart Contract Top 10, both of which provide structured identifiers, short descriptions, and canonical examples for common issue classes~\cite{swc_registry, owasp_sc_top10}. A shared taxonomy enables consistent labeling in audit reports, static analysis tools, and vulnerability datasets. It also makes retrieval-based systems---such as the knowledge base constructed later in this thesis---easier to query and evaluate.
+% Smart contract security research and industry practice have converged on shared classification frameworks for recurring vulnerability types. Two widely used resources are the Smart Contract Weakness Classification (SWC) registry and the OWASP Smart Contract Top 10, both of which provide structured identifiers, short descriptions, and canonical examples for common issue classes~\cite{swc_registry, owasp_sc_top10}. A shared taxonomy enables consistent labeling in audit reports, static analysis tools, and vulnerability datasets. It also makes retrieval-based systems---such as the knowledge base constructed later in this thesis---easier to query and evaluate.
 
-However, taxonomies are imperfect abstractions. Real incidents rarely map cleanly to a single label: an exploit may combine oracle manipulation with reentrancy, or rely on an access-control mistake that only becomes exploitable because of a separate accounting error. We therefore treat taxonomies as an organizational tool rather than a complete model of risk, and we emphasize actionable vulnerability \emph{patterns} that are relevant during both manual and automated code analysis~\cite{atzei2017survey, perez2021smart}.
+% However, taxonomies are imperfect abstractions. Real incidents rarely map cleanly to a single label: an exploit may combine oracle manipulation with reentrancy, or rely on an access-control mistake that only becomes exploitable because of a separate accounting error. We therefore treat taxonomies as an organizational tool rather than a complete model of risk, and we emphasize actionable vulnerability \emph{patterns} that are relevant during both manual and automated code analysis~\cite{atzei2017survey, perez2021smart}.
 
 %------------------------------------------------------------------
 \subsection{Common Vulnerability Types}
-This subsection introduces types of attahc with vu;nerable examples of code. It is not recommentded (restricted0 to use it in production code. Lewarn purpose only code.
+There are three main sets of vulnerabilities
+\begin{itemize}
+    \item \textbf{Solidity related} - 
+    \item \textbf{EVM related} -
+    \item \textbf{Ethereum Blockchain Design related} - 
+\end{itemize}
+
+This subsection introduces types of attahc with vu;nerable examples of code. It is not recommentded (restricted0 to use it in production code. Lewarn purpose only code. 
 
 \subsubsection*{Reentrancy attack}
 
@@ -328,64 +335,120 @@ The preceding discussion establishes that well-known smart contract vulnerabilit
 \chapter{Code Analysis}
 \label{ch:code-analysis}
 
-% Goal: describe analysis methods you'll reference when positioning Wake/Wake-AI and your RAG design.
+The security analysis of software systems, particularly smart contracts deployed on blockchain platforms, relies on a diverse set of analytical techniques that have evolved over decades of programming language research. This chapter provides a comprehensive overview of the foundational methods for code analysis, establishing the theoretical and practical foundations necessary to understand different approaches for vulnerability detection. The discussion is organized around three complementary paradigms: static analysis, which reasons about program behavior without execution; dynamic analysis, which observes actual runtime behavior; and formal verification, which provides mathematical guaranties about program correctness.
 
-The security analysis of software systems, particularly smart contracts deployed on blockchain platforms, relies on a diverse set of analytical techniques that have evolved over decades of programming language research. This chapter provides a comprehensive overview of the foundational methods for code analysis, establishing the theoretical and practical groundwork necessary for understanding how modern tools—including Wake and its AI-augmented extensions—approach vulnerability detection in Solidity smart contracts. We organise our discussion around three complementary paradigms: static analysis, which reasons about program behaviour without execution; dynamic analysis, which observes actual runtime behaviour; and formal verification, which provides mathematical guarantees about program correctness.
+% \section{Static Analysis}
+% \label{sec:static-analysis}
+
+% Static analysis encompasses techniques that examine source code, bytecode, or other program representations to infer properties about all possible executions without actually running the program~\cite{nielson1999principles}. The appeal of static analysis lies in its soundness guarantees—a sound static analyser will never miss a bug of the class it is designed to detect—and its ability to reason about infinite execution paths. However, this power comes at the cost of precision: static analysers may report false positives, flagging code as potentially buggy when no actual vulnerability exists~\cite{rice1953classes}.
+
+
+% \subsection{Abstract Syntax Tree}
+% \label{subsec:ast}
+
+% The abstract syntax tree (AST) serves as the foundational representation for most static analysis techniques. An AST is a hierarchical tree structure that captures the syntactic structure of source code while abstracting away concrete details such as whitespace, comments, and parentheses that do not affect program semantics~\cite{aho2006compilers}. Each node in the tree corresponds to a syntactic construct—a function declaration, an assignment statement, a binary expression—and the tree's structure reflects the nesting and composition of these constructs.
+
+% \begin{figure}[!h]
+%     \centering
+%     \includegraphics[width=7cm, height=8cm]{images/ast.pdf}
+%     \caption{Abstract Syntax Tree example.}
+%     \label{fig:ast_diagram}
+% \end{figure}
+
+% However, the AST has significant limitations for semantic analysis. Because it captures only syntactic structure, it cannot directly represent the flow of data through a program or the possible paths of control flow. Two syntactically similar code fragments may exhibit vastly different runtime behaviours depending on the values of variables and the paths taken through conditional statements. These limitations motivate the use of more semantically rich representations.
+
+% \subsection{Intermediate Representation}
+% \label{subsec:ir}
+
+% Intermediate representations (IRs) bridge the gap between source-level syntax and low-level execution semantics by normalizing diverse syntactic constructs into a uniform format amenable to analysis~\cite{muchnick1997advanced}. A well-designed IR strips away syntactic sugar, resolves implicit operations, and exposes the underlying computational structure of the program. {FIX OLD CITE}
+
+% [TODO smth interesting in general related to code]
+
+% \subsection{Control Flow Analysis}
+% \label{subsec:control-flow}
+
+% Control flow analysis (CFA) determines the possible paths of execution through a program, representing this information as a control flow graph (CFG) where nodes represent basic blocks—sequences of instructions with no internal branching—and edges represent possible transfers of control~\cite{allen1970control}. The CFG provides the structural backbone for many subsequent analyses, enabling reasoning about path reachability, loop structure, and the ordering of operations.
+
+% [Again old cite, if you cite ,you can directly copy text from book or web page]
+
+
+% The call graph, a related structure that captures the calling relationships between functions, extends control flow analysis to the interprocedural level. Each node in the call graph represents a function, and edges represent potential call relationships. In the presence of dynamic dispatch—common in object-oriented languages and in Solidity's inheritance system—call graph construction becomes challenging, as the target of a call may depend on runtime type information~\cite{grove2001framework}.
+% entially leading to precision loss.
+
+% [TODO some grapth with explanation, image]
+
+% Reachability analysis over the CFG determines which program points can potentially be reached from a given starting point. This analysis is fundamental for pruning infeasible paths from consideration and for establishing preconditions under which vulnerabilities can be triggered. If a vulnerable code pattern exists only on unreachable paths, it poses no actual security risk.
+
+% \subsection{Data Flow Analysis}
+% \label{subsec:data-flow}
+
+% Data flow analysis tracks how values flow through a program, determining at each program point which values may be produced and consumed~\cite{kildall1973unified}. The classic formulation employs the monotone framework, which computes fixed points over the lattice of possible data flow facts by iteratively propagating information along CFG edges until no further changes occur~\cite{kam1977monotone}.
+
+% The reaching definitions analysis, a foundational data flow analysis, determines for each use of a variable which definitions (assignments) might reach that use. This information enables detection of uninitialised variables, dead code, and various forms of data dependency. For smart contract security, reaching definitions help establish whether user-controlled input can influence security-critical operations~\cite{yamaguchi2014modeling}.
+
+% Taint analysis, a specialisation of data flow analysis, tracks the flow of untrusted data from sources (such as transaction parameters) to security-sensitive sinks (such as external calls or state modifications)~\cite{schwartz2010all}. In the smart contract domain, taint sources include \texttt{msg.sender}, \texttt{msg.value}, \texttt{calldata}, and return values from external calls. Sinks include operations that transfer value, modify access control state, or perform external calls. A taint flow from source to sink without proper sanitisation indicates a potential vulnerability.
+
+% Data flow analysis faces particular challenges in Solidity due to storage aliasing. Solidity's storage model maps state variables to 256-bit storage slots according to complex packing rules, and dynamic data structures such as mappings and arrays use hash-based slot computation~\cite{antonopoulos2018mastering}. Two syntactically distinct storage references may alias to the same slot, creating data flow paths invisible to na\"ive analysis. Precise handling of storage aliasing requires modelling Solidity's storage layout rules and potentially employing alias analysis techniques~\cite{andersen1994program}.
+
+% \paragraph{Vulnerable `withdraw()` function}
+% \begin{minted}[fontsize=\small,breaklines]{solidity}
+% function withdraw(uint _amount) public {
+%   if(balances[msg.sender] >= _amount) {
+%     (bool result,) = msg.sender.call{value:_amount}("");
+%     if(result) {
+%       _amount;
+%     }
+%     balances[msg.sender] -= _amount;
+%   }
+% }
+% \end{minted}
 
 \section{Static Analysis}
 \label{sec:static-analysis}
 
-Static analysis encompasses techniques that examine source code, bytecode, or other program representations to infer properties about all possible executions without actually running the program~\cite{nielson1999principles}. The appeal of static analysis lies in its soundness guarantees—a sound static analyser will never miss a bug of the class it is designed to detect—and its ability to reason about infinite execution paths. However, this power comes at the cost of precision: static analysers may report false positives, flagging code as potentially buggy when no actual vulnerability exists~\cite{rice1953classes}.
+Static analysis encompasses techniques that examine source code, bytecode, or other program representations to infer properties about all possible executions without actually running the program. The appeal of static analysis lies in its advantage of never missing a bug of the class it is designed to detect. However, this power comes at a well-known theoretical cost. \emph{Rice's theorem}\footnote{\url{https://en.wikipedia.org/wiki/Rice\%27s_theorem}} establishes that any non-trivial semantic property of programs is undecidable in the general case, so every practical static analyzer must approximate. The consequence is that tools may report \textit{false positives}, flagging code as potentially buggy when no real vulnerability exists. Tuning this trade-off between soundness and precision is a central design challenge in every static analysis tool~\cite{nielson1999principles,rice1953classes}.
+
+The rest of section decomposes the standard pipeline through which static analyzers process smart contract code: parsing it into a syntax tree, lowering it to an intermediate representation, and then applying control flow and data flow analyzes to reason about the program's behavior.
 
 
 \subsection{Abstract Syntax Tree}
 \label{subsec:ast}
 
-The abstract syntax tree (AST) serves as the foundational representation for most static analysis techniques. An AST is a hierarchical tree structure that captures the syntactic structure of source code while abstracting away concrete details such as whitespace, comments, and parentheses that do not affect program semantics~\cite{aho2006compilers}. Each node in the tree corresponds to a syntactic construct—a function declaration, an assignment statement, a binary expression—and the tree's structure reflects the nesting and composition of these constructs.
+The abstract syntax tree (AST) is the first structured representation that an analyzer builds from raw source code. It is a hierarchical tree whose nodes correspond to syntactic constructs, while abstracting semantically irrelevant details such as whitespace, comments, and parentheses~\cite{aho2006compilers}. The Solidity compiler itself produces a JSON-formatted AST that downstream tools can consume directly.
 
 \begin{figure}[!h]
     \centering
-    \includegraphics[width=7cm, height=8cm]{images/ast.pdf}
+    \includegraphics[width=6cm, height=7cm]{images/ast.pdf}
     \caption{Abstract Syntax Tree example.}
     \label{fig:ast_diagram}
 \end{figure}
 
-However, the AST has significant limitations for semantic analysis. Because it captures only syntactic structure, it cannot directly represent the flow of data through a program or the possible paths of control flow. Two syntactically similar code fragments may exhibit vastly different runtime behaviours depending on the values of variables and the paths taken through conditional statements. These limitations motivate the use of more semantically rich representations.
+However, as mentioned, the AST captures only the syntactic structure. It cannot directly represent the flow of data through a program or the paths that execution might take at runtime. Two syntactically similar code fragments may behave entirely differently depending on variable values and branching outcomes. These limitations motivate the use of semantically richer representations.
 
 \subsection{Intermediate Representation}
 \label{subsec:ir}
 
-Intermediate representations (IRs) bridge the gap between source-level syntax and low-level execution semantics by normalizing diverse syntactic constructs into a uniform format amenable to analysis~\cite{muchnick1997advanced}. A well-designed IR strips away syntactic sugar, resolves implicit operations, and exposes the underlying computational structure of the program. {FIX OLD CITE}
-
-[TODO smth interesting in general related to code]
+Intermediate representation (IR) bridges the gap between source-level syntax and low-level execution semantics by normalizing various syntactic constructs into a uniform format amenable to analysis~\cite{muchnick1997advanced}. A well-designed IR removes syntactic sugar, resolves implicit type conversions, and exposes the underlying computational structure. A particularly important technique in modern IR design is \textit{Static Single Assignment} (SSA) form, introduced by Cytron et al. in 1991, in which every variable is assigned exactly once and special $\phi$-functions are inserted at control flow merge points to reconcile multiple reaching definitions. SSA simplifies many things, such as constant propagation, dead code elimination, and use-def chain construction---because each use of a variable points unambiguously to a single definition~\cite{cytron1991ssa}. [TODO add smtjh + smooth transition]
 
 \subsection{Control Flow Analysis}
 \label{subsec:control-flow}
 
-Control flow analysis (CFA) determines the possible paths of execution through a program, representing this information as a control flow graph (CFG) where nodes represent basic blocks—sequences of instructions with no internal branching—and edges represent possible transfers of control~\cite{allen1970control}. The CFG provides the structural backbone for many subsequent analyses, enabling reasoning about path reachability, loop structure, and the ordering of operations.
+Control flow analysis determines the possible execution paths through a program, typically encoding them as a \textit{control flow graph} (CFG). In a CFG, each node represents a \textit{basic block}---a maximal sequence of instructions with no internal branching---and directed edges represent possible transfers of control between blocks~\cite{allen1970control}. The CFG provides the structural backbone upon which most subsequent analyses operate: loop detection, dominance computation, and path-sensitive reasoning all depend on it.
 
-[Again old cite, if you cite ,you can directly copy text from book or web page]
+At the interprocedural level, the \textit{call graph} extends this view by capturing the calling relationships between functions. Each node represents a function and each edge a potential call site. Constructing an accurate call graph is particularly challenging in Solidity, where inheritance hierarchies, function modifiers, and low-level \texttt{call}/\texttt{delegatecall} instructions can make the target of an invocation ambiguous or even determined at runtime~\cite{grove2001framework}. Overapproximating the call graph---assuming that every possible target is reachable---preserves soundness but introduces spurious paths that can degrade precision.
 
+\textit{Reachability analysis} over the CFG then determines which program points can actually be reached from a given entry. This step is fundamental for pruning infeasible paths: if a vulnerable code pattern exists only on an unreachable branch, it poses no real security risk and should not be reported. In practice, however, precisely establishing reachability in the presence of complex conditions remains computationally expensive, and most tools settle for conservative approximations.
 
-The call graph, a related structure that captures the calling relationships between functions, extends control flow analysis to the interprocedural level. Each node in the call graph represents a function, and edges represent potential call relationships. In the presence of dynamic dispatch—common in object-oriented languages and in Solidity's inheritance system—call graph construction becomes challenging, as the target of a call may depend on runtime type information~\cite{grove2001framework}.
-entially leading to precision loss.
-
-[TODO some grapth with explanation, image]
-
-Reachability analysis over the CFG determines which program points can potentially be reached from a given starting point. This analysis is fundamental for pruning infeasible paths from consideration and for establishing preconditions under which vulnerabilities can be triggered. If a vulnerable code pattern exists only on unreachable paths, it poses no actual security risk.
 
 \subsection{Data Flow Analysis}
 \label{subsec:data-flow}
 
-Data flow analysis tracks how values flow through a program, determining at each program point which values may be produced and consumed~\cite{kildall1973unified}. The classic formulation employs the monotone framework, which computes fixed points over the lattice of possible data flow facts by iteratively propagating information along CFG edges until no further changes occur~\cite{kam1977monotone}.
+Where control flow analysis maps the \textit{structure} of possible executions, data flow analysis tracks how \textit{values} propagate through that structure. The classical formulation, due to Kildall~\cite{kildall1973unified}, computes fixed points over a lattice of data flow facts by iteratively propagating information along CFG edges until convergence. Kam and Ullman~\cite{kam1977monotone} later formalised the conditions under which this iterative process is guaranteed to terminate and produce a sound result---the so-called monotone framework.
 
-The reaching definitions analysis, a foundational data flow analysis, determines for each use of a variable which definitions (assignments) might reach that use. This information enables detection of uninitialised variables, dead code, and various forms of data dependency. For smart contract security, reaching definitions help establish whether user-controlled input can influence security-critical operations~\cite{yamaguchi2014modeling}.
+A foundational instance of data flow analysis is \textit{reaching definitions}, which determines for each use of a variable which assignments might have produced the value being read. This information underpins the detection of uninitialised variables, dead code, and various data dependency patterns~\cite{yamaguchi2014modeling}. \textit{Taint analysis} specialises this idea further by distinguishing untrusted \textit{sources}---such as \texttt{msg.sender}, \texttt{msg.value}, and \texttt{calldata} in Solidity---from security-sensitive \textit{sinks}---such as external calls, value transfers, and state modifications. A taint flow that reaches a sink without passing through a sanitising check signals a potential vulnerability~\cite{schwartz2010all}.
 
-Taint analysis, a specialisation of data flow analysis, tracks the flow of untrusted data from sources (such as transaction parameters) to security-sensitive sinks (such as external calls or state modifications)~\cite{schwartz2010all}. In the smart contract domain, taint sources include \texttt{msg.sender}, \texttt{msg.value}, \texttt{calldata}, and return values from external calls. Sinks include operations that transfer value, modify access control state, or perform external calls. A taint flow from source to sink without proper sanitisation indicates a potential vulnerability.
+Data flow analysis in Solidity faces a domain-specific complication: \textit{storage aliasing}. Solidity maps state variables to 256-bit storage slots according to packing rules that depend on type size and declaration order, while dynamic structures like mappings and arrays compute their slot addresses via hashing~\cite{antonopoulos2018mastering}. Two syntactically distinct references may therefore alias to the same physical slot, creating data flow paths that a naïve analyser will miss. Handling this correctly requires modelling Solidity's storage layout and, in sophisticated tools, incorporating alias analysis~\cite{andersen1994program}. As an illustration, consider the following vulnerable \texttt{withdraw()} function, which performs an external call before updating the caller's balance---a classic reentrancy pattern:
 
-Data flow analysis faces particular challenges in Solidity due to storage aliasing. Solidity's storage model maps state variables to 256-bit storage slots according to complex packing rules, and dynamic data structures such as mappings and arrays use hash-based slot computation~\cite{antonopoulos2018mastering}. Two syntactically distinct storage references may alias to the same slot, creating data flow paths invisible to na\"ive analysis. Precise handling of storage aliasing requires modelling Solidity's storage layout rules and potentially employing alias analysis techniques~\cite{andersen1994program}.
-
-\paragraph{Vulnerable `withdraw()` function}
 \begin{minted}[fontsize=\small,breaklines]{solidity}
 function withdraw(uint _amount) public {
   if(balances[msg.sender] >= _amount) {
@@ -398,24 +461,101 @@ function withdraw(uint _amount) public {
 }
 \end{minted}
 
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=13cm, height=6cm]{images/cfg_ddg.pdf}
+    \caption{Comparison between Control Flow and Data Dependancy graphs.}
+    \label{fig:cfg_ddg_diagram}
+\end{figure}
+
+Despite its strengths, static analysis is inherently limited to reasoning about what a program \textit{might} do, not what it \textit{actually} does when executed against concrete input. False positives accumulate as approximations compound across layers of analysis, and a recent large-scale evaluation of eight static application security testing (SAST) tools for Solidity found that even the best-performing tools struggle to balance recall and precision, with business-logic vulnerabilities and protocol-layer flaws largely eluding automated detection~\cite{li2024sast}. Furthermore, static analysis cannot capture behaviors that emerge only at runtime, such as interactions between multiple deployed contracts, oracle responses, or mempool-dependent transaction ordering.
+
+These gaps motivate the complementary use of \textit{dynamic analysis}, which tests programs by executing them against concrete or symbolically generated inputs.
 
 \section{Dynamic Analysis}
 \label{sec:dynamic-analysis}
 
-While static analysis reasons about all possible executions, dynamic analysis observes actual program behaviour during concrete executions. This complementary approach sacrifices soundness—a dynamic analysis can only observe the executions it actually runs—in exchange for precision: the behaviours observed during dynamic analysis represent actual, not merely potential, program behaviour. [TODO cite]
+While static analysis reasons about all possible executions of a program without running it, dynamic analysis takes the opposite approach: it observes actual program behaviour during concrete executions. This complementary perspective sacrifices soundness---a dynamic analysis can only ever observe the executions it actually runs---in exchange for precision, since every behaviour it reports genuinely occurred rather than being a conservative approximation~\cite{ernst2003static}. In practice, the two approaches catch different classes of bugs, which is why mature security workflows typically combine both~\cite{manes2019art}.
 
+For smart contracts, dynamic analysis is especially valuable because it can exercise the \emph{stateful} nature of contracts: real vulnerability triggers often depend on specific sequences of transactions that leave the contract in an exploitable state, something that is difficult to reason about purely from source code.
+
+% ──────────────────────────────────────────────────────────────
 \subsection{Fuzz Testing}
 \label{subsec:fuzz-testing}
 
-Fuzz testing (fuzzing) is a dynamic testing technique that automatically generates test inputs to explore program behaviour and discover bugs [TODO cite smth normal related to text and fuzzing, not book from 1980 year]. Modern fuzzing has evolved significantly from its origins in random input generation, incorporating coverage guidance, constraint solving, and domain-specific knowledge to systematically explore program state space~\cite{manes2019art}.
+Fuzz testing (\emph{fuzzing}) is a dynamic testing technique that automatically generates inputs to drive a program through its execution paths, looking for crashes, assertion violations, or other anomalous behaviour. The idea dates back to Miller~et~al.~\cite{miller1990empirical}, who fed streams of random characters into UNIX utilities and discovered that roughly 25--33\,\% of them crashed---a striking demonstration that even mature software harbours input-handling bugs that simple random testing can expose. Since then, fuzzing has evolved from purely random input generation into a sophisticated family of techniques incorporating coverage guidance, constraint solving, and domain-specific knowledge to systematically explore program state space~\cite{manes2019art}.
 
-[TODO maybe a table with some stats interesting, then refernece and small discussion about it]
+% ── General idea, then smart-contract specifics ──────────────
+Adapting fuzzing to smart contracts introduces a challenge not present in traditional software: \textbf{statefulness}. A conventional fuzzer generates a single input per test case, but a smart contract's behaviour depends on sequences of transactions that cumulatively modify persistent storage on the blockchain. Two calls to the same function can produce entirely different outcomes depending on what transactions preceded them. Effective smart contract fuzzers must therefore generate and mutate \emph{transaction sequences} rather than isolated inputs, substantially expanding the search space~\cite{choi2021smartian}.
 
-Invariant-based fuzzing provides properties that should hold across all reachable states. The fuzzer then attempts to generate transaction sequences that violate these invariants. Common invariants include balance conservation (total value in should equal total value out), access control consistency (only authorised addresses can perform privileged operations), and state machine integrity (the contract should only be in valid states)~\cite{wustholz2020harvey}.
 
-Coverage-guided fuzzing uses feedback from previous executions to guide input generation toward unexplored program regions. By instrumenting the contract to track which code paths are exercised, the fuzzer can prioritise inputs that reach new coverage, systematically expanding the explored state space~\cite{nguyen2020sfuzz}. The combination of coverage guidance with property-based testing provides a powerful technique for discovering subtle vulnerabilities that escape both manual review and pattern-based static analysis.
+Subsequent tools introduced increasingly sophisticated strategies:
 
-Corpus generation and management play crucial roles in fuzzing effectiveness. The corpus—the set of seed inputs from which the fuzzer generates new inputs—significantly influences exploration efficiency. Techniques such as corpus distillation, which removes redundant inputs that do not contribute new coverage, and corpus scheduling, which prioritises inputs likely to lead to new discoveries, improve fuzzing throughput~\cite{rebert2014optimizing}.
+\paragraph{Coverage-guided fuzzing.}
+sFuzz~\cite{nguyen2020sfuzz} adapted the feedback-driven strategy pioneered by AFL for traditional software: after each execution, the fuzzer records which EVM instructions were visited and prioritises inputs that reach new coverage. This coverage-guided loop systematically expands the explored portion of the program, steering the search away from repeatedly exercising the same paths.
+
+\paragraph{Data-flow--aware fuzzing.}
+SMARTIAN~\cite{choi2021smartian} observed that coverage alone is an insufficient signal when transactions share persistent state. It combines a static analysis pass---predicting which transaction orderings are likely to exercise inter-function data dependencies---with a lightweight dynamic data-flow analysis that tracks how values propagate across transactions at runtime. The static pass seeds the fuzzer with promising transaction sequences, and the dynamic feedback refines them, enabling SMARTIAN to uncover vulnerabilities guarded by complex state conditions more effectively than coverage-only fuzzers.
+
+\paragraph{Hybrid fuzzing.}
+ConFuzzius~\cite{torres2021confuzzius}, the first hybrid fuzzer for smart contracts, pairs evolutionary fuzzing with on-the-fly constraint solving. When the evolutionary engine stalls at a branch whose condition it cannot satisfy by mutation alone, ConFuzzius extracts the path constraint via symbolic taint analysis and invokes an SMT solver to produce a satisfying input. This input is fed back into the mutation pool so the fuzzer can continue past the roadblock. Evaluated against 128 curated contracts and 21\,000 real-world contracts, ConFuzzius detected up to 23\,\% more bugs than purely symbolic or purely fuzzing-based tools, and achieved up to 69\,\% higher code coverage.
+
+\paragraph{Snapshot-based fuzzing.}
+A persistent bottleneck for stateful fuzzers is \emph{re-execution overhead}: to test a transaction deep in a sequence, the fuzzer must replay every preceding transaction from the initial state. ItyFuzz~\cite{shou2023ityfuzz} addresses this by snapshotting EVM states at interesting points and fuzzing individual transactions from those snapshots rather than from full sequences. Combined with a \emph{dataflow waypoint} mechanism that identifies states with high exploration momentum, this design achieves sub-second response times and enables \emph{on-chain fuzzing}---testing contracts directly against forked mainnet state. ItyFuzz was the first tool to automatically synthesize concrete reentrancy exploits from on-chain DeFi projects.
+
+% ──────────────────────────────────────────────────────────────
+\subsubsection{Property-Based Testing and Invariants}
+\label{subsubsec:property-based}
+
+A complementary dimension to the search strategy is what the fuzzer actually checks. Early tools relied on \emph{built-in oracles}: hardcoded patterns for known vulnerability classes such as reentrancy or integer overflow. While useful, these oracles cannot capture application-specific correctness properties---for instance, that a token's total supply must equal the sum of all balances, or that only a designated admin address may pause the contract.
+
+\emph{Property-based} (or \emph{invariant-based}) fuzzing addresses this gap by letting the developer specify custom properties that should hold across all reachable states. The fuzzer then searches for transaction sequences that violate them. Echidna~\cite{grieco2020echidna}, developed by Trail of Bits and arguably the most widely adopted smart contract fuzzer in professional auditing, exemplifies this approach. Invariants are expressed directly in Solidity as functions prefixed with \texttt{echidna\_} that return a boolean. Consider a simplified token contract:
+
+\begin{minted}[fontsize=\small,breaklines]{solidity}
+contract Token {
+    mapping(address => uint256) public balances;
+    uint256 public totalSupply;
+
+    function transfer(address to, uint256 amount) public {
+        require(balances[msg.sender] >= amount);
+        balances[msg.sender] -= amount;
+        balances[to] += amount;
+    }
+
+    // Echidna invariant: total supply must not change
+    // after transfers (no minting / burning in transfer)
+    function echidna_supply_constant() public view
+        returns (bool)
+    {
+        uint256 sum = 0;
+        // In practice, iterate tracked addresses
+        // ...
+        return totalSupply == sum;
+    }
+}
+\end{minted}
+
+\noindent
+If the fuzzer discovers a sequence of calls that causes \texttt{echidna\_supply\_constant} to return \texttt{false}, it reports the minimal transaction sequence as a counterexample. This workflow mirrors classical property-based testing frameworks such as QuickCheck, but operates over transaction sequences instead of function arguments.
+
+
+% ──────────────────────────────────────────────────────────────
+\subsubsection{Corpus Management and Practical Considerations}
+\label{subsubsec:corpus-management}
+
+Regardless of the search strategy, the effectiveness of a fuzzing campaign is heavily influenced by the \emph{corpus}---the set of seed inputs from which the fuzzer generates new candidates. Techniques such as corpus distillation, which removes redundant seeds that do not contribute new coverage, and corpus scheduling, which prioritises seeds likely to lead to novel discoveries, can substantially improve throughput~\cite{rebert2014optimizing}. In the smart contract domain, seed quality is particularly important because the input space is structured (ABI-encoded transactions with typed parameters) rather than a flat byte stream; grammar-aware mutation strategies that respect this structure tend to outperform blind byte-level mutation~\cite{grieco2020echidna}.
+
+Another practical consideration is the execution environment. Most fuzzers run contracts in a local, instrumented EVM sandbox, which provides fast feedback but may miss bugs that depend on real on-chain state (e.g., interactions with deployed DeFi protocols). Snapshot-based approaches like ItyFuzz~\cite{shou2023ityfuzz} partially bridge this gap by forking mainnet state into the fuzzer, enabling tests against realistic token balances, oracle prices, and protocol configurations. - REPHRASE, because it is not a problem at all or even do NOT mention about it
+
+% ──────────────────────────────────────────────────────────────
+\subsubsection{Limitations of Fuzzing}
+\label{subsubsec:fuzzing-limitations}
+
+[TODO ANOTHER BEGININGN]if the fuzzer does not find a bug, this does not prove that the code is vulnerable/incorrect. Bugs that require very specific, unlikely input sequences---or that depend on environmental conditions the fuzzer does not model---may be missed entirely. Coverage metrics offer some confidence (a fuzzer that has exercised 95\,\% of instructions has explored most of the code), but coverage is a necessary rather than sufficient condition for bug detection; a line can be covered without triggering the precise condition that constitutes a vulnerability.
+
+Furthermore, the quality of results depends directly on the quality of the oracles. Built-in oracles detect only the vulnerability classes they were designed for, and user-defined invariants require the developer to anticipate what could go wrong---precisely the kind of reasoning that is difficult to do exhaustively for complex DeFi protocols. [VERY STRONG FOCUS on Blockchain. shoudl not be, formulate in general]
+
+[ANOTHER BEGINNING, better]These inherent limitations of dynamic analysis motivate the pursuit of \emph{formal verification}: techniques that aim to provide mathematical guarantees about contract behaviour across \emph{all} possible inputs, rather than merely the inputs explored during testing. Where fuzzing asks ``can I find an input that breaks this property?'', formal verification asks ``can I \emph{prove} that no such input exists?'' The next section examines how these techniques are applied to smart contracts. [NOY ONLY SC, in the first order it should be in general]
 
 \section{Formal Verification}
 \label{sec:formal-verification}
@@ -826,6 +966,8 @@ After having the overview about Ethereum, Code Analysis and LLMs, we can move to
 \label{chap:wake}
 
 This chapter provides a fundamental overview of Wake framework. It focuses on its internal model and analysis workflow. After it, the separate module with AI integration is described with findings of limitations. [TODO]
+
+TODO SOMEWHRE COMPARE TO OTHERS IN TABLE BASED ON SOME METRICS
 
 \section{Overview}
 \label{sec:wake-overview}
