@@ -475,7 +475,7 @@ These gaps motivate the complementary use of \textit{dynamic analysis}, which te
 \section{Dynamic Analysis}
 \label{sec:dynamic-analysis}
 
-While static analysis reasons about all possible executions of a program without running it, dynamic analysis takes the opposite approach: it observes actual program behaviour during concrete executions. This complementary perspective sacrifices soundness---a dynamic analysis can only ever observe the executions it actually runs---in exchange for precision, since every behaviour it reports genuinely occurred rather than being a conservative approximation~\cite{ernst2003static}. In practice, the two approaches catch different classes of bugs, which is why mature security workflows typically combine both~\cite{manes2019art}.
+This complementary perspective sacrifices soundness, so it can only observe the executions it actually runs, in exchange for precision, since every behaviour it reports genuinely occurred rather than being a conservative approximation. In practice, the two approaches catch different classes of bugs, which is why mature security workflows typically combine both~\cite{manes2019art, ernst2003static}.
 
 For smart contracts, dynamic analysis is especially valuable because it can exercise the \emph{stateful} nature of contracts: real vulnerability triggers often depend on specific sequences of transactions that leave the contract in an exploitable state, something that is difficult to reason about purely from source code.
 
@@ -483,151 +483,169 @@ For smart contracts, dynamic analysis is especially valuable because it can exer
 \subsection{Fuzz Testing}
 \label{subsec:fuzz-testing}
 
-Fuzz testing (\emph{fuzzing}) is a dynamic testing technique that automatically generates inputs to drive a program through its execution paths, looking for crashes, assertion violations, or other anomalous behaviour. The idea dates back to Miller~et~al.~\cite{miller1990empirical}, who fed streams of random characters into UNIX utilities and discovered that roughly 25--33\,\% of them crashed---a striking demonstration that even mature software harbours input-handling bugs that simple random testing can expose. Since then, fuzzing has evolved from purely random input generation into a sophisticated family of techniques incorporating coverage guidance, constraint solving, and domain-specific knowledge to systematically explore program state space~\cite{manes2019art}.
+Fuzz testing (\emph{fuzzing}) is a dynamic testing technique that automatically generates inputs to drive a program through its execution paths, looking for crashes, assertion violations, or other anomalous behaviour. The idea dates back to Miller~et~al, who fed streams of random characters into UNIX utilities and discovered that roughly 25--33\,\% of them crashed---a striking demonstration that even mature software harbours input-handling bugs that simple random testing can expose. Since then, fuzzing has evolved from purely random input generation into a sophisticated family of techniques incorporating coverage guidance, constraint solving, and domain-specific knowledge to systematically explore program state space~\cite{miller1990empirical}.
 
 % ── General idea, then smart-contract specifics ──────────────
 Adapting fuzzing to smart contracts introduces a challenge not present in traditional software: \textbf{statefulness}. A conventional fuzzer generates a single input per test case, but a smart contract's behaviour depends on sequences of transactions that cumulatively modify persistent storage on the blockchain. Two calls to the same function can produce entirely different outcomes depending on what transactions preceded them. Effective smart contract fuzzers must therefore generate and mutate \emph{transaction sequences} rather than isolated inputs, substantially expanding the search space~\cite{choi2021smartian}.
 
-
 Subsequent tools introduced increasingly sophisticated strategies:
 
-\paragraph{Coverage-guided fuzzing.}
-sFuzz~\cite{nguyen2020sfuzz} adapted the feedback-driven strategy pioneered by AFL for traditional software: after each execution, the fuzzer records which EVM instructions were visited and prioritises inputs that reach new coverage. This coverage-guided loop systematically expands the explored portion of the program, steering the search away from repeatedly exercising the same paths.
-
-\paragraph{Data-flow--aware fuzzing.}
-SMARTIAN~\cite{choi2021smartian} observed that coverage alone is an insufficient signal when transactions share persistent state. It combines a static analysis pass---predicting which transaction orderings are likely to exercise inter-function data dependencies---with a lightweight dynamic data-flow analysis that tracks how values propagate across transactions at runtime. The static pass seeds the fuzzer with promising transaction sequences, and the dynamic feedback refines them, enabling SMARTIAN to uncover vulnerabilities guarded by complex state conditions more effectively than coverage-only fuzzers.
-
-\paragraph{Hybrid fuzzing.}
-ConFuzzius~\cite{torres2021confuzzius}, the first hybrid fuzzer for smart contracts, pairs evolutionary fuzzing with on-the-fly constraint solving. When the evolutionary engine stalls at a branch whose condition it cannot satisfy by mutation alone, ConFuzzius extracts the path constraint via symbolic taint analysis and invokes an SMT solver to produce a satisfying input. This input is fed back into the mutation pool so the fuzzer can continue past the roadblock. Evaluated against 128 curated contracts and 21\,000 real-world contracts, ConFuzzius detected up to 23\,\% more bugs than purely symbolic or purely fuzzing-based tools, and achieved up to 69\,\% higher code coverage.
-
-\paragraph{Snapshot-based fuzzing.}
-A persistent bottleneck for stateful fuzzers is \emph{re-execution overhead}: to test a transaction deep in a sequence, the fuzzer must replay every preceding transaction from the initial state. ItyFuzz~\cite{shou2023ityfuzz} addresses this by snapshotting EVM states at interesting points and fuzzing individual transactions from those snapshots rather than from full sequences. Combined with a \emph{dataflow waypoint} mechanism that identifies states with high exploration momentum, this design achieves sub-second response times and enables \emph{on-chain fuzzing}---testing contracts directly against forked mainnet state. ItyFuzz was the first tool to automatically synthesize concrete reentrancy exploits from on-chain DeFi projects.
+\begin{itemize}
+    \item \textbf{Coverage-guided fuzzing} - after each execution, the fuzzer records which parts of code were visited and prioritizes inputs that reach new coverage. This approach systematically expands the explored portion of the program, steering the search away from repeatedly exercising the same paths.
+    \item \textbf{Data-flow--aware fuzzing} - it tracks how values flow through the program at runtime and uses that information to guide mutation. The idea behind this is to help the fuzzer share successive inputs and make coverage more sufficient.
+    \item \textbf{Hybrid fuzzing} - an equality check against a magic constant is astronomically unlikely to be satisfied by random bit flips. This extension of the naive method combines evolutionary fuzzing with symbolic execution to overcome such roadblocks. When the fuzzer stops at a hard-to-satisfy branch, the hybrid engine extracts the path constraint and invokes an SMT solver to produce a satisfying input, which is fed back into the mutation pool~\cite{torres2021confuzzius}.
+    \item \textbf{Snapshot-based fuzzing} - it mitigates \emph{reexecution overhead} by capturing program state at interesting points and resuming directly from those checkpoints, avoiding redundant reexecution. 
+\end{itemize}
 
 % ──────────────────────────────────────────────────────────────
-\subsubsection{Property-Based Testing and Invariants}
-\label{subsubsec:property-based}
+\subsubsection*{Invariants}
+\label{subsubsec:invariants}
 
 A complementary dimension to the search strategy is what the fuzzer actually checks. Early tools relied on \emph{built-in oracles}: hardcoded patterns for known vulnerability classes such as reentrancy or integer overflow. While useful, these oracles cannot capture application-specific correctness properties---for instance, that a token's total supply must equal the sum of all balances, or that only a designated admin address may pause the contract.
 
-\emph{Property-based} (or \emph{invariant-based}) fuzzing addresses this gap by letting the developer specify custom properties that should hold across all reachable states. The fuzzer then searches for transaction sequences that violate them. Echidna~\cite{grieco2020echidna}, developed by Trail of Bits and arguably the most widely adopted smart contract fuzzer in professional auditing, exemplifies this approach. Invariants are expressed directly in Solidity as functions prefixed with \texttt{echidna\_} that return a boolean. Consider a simplified token contract:
+\emph{Property-based} (or \emph{invariant-based}) fuzzing addresses this gap by letting the developer specify custom properties that should hold across all reachable states. The fuzzer then searches for input sequences that violate them. This idea originates from frameworks like QuickCheck~\cite{claessen2000quickcheck} for Haskell, which generates random function arguments and checks user-defined predicates, and has since been adapted to many domains. In Solidity, an invariant might assert that a token's total supply remains constant after any sequence of transfers; if the fuzzer discovers a call sequence that violates such a property, it reports the minimal triggering sequence as a counterexample. Concrete tools that implement this approach for smart contracts are discussed in Chapter~\ref{TODO}.
 
-\begin{minted}[fontsize=\small,breaklines]{solidity}
-contract Token {
-    mapping(address => uint256) public balances;
-    uint256 public totalSupply;
-
-    function transfer(address to, uint256 amount) public {
-        require(balances[msg.sender] >= amount);
-        balances[msg.sender] -= amount;
-        balances[to] += amount;
-    }
-
-    // Echidna invariant: total supply must not change
-    // after transfers (no minting / burning in transfer)
-    function echidna_supply_constant() public view
-        returns (bool)
-    {
-        uint256 sum = 0;
-        // In practice, iterate tracked addresses
-        // ...
-        return totalSupply == sum;
-    }
-}
-\end{minted}
-
-\noindent
-If the fuzzer discovers a sequence of calls that causes \texttt{echidna\_supply\_constant} to return \texttt{false}, it reports the minimal transaction sequence as a counterexample. This workflow mirrors classical property-based testing frameworks such as QuickCheck, but operates over transaction sequences instead of function arguments.
-
+A 2024 industry survey~\cite{luo2024arewethereyet} that benchmarked eleven open-source smart contract fuzzers on 2\,000 contracts found that no single tool dominates across all vulnerability categories: built-in-oracle fuzzers excel at detecting well-known patterns, while property-based tools are essential for logic bugs that lack a generic signature. This finding reinforces the general principle that oracle quality is at least as important as search strategy.
 
 % ──────────────────────────────────────────────────────────────
-\subsubsection{Corpus Management and Practical Considerations}
-\label{subsubsec:corpus-management}
-
-Regardless of the search strategy, the effectiveness of a fuzzing campaign is heavily influenced by the \emph{corpus}---the set of seed inputs from which the fuzzer generates new candidates. Techniques such as corpus distillation, which removes redundant seeds that do not contribute new coverage, and corpus scheduling, which prioritises seeds likely to lead to novel discoveries, can substantially improve throughput~\cite{rebert2014optimizing}. In the smart contract domain, seed quality is particularly important because the input space is structured (ABI-encoded transactions with typed parameters) rather than a flat byte stream; grammar-aware mutation strategies that respect this structure tend to outperform blind byte-level mutation~\cite{grieco2020echidna}.
-
-Another practical consideration is the execution environment. Most fuzzers run contracts in a local, instrumented EVM sandbox, which provides fast feedback but may miss bugs that depend on real on-chain state (e.g., interactions with deployed DeFi protocols). Snapshot-based approaches like ItyFuzz~\cite{shou2023ityfuzz} partially bridge this gap by forking mainnet state into the fuzzer, enabling tests against realistic token balances, oracle prices, and protocol configurations. - REPHRASE, because it is not a problem at all or even do NOT mention about it
-
-% ──────────────────────────────────────────────────────────────
-\subsubsection{Limitations of Fuzzing}
+\subsubsection{Limitations}
 \label{subsubsec:fuzzing-limitations}
 
-[TODO ANOTHER BEGININGN]if the fuzzer does not find a bug, this does not prove that the code is vulnerable/incorrect. Bugs that require very specific, unlikely input sequences---or that depend on environmental conditions the fuzzer does not model---may be missed entirely. Coverage metrics offer some confidence (a fuzzer that has exercised 95\,\% of instructions has explored most of the code), but coverage is a necessary rather than sufficient condition for bug detection; a line can be covered without triggering the precise condition that constitutes a vulnerability.
+Regardless of the search strategy, the effectiveness of a fuzzing campaign is heavily influenced by the \emph{corpus}---the set of seed inputs from which the fuzzer generates new candidates. Techniques such as corpus distillation, which removes redundant seeds that do not contribute new coverage, and corpus scheduling, which prioritises seeds likely to lead to novel discoveries, can substantially improve throughput.
 
-Furthermore, the quality of results depends directly on the quality of the oracles. Built-in oracles detect only the vulnerability classes they were designed for, and user-defined invariants require the developer to anticipate what could go wrong---precisely the kind of reasoning that is difficult to do exhaustively for complex DeFi protocols. [VERY STRONG FOCUS on Blockchain. shoudl not be, formulate in general]
+Despite its practical effectiveness, fuzzing provides no completeness guarantee: if the fuzzer does not find a bug, this does not prove that the program is correct. Bugs that require very specific, unlikely input sequences---or that depend on environmental conditions the fuzzer does not model---may be missed entirely. Coverage metrics offer some confidence that a large portion of the code has been exercised, but coverage is a necessary rather than sufficient condition for bug detection; a code path can be covered without triggering the precise condition that constitutes a vulnerability.
 
-[ANOTHER BEGINNING, better]These inherent limitations of dynamic analysis motivate the pursuit of \emph{formal verification}: techniques that aim to provide mathematical guarantees about contract behaviour across \emph{all} possible inputs, rather than merely the inputs explored during testing. Where fuzzing asks ``can I find an input that breaks this property?'', formal verification asks ``can I \emph{prove} that no such input exists?'' The next section examines how these techniques are applied to smart contracts. [NOY ONLY SC, in the first order it should be in general]
+Furthermore, the quality of results depends directly on the quality of the oracles. Built-in oracles detect only the vulnerability classes they were designed for, and user-defined invariants require the developer to anticipate what correct behaviour looks like---precisely the kind of reasoning that is difficult to do exhaustively for complex software systems with many interacting components.
+
+These inherent limitations of dynamic analysis---the inability to guarantee absence of bugs and the dependence on the quality of test oracles---motivate the pursuit of \emph{formal verification}: techniques that aim to provide mathematical guarantees about program behaviour across \emph{all} possible inputs, rather than merely the inputs explored during testing. Where fuzzing asks ``can I find an input that breaks this property?'', formal verification asks ``can I \emph{prove} that no such input exists?'' The next section examines how these techniques work and how they are applied to smart contracts.
 
 \section{Formal Verification}
 \label{sec:formal-verification}
 
-Formal verification employs mathematical techniques to prove that programs satisfy specified properties with certainty, not merely with high probability as testing provides~\cite{clarke2018model}. While static analysis and testing may miss vulnerabilities or report false positives, formal verification can provide guarantees: if verification succeeds, the property provably holds; if it fails, a concrete counterexample demonstrates the violation.
+Formal verification employs mathematical techniques to prove that programs satisfy specified properties with certainty, not merely with high probability as testing provides~\cite{clarke2018model}. While static analysis and testing may miss vulnerabilities or report false positives, formal verification can provide guarantees: if verification succeeds, the property provably holds for \emph{all} reachable states; if it fails, a concrete counterexample demonstrates the violation.
 
-However, formal verification faces significant practical challenges. The techniques are computationally expensive, often requiring substantial manual effort to specify properties and guide the verification process. Scalability limitations restrict application to smaller codebases or require abstraction that may introduce imprecision. Additionally, verification establishes conformance to specification, but specifications themselves may be incomplete or incorrect, leaving gaps in security coverage.
+However, formal verification faces significant practical challenges. The techniques are computationally expensive, often requiring substantial manual effort to specify properties and guide the verification process. Scalability limitations restrict application to smaller codebases or require abstraction that may introduce imprecision. Additionally, verification establishes conformance to a specification---but the specification itself may be incomplete or incorrect, leaving gaps in security coverage. As Tolmach et al.\ observe in their comprehensive survey, the vast majority of deployed smart contracts lack any kind of formal specification whatsoever, which presents a fundamental barrier to the widespread adoption of these techniques~\cite{tolmach2021survey}.
 
-[TODO mention, that even itis well known existed technique for dynami analysis, it has very weak application in Ehereum and smart contracts]
+A prerequisite for any formal verification effort is a rigorous formalisation of the execution environment. In the Ethereum context, this means defining the semantics of the EVM---a task complicated by the fact that the canonical reference, the Yellow Paper~\cite{wood2014ethereum}, is a semi-formal document that has historically contained ambiguities and under-specifications. Several independent efforts have addressed this gap. Hildenbrandt et al.\ developed KEVM, a complete executable formal semantics of the EVM bytecode built using the K Framework, which passes the entire official test suite of over 40{,}000 programs~\cite{hildenbrandt2018kevm}. Concurrently, Grishchenko et al.\ formalised a complete small-step semantics of EVM bytecode in the F* proof assistant and used it to define central security properties such as call integrity, atomicity, and independence from miner-controlled parameters~\cite{grishchenko2018semantic}. These foundational semantics serve as the bedrock upon which all subsequent formal analyses are built, and the effort invested in their construction illustrates how much rigour is needed before one can even begin to reason formally about program behaviour in this domain.
+
+It is worth noting that while dynamic analysis techniques such as fuzzing and runtime monitoring are well-established in traditional software engineering, their application to Ethereum smart contracts remains comparatively limited. The deterministic, sandboxed execution model of the EVM, the absence of standard I/O channels, and the difficulty of simulating realistic multi-contract transaction sequences all constrain the effectiveness of purely dynamic approaches in this setting. As a result, the smart contract security community has invested disproportionately in static and formal methods relative to what one might expect from the broader software engineering landscape---a trend that further motivates the techniques discussed below.
+
+The subsections that follow examine three principal formal verification strategies: symbolic execution, model checking, and theorem proving. Each occupies a different point in the trade-off between automation and expressiveness.
+
+% --- Diagram suggestion ---
+% Figure: A conceptual diagram showing the three FV strategies along
+% two axes: Automation (high to low, x-axis) and Expressiveness
+% (low to high, y-axis).
+%
+%   Expressiveness
+%       ^
+%       |           Theorem Proving
+%       |               *
+%       |
+%       |       Model Checking
+%       |           *
+%       |
+%       |   Symbolic Execution
+%       |       *
+%       |
+%       +----------------------------> Automation
+%
+% Caption: Trade-off between automation and expressiveness across
+% the three principal formal verification strategies. Symbolic
+% execution is the most automated but limited to path-level
+% reasoning; theorem proving is the most expressive but requires
+% significant human guidance.
+
 
 \subsection{Symbolic Execution}
 \label{subsec:symbolic-execution}
 
-Symbolic execution executes programs with symbolic rather than concrete values, representing program state as logical constraints over symbolic variables~\cite{king1976symbolic}. Rather than computing specific outputs for specific inputs, symbolic execution computes expressions over symbolic inputs that characterise the relationship between inputs and outputs. At branch points, execution forks to explore both paths, accumulating path conditions that constrain the symbolic inputs consistent with each path.
+Symbolic execution runs programs with symbolic rather than concrete values, representing program state as logical constraints over symbolic variables~\cite{king1976symbolic}. Rather than computing specific outputs for specific inputs, it computes expressions over symbolic inputs that characterise the relationship between inputs and outputs. At branch points, execution forks to explore both paths, accumulating \emph{path conditions}---conjunctions of constraints that must hold for a given execution path to be feasible.
 
-For vulnerability detection, symbolic execution enables systematic exploration of program paths and automatic generation of inputs that trigger specific behaviours. Given a property to check—such as the absence of integer overflow—symbolic execution explores paths, collects constraints under which the property is violated, and queries a satisfiability modulo theories (SMT) solver to determine whether satisfying inputs exist. If the solver finds a satisfying assignment, it provides a concrete exploit input; if the constraints are unsatisfiable, the property holds on that path~\cite{cadar2008exe}.
+For vulnerability detection, this mechanism enables systematic exploration of program paths and automatic generation of inputs that trigger specific behaviours. Given a property to check---for instance, that no arithmetic overflow can occur---symbolic execution explores paths, collects the constraints under which the property would be violated, and queries a satisfiability modulo theories (SMT) solver to determine whether satisfying inputs exist. If the solver finds a satisfying assignment, it provides a concrete exploit input; if the constraints are unsatisfiable, the property holds on that path~\cite{cadar2008exe}.
 
-Symbolic execution faces the path explosion problem: the number of paths through a program grows exponentially with the number of branch points. Loops and recursive calls exacerbate this problem, potentially creating infinite paths. Practical symbolic execution engines employ various strategies to manage path explosion, including bounded exploration, state merging, and prioritised search~\cite{cadar2013symbolic}.
+The principal limitation is the \emph{path explosion} problem: the number of execution paths grows exponentially with the number of branch points. Loops and recursive calls exacerbate this by potentially creating infinitely many paths. Practical implementations employ various strategies to manage this---bounded exploration that limits loop unrolling depth, state merging that combines similar symbolic states, and prioritised search heuristics that focus on the most promising regions of the state space~\cite{cadar2013symbolic}.
 
-In the smart contract domain, tools such as Mythril~\cite{mueller2018smashing} and Manticore~\cite{mossberg2019manticore} employ symbolic execution to detect vulnerabilities. These tools symbolically execute EVM bytecode, modelling the Ethereum execution environment including storage, message calls, and environmental variables. When a path reaches a potentially vulnerable state—an external call with user-controlled destination, an arithmetic operation that may overflow—the tool checks whether the path is feasible and, if so, reports the vulnerability with a triggering input.
+When applied to EVM bytecode, symbolic execution must additionally model the blockchain execution environment: persistent storage, inter-contract message calls, and environmental variables such as block timestamps and transaction origins. This creates a tension between precision and soundness. Conservative assumptions---treating every external call as potentially adversarial---lead to false positives; optimistic assumptions may miss real vulnerabilities that manifest only through specific cross-contract interactions~\cite{luu2016making}. Each modelling decision translates directly into constraints that the SMT solver must handle, and finding the right balance is a persistent engineering challenge.
 
-Environment modelling presents particular challenges for smart contract symbolic execution. The blockchain environment includes not just the contract under analysis but the entire ecosystem of other contracts, the block context, and the transaction parameters. Accurate modelling requires assumptions about what external contracts might do, what values environmental variables might take, and how transactions might be sequenced. Conservative assumptions lead to false positives; optimistic assumptions may miss real vulnerabilities~\cite{luu2016making}.
 
-% [https://www.cyfrin.io/blog/solidity-smart-contract-formal-verification-symbolic-execution#layer-4-or-formal-verification]
+\subsection{Model Checking}
+\label{subsec:model-checking}
+
+Model checking is an automated technique that exhaustively explores the state space of a system to determine whether it satisfies a given property, typically expressed in temporal logic~\cite{clarke2018model}. Unlike symbolic execution, which reasons about individual execution paths, model checking reasons about the \emph{entire transition system} of a program, making it well-suited for verifying properties that span multiple invocations or depend on the ordering of events.
+
+Two principal algorithmic strategies underlie modern model checkers. Bounded Model Checking (BMC) unrolls the transition relation up to a finite depth $k$ and encodes the resulting computation as a satisfiability problem: if a property violation exists within $k$ steps, the solver finds it; otherwise, the property holds up to that bound. Constrained Horn Clauses (CHC) take a different approach, constructing \emph{function summaries}---logical abstractions that capture a function's input-output relationship without inlining its body---and using fixed-point solvers to reason about unbounded behaviour. The BMC approach is effective at finding shallow bugs quickly, while CHC-based reasoning can establish properties that hold for arbitrarily many steps, at the cost of greater computational complexity.
+
+To illustrate how model checking applies in practice, consider the verification of a token contract's conservation property---one of the most fundamental invariants in decentralised finance. For any standard token, the sum of all individual balances should always equal the reported total supply. A specification for this might state:
+
+\begin{quote}
+\emph{For any sequence of transactions (transfers, mints, burns), and for any set of addresses, the sum of all balances must equal the total supply.}
+\end{quote}
+
+\noindent Attempting to verify this by testing is fundamentally limited: one can only check finitely many transaction sequences and address sets. A model checker, by contrast, can reason about all possible sequences, either by exhaustive enumeration (for bounded depth) or by discovering an inductive invariant that implies the property holds regardless of the number of steps.
+
+Despite its power, model checking inherits the fundamental \emph{state explosion} problem from the classical setting. Smart contract storage is effectively unbounded---mappings can hold entries for any 256-bit key---and the state space of interacting contracts grows combinatorially. Abstraction techniques, such as replacing concrete addresses with symbolic representatives or bounding the set of interacting contracts, are essential for practical scalability, but they introduce a gap between the verified model and the actual deployed system that must be carefully assessed~\cite{tolmach2021survey}.
+
 
 \subsection{Theorem Proving}
 \label{subsec:theorem-proving}
 
-Theorem proving represents the most powerful—and most demanding—approach to formal verification. Rather than exhaustively exploring state space, theorem proving directly constructs mathematical proofs that programs satisfy specifications. Interactive theorem provers such as Coq~\cite{bertot2013interactive}, Isabelle~\cite{nipkow2002isabelle}, and Lean~\cite{moura2021lean} provide frameworks for developing machine-checked proofs with human guidance.
+Theorem proving represents the most powerful---and most demanding---approach to formal verification. Rather than exhaustively exploring a state space, theorem proving directly constructs mathematical proofs that programs satisfy their specifications. Interactive theorem provers such as Coq~\cite{bertot2013interactive}, Isabelle/HOL~\cite{nipkow2002isabelle}, and Lean~\cite{moura2021lean} provide frameworks for developing machine-checked proofs with human guidance.
 
-The expressiveness of theorem proving is unmatched: any mathematically statable property can, in principle, be proven. This includes properties beyond the reach of model checking and symbolic execution, such as correctness relative to complex mathematical specifications or security properties involving cryptographic assumptions. Projects such as the Ethereum Foundation's formal specification efforts demonstrate the application of theorem proving to blockchain protocol verification~\cite{hirai2017defining}.
+The expressiveness of theorem proving is unmatched: any mathematically statable property can, in principle, be proven. This includes properties beyond the reach of model checking and symbolic execution, such as correctness relative to complex mathematical specifications---for example, the fixed-point arithmetic used in automated market makers---or security properties that depend on cryptographic assumptions. The Ethereum Foundation's early efforts to formalise EVM semantics in interactive theorem provers demonstrated both the feasibility and the difficulty of this approach~\cite{hirai2017defining}.
 
-However, the cost of theorem proving is substantial. Proofs require significant human expertise to construct, often taking person-months of effort for non-trivial systems. The proof development process requires not just programming skill but mathematical sophistication and familiarity with the proof assistant's logic and tactics. For most smart contract development contexts, this cost-benefit trade-off renders full theorem proving impractical.
+However, the cost is substantial. Proofs require significant human expertise to construct, often demanding person-months of effort for non-trivial systems. The development process requires not just programming skill but mathematical sophistication and deep familiarity with the proof assistant's logic and tactic language. For most development contexts, where time-to-market pressure is intense and code is frequently updated, full theorem proving of the entire codebase remains impractical.
 
-Nonetheless, theorem proving plays an important role in the broader smart contract security ecosystem. Proofs of foundational libraries, such as safe arithmetic operations or standard token implementations, can be developed once and reused widely. High-value contracts managing billions of dollars may justify the investment in formal proofs. The verification of compiler correctness ensures that properties proven at the source level are preserved through compilation~\cite{leroy2009formal}.
+Nonetheless, theorem proving plays an important strategic role. Proofs of foundational libraries---such as safe arithmetic operations or standard token implementations---can be developed once and reused widely across an entire ecosystem. For the highest-value contracts managing billions of dollars, the investment may be justified by the potential cost of failure. Furthermore, the verification of compiler correctness, following the tradition of projects like CompCert~\cite{leroy2009formal}, can ensure that properties proven at the source level are preserved through compilation to bytecode---closing a gap that other verification techniques typically leave open.
 
-\begin{table}[h!]
+
+\subsection{Comparison of Analysis Techniques}
+\label{subsec:analysis-comparison}
+
+Table~\ref{tab:analysis-comparison} summarises the key characteristics of the three families of analysis techniques surveyed throughout this chapter. The columns reflect each technique's theoretical profile; practical implementations may deviate from these ideals depending on the specific abstractions and heuristics employed.
+
+\begin{table}[ht]
 \centering
 \caption{Comparison of static analysis, dynamic analysis, and formal verification.}
 \label{tab:analysis-comparison}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{|l|l|l|l|}
 \hline
-\textbf{} & \textbf{Static Analysis} & \textbf{Dynamic Analysis} & \textbf{Formal Verification} \\
+\textbf{Criterion} & \textbf{Static Analysis} & \textbf{Dynamic Analysis} & \textbf{Formal Verification} \\
 \hline
-\textbf{Execution required}  & No & Yes & No \\
+\textbf{Execution required}  & No & Yes & No (but may use symbolic execution) \\
 \hline
-\textbf{Code coverage} & All paths & Executed paths only & All paths (within model) \\
+\textbf{Code coverage} & All paths (approximated) & Executed paths only & All paths (within the verified model) \\
 \hline
-\textbf{False positives} & High & Low & None \\
+\textbf{False positives} & High & Low & None (within the verified model) \\
 \hline
-\textbf{False negatives} & Possible & High & None (within model) \\
+\textbf{False negatives} & Possible & High & None (for specified properties) \\
 \hline
 \textbf{Scalability} & High & Medium & Low \\
 \hline
-\textbf{Automation} & Full & Full & Requires manual spec \\
+\textbf{Automation} & Fully automated & Fully automated & Ranges from automated to fully manual \\
 \hline
-\textbf{Expertise required} & Low & Low & High \\
+\textbf{Expertise required} & Low & Low--Medium & Medium--High \\
 \hline
-\textbf{Cost} & Low & Medium & High \\
+\textbf{Typical cost} & Low & Medium & High \\
 \hline
 \end{tabular}}
 \end{table}
 
 
-This chapter has surveyed the foundational techniques for program analysis as applied to smart contract security. Static analysis, operating on representations from abstract syntax trees to interprocedural data flow, provides scalable vulnerability detection with soundness guaranties but may produce false positives. Dynamic analysis, through transaction tracing and fuzz testing, observes actual behaviors with precision but cannot guaranty absence of vulnerabilities. Formal verification offers mathematical certainty but at a significant computational and human cost.
+% ============================================================
+% Chapter conclusion: synthesis of SA, DA, FV + transition to LLMs
+% ============================================================
 
-Each technique occupies a distinct point in the trade-off space between soundness, completeness, scalability, and automation. In practice, effective security analysis combines multiple techniques: static analysis for broad coverage and early detection, dynamic analysis for validation and edge case discovery, and selective formal verification for highest-assurance components. This detailed defense approach acknowledges that no single technique suffices for a complete security assessment.
+\subsection*{Summary}
 
-Despite the sophistication of these techniques, significant challenges remain. The semantic gap between source code and natural language makes it difficult for automated tools to understand programmer intent, leading to false positives (flagging intended behavior as bugs) and false negatives (missing bugs that violate unstated invariants). The evolving landscape of smart contract patterns, from novel DeFi primitives to cross-chain bridges, continuously introduces new vulnerability classes that existing detectors may not recognise~\cite{werner2022sok}.
+This chapter has surveyed the foundational techniques for program analysis as applied to smart contract security. Static analysis, operating on representations from abstract syntax trees to interprocedural data flow, provides scalable vulnerability detection with soundness guarantees but may produce false positives. Dynamic analysis, through transaction tracing and fuzz testing, observes actual execution behaviours with precision but cannot guarantee the absence of vulnerabilities. Formal verification offers mathematical certainty but at significant computational and human cost.
 
-Recent advances in large language models (LLMs) offer a promising complementary approach. LLMs trained on vast corpora of code and natural language have demonstrated remarkable capabilities in code understanding, generation, and analysis~\cite{chen2021evaluating}. Their ability to process natural language specifications, understand contextual patterns, and generalize from examples positions them as potential contributors to security analysis workflows.
+Each technique occupies a distinct point in the trade-off space between soundness, completeness, scalability, and automation, as summarised in Table~\ref{tab:analysis-comparison}. In practice, effective security analysis combines multiple techniques in a layered defence: static analysis for broad, early-stage detection during development; fuzz testing for validation and discovery of edge cases that elude pattern-based rules; and selective formal verification for the highest-assurance components where the economic stakes justify the investment. This defence-in-depth approach acknowledges that no single technique suffices for comprehensive security assessment.
+
+Despite the sophistication of these techniques, significant challenges remain. The semantic gap between source code and programmer intent makes it difficult for automated approaches to reason about what a contract \emph{should} do, as opposed to what it \emph{does} do. This gap leads to false positives (flagging intended behaviour as bugs) and false negatives (missing bugs that violate unstated invariants). The rapidly evolving landscape of smart contract patterns---from novel DeFi primitives like flash loans and concentrated liquidity to cross-chain bridges and account abstraction---continuously introduces new vulnerability classes that existing approaches may not recognise~\cite{werner2022sok}. Moreover, the composability of smart contracts means that individual components verified in isolation may exhibit emergent vulnerabilities when composed, a problem that no single analysis technique currently addresses in a fully satisfactory way.
+
+These limitations point toward the need for approaches that can bridge the gap between natural-language intent and formal specification, that can generalise from known vulnerability patterns to detect novel ones, and that can reason about the higher-level semantics of contract interactions rather than just their syntactic structure. Recent advances in large language models (LLMs) offer a promising complementary direction. Trained on vast corpora of code and natural language, these models have demonstrated remarkable capabilities in code understanding, generation, and analysis~\cite{chen2021evaluating}. Their ability to process natural-language specifications, recognise contextual patterns, and generalise from examples positions them as potential contributors to security analysis workflows---not as replacements for the rigorous techniques surveyed in this chapter, but as approaches that might help close the gap between what developers intend and what formal methods can verify. The following chapter examines these models, their architecture, and their emerging role in smart contract security.
 
 \chapter{Large Language Models}
 \label{ch:llm}
