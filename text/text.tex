@@ -191,16 +191,21 @@ Solidity is Ethereum’s dominant high-level, statically typed, contract-oriente
 
 A common drawback of Solidity development is that subtle semantic errors can produce severe vulnerabilities. For example, performing an external call before updating the internal state or careless use of \texttt{delegatecall} may execute foreign code in the caller’s storage context~\cite{soliditydocs}.
 
-\paragraph{Conceptual example}
+\newpage
+
+\begin{listing}[!h]
 \begin{minted}[fontsize=\small,breaklines]{solidity}
 contract Counter {
     uint256 public value;
-
+    
     function inc() external {
         value += 1; // persistent on-chain state update
     }
 }
 \end{minted}
+\caption{A minimal stateful Solidity contract.}
+\label{lst:counter-stateful}
+\end{listing}
 
 Even this trivial piece of code captures the core model, where a transaction triggers EVM execution, the state is updated, and the transition becomes part of the verifiable blockchain history.
 
@@ -225,7 +230,7 @@ The rest of section illustrates the most popular attack patterns and minimal cod
 
 This type of attack occurs when a contract makes an external call before it has finished updating its own state. The callee, which may be a contract under attacker control, can re-enter the caller inside the same transaction and observe or manipulate the intermediate, stale state. The classic pattern involves a \texttt{withdraw} function that transfers Ether before reducing the caller's recorded balance.
 
-\paragraph{Vulnerable victim contract}
+\begin{listing}[!h]
 \begin{minted}[fontsize=\small,breaklines]{solidity}
 contract VulnerableVault {
     mapping(address => uint256) public balances;
@@ -247,23 +252,29 @@ contract VulnerableVault {
     }
 }
 \end{minted}
+\caption{Vulnerable vault contract susceptible to reentrancy.}
+\label{lst:vulnerable-vault}
+\end{listing}
 
 An attacker deploys a malicious contract whose \texttt{receive()} fallback immediately calls \texttt{withdraw()} again. Because \texttt{balances[msg.sender]} has not yet been set to zero at step~(1), each recursive call passes the balance check, draining the vault until gas is exhausted.
 
-\paragraph{Attacker contract}
+The fix is straightforward: apply the \emph{checks-effects-interactions} pattern~---~update all internal states \emph{before} making any external call. An additional defense is an explicit reentrancy guard\footnote{\url{https://docs.openzeppelin.com/contracts/3.x/api/utils\#ReentrancyGuard}}.
+
+\newpage
+
+\begin{listing}[!ht]
 \begin{minted}[fontsize=\small,breaklines]{solidity}
 contract Attacker {
     VulnerableVault public target;
-
+    
     constructor(address _target) {
         target = VulnerableVault(_target);
     }
-
+    
     function attack() external payable {
         target.deposit{value: msg.value}();
         target.withdraw();
     }
-
     // Re-enters withdraw() on every incoming Ether transfer
     receive() external payable {
         if (address(target).balance >= msg.value) {
@@ -272,21 +283,22 @@ contract Attacker {
     }
 }
 \end{minted}
-
-The fix is straightforward: apply the \emph{checks-effects-interactions} pattern~---~update all internal states \emph{before} making any external call. An additional defense is an explicit reentrancy guard\footnote{\url{https://docs.openzeppelin.com/contracts/3.x/api/utils#ReentrancyGuard}}.
+\caption{Attacker contract exploiting the reentrancy vulnerability in Listing~\ref{lst:vulnerable-vault}.}
+\label{lst:attacker-reentrancy}
+\end{listing}
 
 \subsubsection*{Denial of Service}
 
 Denial of service (DoS) in Ethereum manifests itself as making a critical operation consistently revert or prohibitively expensive. One prevalent pattern involves iterating over an unbounded array to distribute funds or update state; an attacker who controls one entry in that array can cause the iteration to fail by forcing a revert and blocking all other participants.
 
+\begin{listing}[!h]
 \begin{minted}[fontsize=\small,breaklines]{solidity}
 contract Distributor {
     address[] public recipients;
-
+    
     function addRecipient(address r) external {
         recipients.push(r);
     }
-
     // An attacker adds a contract that always reverts on receive().
     // This causes the entire loop to revert, locking all funds.
     function distribute() external {
@@ -296,6 +308,9 @@ contract Distributor {
     }
 }
 \end{minted}
+\caption{Distributor contract vulnerable to DoS via a reverting recipient.}
+\label{lst:dos-distributor}
+\end{listing}
 
 The standard mitigation is a \emph{pull-payment} (withdrawal) pattern: instead of the contract pushing funds to all recipients in a loop, each recipient calls a \textbf{claimPayment()} function individually, so a malicious recipient can only block their own withdrawal.
 
@@ -324,76 +339,10 @@ The preceding discussion establishes that well-known smart contract vulnerabilit
 
 The security analysis of software systems, particularly smart contracts deployed on blockchain platforms, relies on a diverse set of analytical techniques that have evolved over decades of programming language research. This chapter provides a comprehensive overview of the foundational methods for code analysis, establishing the theoretical and practical foundations necessary to understand different approaches for vulnerability detection. The discussion is organized around three complementary paradigms: static analysis, which reasons about program behavior without execution; dynamic analysis, which observes actual runtime behavior; and formal verification, which provides mathematical guaranties about program correctness.
 
-% \section{Static Analysis}
-% \label{sec:static-analysis}
-
-% Static analysis encompasses techniques that examine source code, bytecode, or other program representations to infer properties about all possible executions without actually running the program~\cite{nielson1999principles}. The appeal of static analysis lies in its soundness guarantees—a sound static analyser will never miss a bug of the class it is designed to detect—and its ability to reason about infinite execution paths. However, this power comes at the cost of precision: static analysers may report false positives, flagging code as potentially buggy when no actual vulnerability exists~\cite{rice1953classes}.
-
-
-% \subsection{Abstract Syntax Tree}
-% \label{subsec:ast}
-
-% The abstract syntax tree (AST) serves as the foundational representation for most static analysis techniques. An AST is a hierarchical tree structure that captures the syntactic structure of source code while abstracting away concrete details such as whitespace, comments, and parentheses that do not affect program semantics~\cite{aho2006compilers}. Each node in the tree corresponds to a syntactic construct—a function declaration, an assignment statement, a binary expression—and the tree's structure reflects the nesting and composition of these constructs.
-
-% \begin{figure}[!h]
-%     \centering
-%     \includegraphics[width=7cm, height=8cm]{images/ast.pdf}
-%     \caption{Abstract Syntax Tree example.}
-%     \label{fig:ast_diagram}
-% \end{figure}
-
-% However, the AST has significant limitations for semantic analysis. Because it captures only syntactic structure, it cannot directly represent the flow of data through a program or the possible paths of control flow. Two syntactically similar code fragments may exhibit vastly different runtime behaviours depending on the values of variables and the paths taken through conditional statements. These limitations motivate the use of more semantically rich representations.
-
-% \subsection{Intermediate Representation}
-% \label{subsec:ir}
-
-% Intermediate representations (IRs) bridge the gap between source-level syntax and low-level execution semantics by normalizing diverse syntactic constructs into a uniform format amenable to analysis~\cite{muchnick1997advanced}. A well-designed IR strips away syntactic sugar, resolves implicit operations, and exposes the underlying computational structure of the program. {FIX OLD CITE}
-
-% [TODO smth interesting in general related to code]
-
-% \subsection{Control Flow Analysis}
-% \label{subsec:control-flow}
-
-% Control flow analysis (CFA) determines the possible paths of execution through a program, representing this information as a control flow graph (CFG) where nodes represent basic blocks—sequences of instructions with no internal branching—and edges represent possible transfers of control~\cite{allen1970control}. The CFG provides the structural backbone for many subsequent analyses, enabling reasoning about path reachability, loop structure, and the ordering of operations.
-
-% [Again old cite, if you cite ,you can directly copy text from book or web page]
-
-
-% The call graph, a related structure that captures the calling relationships between functions, extends control flow analysis to the interprocedural level. Each node in the call graph represents a function, and edges represent potential call relationships. In the presence of dynamic dispatch—common in object-oriented languages and in Solidity's inheritance system—call graph construction becomes challenging, as the target of a call may depend on runtime type information~\cite{grove2001framework}.
-% entially leading to precision loss.
-
-% [TODO some grapth with explanation, image]
-
-% Reachability analysis over the CFG determines which program points can potentially be reached from a given starting point. This analysis is fundamental for pruning infeasible paths from consideration and for establishing preconditions under which vulnerabilities can be triggered. If a vulnerable code pattern exists only on unreachable paths, it poses no actual security risk.
-
-% \subsection{Data Flow Analysis}
-% \label{subsec:data-flow}
-
-% Data flow analysis tracks how values flow through a program, determining at each program point which values may be produced and consumed~\cite{kildall1973unified}. The classic formulation employs the monotone framework, which computes fixed points over the lattice of possible data flow facts by iteratively propagating information along CFG edges until no further changes occur~\cite{kam1977monotone}.
-
-% The reaching definitions analysis, a foundational data flow analysis, determines for each use of a variable which definitions (assignments) might reach that use. This information enables detection of uninitialised variables, dead code, and various forms of data dependency. For smart contract security, reaching definitions help establish whether user-controlled input can influence security-critical operations~\cite{yamaguchi2014modeling}.
-
-% Taint analysis, a specialisation of data flow analysis, tracks the flow of untrusted data from sources (such as transaction parameters) to security-sensitive sinks (such as external calls or state modifications)~\cite{schwartz2010all}. In the smart contract domain, taint sources include \texttt{msg.sender}, \texttt{msg.value}, \texttt{calldata}, and return values from external calls. Sinks include operations that transfer value, modify access control state, or perform external calls. A taint flow from source to sink without proper sanitisation indicates a potential vulnerability.
-
-% Data flow analysis faces particular challenges in Solidity due to storage aliasing. Solidity's storage model maps state variables to 256-bit storage slots according to complex packing rules, and dynamic data structures such as mappings and arrays use hash-based slot computation~\cite{antonopoulos2018mastering}. Two syntactically distinct storage references may alias to the same slot, creating data flow paths invisible to na\"ive analysis. Precise handling of storage aliasing requires modelling Solidity's storage layout rules and potentially employing alias analysis techniques~\cite{andersen1994program}.
-
-% \paragraph{Vulnerable `withdraw()` function}
-% \begin{minted}[fontsize=\small,breaklines]{solidity}
-% function withdraw(uint _amount) public {
-%   if(balances[msg.sender] >= _amount) {
-%     (bool result,) = msg.sender.call{value:_amount}("");
-%     if(result) {
-%       _amount;
-%     }
-%     balances[msg.sender] -= _amount;
-%   }
-% }
-% \end{minted}
-
 \section{Static Analysis}
 \label{sec:static-analysis}
 
-Static analysis encompasses techniques that examine source code, bytecode, or other program representations to infer properties about all possible executions without actually running the program. The appeal of static analysis lies in its advantage of never missing a bug of the class it is designed to detect. However, this power comes at a well-known theoretical cost. \emph{Rice's theorem}\footnote{\url{https://en.wikipedia.org/wiki/Rice\%27s_theorem}} establishes that any non-trivial semantic property of programs is undecidable in the general case, so every practical static analyzer must approximate. The consequence is that tools may report \textit{false positives}, flagging code as potentially buggy when no real vulnerability exists. Tuning this trade-off between soundness and precision is a central design challenge in every static analysis tool~\cite{nielson1999principles,rice1953classes}.
+Static analysis encompasses techniques that examine source code, bytecode, or other program representations to infer properties about all possible executions without actually running the program. The appeal of static analysis lies in its advantage of never missing a bug of the class it is designed to detect. However, this power comes at a well-known theoretical cost. \emph{Rice's theorem}\footnote{\url{https://en.wikipedia.org/wiki/Rice's_theorem}} establishes that any non-trivial semantic property of programs is undecidable in the general case, so every practical static analyzer must approximate. The consequence is that tools may report \textit{false positives}, flagging code as potentially buggy when no real vulnerability exists. Tuning this trade-off between soundness and precision is a central design challenge in every static analysis tool~\cite{nielson1999principles, rice1953classes}.
 
 The rest of section decomposes the standard pipeline through which static analyzers process smart contract code: parsing it into a syntax tree, lowering it to an intermediate representation, and then applying control flow and data flow analyzes to reason about the program's behavior.
 
@@ -426,22 +375,19 @@ A particularly important technique in modern IR design is Static Single Assignme
 
 The AST and IR represent \emph{what} a program computes, but not \emph{how} execution proceeds through it. Two programs with identical syntax trees can follow entirely different paths at runtime depending on branching conditions and loop bounds.
 
-Control flow analysis determines the possible execution paths through a program, typically encoding them as a \textit{control flow graph} (CFG). In a CFG, each node represents a \textit{basic block}---a maximal sequence of instructions with no internal branching---and directed edges represent possible transfers of control between blocks~\cite{allen1970control}. The CFG provides the structural backbone upon which most subsequent analyses operate: loop detection, dominance computation, and path-sensitive reasoning all depend on it.
+Control flow analysis determines the possible execution paths through a program, typically encoding them as a Control Flow Graph (CFG). In a CFG, each node represents a block --- a maximal sequence of instructions with no internal branching, and directed edges represent possible transfers of control between blocks. The CFG provides the structural backbone upon which most subsequent analyzes operate: loop detection, dominance computation, and path-sensitive reasoning all depend on it. It uses for reachability analysis, that determines which program points can actually be reached from a given entry.
 
-At the interprocedural level, the \textit{call graph} extends this view by capturing the calling relationships between functions. Each node represents a function and each edge a potential call site. Constructing an accurate call graph is particularly challenging in Solidity, where inheritance hierarchies, function modifiers, and low-level \texttt{call}/\texttt{delegatecall} instructions can make the target of an invocation ambiguous or even determined at runtime~\cite{grove2001framework}. Overapproximating the call graph---assuming that every possible target is reachable---preserves soundness but introduces spurious paths that can degrade precision.
-
-\textit{Reachability analysis} over the CFG then determines which program points can actually be reached from a given entry. This step is fundamental for pruning infeasible paths: if a vulnerable code pattern exists only on an unreachable branch, it poses no real security risk and should not be reported. In practice, however, precisely establishing reachability in the presence of complex conditions remains computationally expensive, and most tools settle for conservative approximations.
-
+At the inter-procedural level, the call graph extends this view by capturing the calling relationships between functions. Constructing an accurate control-flow graph from EVM bytecode is particularly challenging because, unlike conventional architectures, the EVM does not encode jump destinations directly in the instruction: instead, \texttt{JUMP} and \texttt{JUMPI} read their target from the execution stack, meaning that resolving where a jump leads may require tracking the stack state across the entire program. Solidity-specific features such as inheritance hierarchies, function modifiers, and low-level \texttt{delegatecall} instructions further complicate matters, as the target of an invocation may be ambiguous or determined only at runtime~\cite{contro2023ethersolve}.
 
 \subsection{Data Flow Analysis}
 \label{subsec:data-flow}
 
-Where control flow analysis maps the \textit{structure} of possible executions, data flow analysis tracks how \textit{values} propagate through that structure. The classical formulation, due to Kildall~\cite{kildall1973unified}, computes fixed points over a lattice of data flow facts by iteratively propagating information along CFG edges until convergence. Kam and Ullman~\cite{kam1977monotone} later formalised the conditions under which this iterative process is guaranteed to terminate and produce a sound result---the so-called monotone framework.
+Where control flow analysis maps the structure of possible executions, data flow analysis tracks how values propagate through that structure. 
 
-A foundational instance of data flow analysis is \textit{reaching definitions}, which determines for each use of a variable which assignments might have produced the value being read. This information underpins the detection of uninitialised variables, dead code, and various data dependency patterns~\cite{yamaguchi2014modeling}. \textit{Taint analysis} specialises this idea further by distinguishing untrusted \textit{sources}---such as \texttt{msg.sender}, \texttt{msg.value}, and \texttt{calldata} in Solidity---from security-sensitive \textit{sinks}---such as external calls, value transfers, and state modifications. A taint flow that reaches a sink without passing through a sanitising check signals a potential vulnerability~\cite{schwartz2010all}.
 
-Data flow analysis in Solidity faces a domain-specific complication: \textit{storage aliasing}. Solidity maps state variables to 256-bit storage slots according to packing rules that depend on type size and declaration order, while dynamic structures like mappings and arrays compute their slot addresses via hashing~\cite{antonopoulos2018mastering}. Two syntactically distinct references may therefore alias to the same physical slot, creating data flow paths that a naïve analyser will miss. Handling this correctly requires modelling Solidity's storage layout and, in sophisticated tools, incorporating alias analysis~\cite{andersen1994program}. As an illustration, consider the following vulnerable \texttt{withdraw()} function, which performs an external call before updating the caller's balance---a classic reentrancy pattern:
+Data flow analysis in Solidity faces a domain-specific complication: \textit{storage aliasing}. Solidity maps state variables to 256-bit storage slots according to packing rules that depend on type size and declaration order, while dynamic structures like mappings and arrays compute their slot addresses via hashing. Two syntactically distinct references may therefore alias to the same physical slot, creating data flow paths that a naive analyzer will miss. Handling this correctly requires modeling Solidity's storage layout and, in sophisticated tools, incorporating alias analysis. As an illustration, consider the following vulnerable \texttt{withdraw()} function, which performs an external call before updating the caller's balance---a classic reentrancy pattern:
 
+\begin{listing}[!h]
 \begin{minted}[fontsize=\small,breaklines]{solidity}
 function withdraw(uint _amount) public {
   if(balances[msg.sender] >= _amount) {
@@ -453,6 +399,9 @@ function withdraw(uint _amount) public {
   }
 }
 \end{minted}
+\caption{Withdraw function vulnerable to reentrancy.}
+\label{lst:withdraw-reentrancy}
+\end{listing}
 
 \begin{figure}[!h]
     \centering
@@ -460,6 +409,8 @@ function withdraw(uint _amount) public {
     \caption{Comparison between Control Flow and Data Dependancy graphs.}
     \label{fig:cfg_ddg_diagram}
 \end{figure}
+
+Figure~\ref{fig:cfg_ddg_diagram} shows both graphs derived from Listing~\ref{lst:withdraw-reentrancy}. In the CFG, the external call and the balance update appear on separate branches that both follow the guard condition, making the ordering between them explicit. The DDG reveals that \texttt{balances[msg.sender]} is read (in the guard) and written (after the call), highlighting a potential reentrancy vulnerability.
 
 Despite its strengths, static analysis is inherently limited to reasoning about what a program \textit{might} do, not what it \textit{actually} does when executed against concrete input. False positives accumulate as approximations compound across layers of analysis, and a recent large-scale evaluation of eight static application security testing (SAST) tools for Solidity found that even the best-performing tools struggle to balance recall and precision, with business-logic vulnerabilities and protocol-layer flaws largely eluding automated detection~\cite{li2024sast}. Furthermore, static analysis cannot capture behaviors that emerge only at runtime, such as interactions between multiple deployed contracts, oracle responses, or mempool-dependent transaction ordering.
 
@@ -503,11 +454,7 @@ These inherent limitations of dynamic analysis motivate the pursuit of \emph{for
 
 Formal verification employs mathematical techniques to prove that programs satisfy specified properties with certainty, not just with high probability as testing provides. While static and dynamic analyzes may miss vulnerabilities or report false positives, formal verification can provide guaranties: if verification succeeds, the property provably holds for \emph{all} reachable states; if it fails, a concrete counterexample demonstrates the violation.
 
-However, formal verification faces significant practical challenges. The techniques are computationally expensive, often requiring substantial manual effort to specify properties and guide the verification process. Scalability limitations restrict application to smaller codebases or require abstraction that may introduce imprecision. Additionally, verification establishes conformance to a specification---but the specification itself may be incomplete or incorrect, leaving gaps in security coverage. As Tolmach et al.\ observe in their comprehensive survey, the vast majority of deployed smart contracts lack any kind of formal specification whatsoever, which presents a fundamental barrier to the widespread adoption of these techniques~\cite{tolmach2021survey}.
-
-A prerequisite for any formal verification effort is a rigorous formalisation of the execution environment. In the Ethereum context, this means defining the semantics of the EVM---a task complicated by the fact that the canonical reference, the Yellow Paper~\cite{wood2014ethereum}, is a semi-formal document that has historically contained ambiguities and under-specifications. Several independent efforts have addressed this gap. Hildenbrandt et al.\ developed KEVM, a complete executable formal semantics of the EVM bytecode built using the K Framework, which passes the entire official test suite of over 40{,}000 programs~\cite{hildenbrandt2018kevm}. Concurrently, Grishchenko et al.\ formalised a complete small-step semantics of EVM bytecode in the F* proof assistant and used it to define central security properties such as call integrity, atomicity, and independence from miner-controlled parameters~\cite{grishchenko2018semantic}. These foundational semantics serve as the bedrock upon which all subsequent formal analyses are built, and the effort invested in their construction illustrates how much rigour is needed before one can even begin to reason formally about program behaviour in this domain.
-
-The subsections that follow examine three principal formal verification strategies: symbolic execution, model checking, and theorem proving. Each occupies a different point in the trade-off between automation and expressiveness.
+However, formal verification faces significant practical challenges. The techniques are computationally expensive, often requiring substantial manual effort to specify properties and guide the verification process. Scalability limitations restrict application to smaller codebases or require abstraction that may introduce imprecision. Additionally, verification establishes conformance to a specification, but the specification itself may be incomplete or incorrect, leaving gaps in security coverage. As \texttt{Tolmach et al.}\ observed in their comprehensive survey, the vast majority of deployed smart contracts lack any kind of formal specification whatsoever, which presents a fundamental barrier to the widespread adoption of these techniques~\cite{tolmach2021survey}.
 
 \begin{figure}[!h]
     \centering
@@ -516,46 +463,47 @@ The subsections that follow examine three principal formal verification strategi
     \label{fig:fv_strategies_tradeoff}
 \end{figure}
 
+A prerequisite for any formal verification effort is a rigorous formalization of the execution environment. In the Ethereum context, this means defining the semantics of the EVM. Unfortunately, this task is complicated by the fact that the canonical reference, the Yellow Paper~\cite{wood2014yellow}, is a semi-formal document that has historically contained ambiguities and under-specifications.
+
+The subsections that follow examine three principal formal verification strategies: symbolic execution, model checking, and theorem proving. Each occupies a different point in the trade-off between automation and expressiveness, as shown in Figure~\ref{fig:fv_strategies_tradeoff}.
 
 \subsection{Symbolic Execution}
 \label{subsec:symbolic-execution}
 
-Symbolic execution runs programs with symbolic rather than concrete values, representing program state as logical constraints over symbolic variables~\cite{king1976symbolic}. Rather than computing specific outputs for specific inputs, it computes expressions over symbolic inputs that characterise the relationship between inputs and outputs. At branch points, execution forks to explore both paths, accumulating \emph{path conditions}---conjunctions of constraints that must hold for a given execution path to be feasible.
+Symbolic execution runs programs with symbolic rather than concrete values, representing the program state as logical constraints over symbolic variables. Rather than computing specific outputs for specific inputs, it computes expressions over symbolic inputs that characterize the relationship between inputs and outputs. 
 
-For vulnerability detection, this mechanism enables systematic exploration of program paths and automatic generation of inputs that trigger specific behaviours. Given a property to check---for instance, that no arithmetic overflow can occur---symbolic execution explores paths, collects the constraints under which the property would be violated, and queries a satisfiability modulo theories (SMT) solver to determine whether satisfying inputs exist. If the solver finds a satisfying assignment, it provides a concrete exploit input; if the constraints are unsatisfiable, the property holds on that path~\cite{cadar2008exe}.
+For vulnerability detection, this mechanism enables systematic exploration of program paths and automatic generation of inputs that trigger specific behaviors. Given a property to check, symbolic execution explores paths, collects the constraints under which the property would be violated, and queries a Satisfiability Modulo Theories (SMT) solver to determine whether satisfying inputs exist. If the solver finds a satisfying assignment, it provides a concrete exploit input; if the constraints are unsatisfiable, the property holds on that path~\cite{cadar2013symbolic}.
 
-The principal limitation is the \emph{path explosion} problem: the number of execution paths grows exponentially with the number of branch points. Loops and recursive calls exacerbate this by potentially creating infinitely many paths. Practical implementations employ various strategies to manage this---bounded exploration that limits loop unrolling depth, state merging that combines similar symbolic states, and prioritised search heuristics that focus on the most promising regions of the state space~\cite{cadar2013symbolic}.
+The principal limitation is the \emph{path explosion} problem: the number of execution paths grows exponentially with the number of branch points. Loops and recursive calls exacerbate this by potentially creating infinitely many paths. Practical implementations employ various strategies to manage this, e.g. bounded exploration that limits loop unrolling depth, state merging that combines similar symbolic states, or prioritized search heuristics that focus on the most promising regions of the state space.
 
-When applied to EVM bytecode, symbolic execution must additionally model the blockchain execution environment: persistent storage, inter-contract message calls, and environmental variables such as block timestamps and transaction origins. This creates a tension between precision and soundness. Conservative assumptions---treating every external call as potentially adversarial---lead to false positives; optimistic assumptions may miss real vulnerabilities that manifest only through specific cross-contract interactions~\cite{luu2016making}. Each modelling decision translates directly into constraints that the SMT solver must handle, and finding the right balance is a persistent engineering challenge.
+When applied to EVM bytecode, symbolic execution must additionally model the blockchain execution environment: persistent storage, inter-contract message calls, and environmental variables such as block timestamps and transaction origins. This creates a tension between precision and soundness.
 
-Consider a simple function that sends Ether based on a condition:
+Consider a function with the assertion that the result of an increment should always exceed the input:
+
+\begin{listing}[!h]
 \begin{minted}[fontsize=\small,breaklines]{solidity}
-function pay(uint256 amount) external {
-    require(amount <= balances[msg.sender]);
-    balances[msg.sender] -= amount;
-    (bool ok, ) = msg.sender.call{value: amount}("");
-    require(ok);
+function increment(uint256 a) public pure returns (uint256) {
+    uint256 b = a + 1;
+    assert(b > a);
+    return b;
 }
 \end{minted}
- 
-Instead of testing this with concrete values like \texttt{amount = 50}, a symbolic execution engine treats \texttt{amount} as an unconstrained symbol $\alpha$ and the caller's balance as another symbol $\beta$. At the \texttt{require} statement the engine forks into two paths:
- 
-\begin{center}
-\begin{tabular}{ll}
-\textbf{Path A} (require passes): & path condition $\beta \geq \alpha$ \\
-\textbf{Path B} (require fails):  & path condition $\beta < \alpha$ \;\;$\rightarrow$\;\; transaction reverts
-\end{tabular}
-\end{center}
- 
-Along Path~A, after the subtraction, the engine asks the SMT solver whether the external call could allow re-entrant execution while the balance has not yet been effectively committed. If the solver confirms this is possible, it returns a concrete counterexample---for instance $\beta = 100, \alpha = 60$---demonstrating an exploitable re-entrancy.
- 
-The key insight is that symbolic execution does not need a developer to think of this scenario. It systematically discovers it by exploring all feasible branches.
+\caption{Simple increment function with an overflow-checking assertion.}
+\label{lst:increment-overflow}
+\end{listing}
 
+A unit test might call the function in Listing~\ref{lst:increment-overflow} with a handful of values and the assertion would pass every time. A symbolic execution engine takes a different approach: it treats \texttt{a} not as a concrete number but as a symbol representing \emph{any} possible \texttt{uint256} value. The engine computes \texttt{b} symbolically as $b = (a + 1) \bmod 2^{256}$, since the arithmetic of the EVM is wrapped around it. At the \texttt{assert} statement, it constructs the negation of the assertion and passes it to an SMT solver:
+%
+\[
+    (a + 1) \bmod 2^{256} \;\leq\; a
+\]
+%
+The solver determines that this is satisfiable when $a = 2^{256} - 1$: adding~1 wraps to~0 and $0 \leq 2^{256} - 1$. It returns this value as a concrete counterexample, proving that the assertion can be violated. This example illustrates both the strength and the scope of symbolic execution: it is highly effective at discovering violations along individual execution paths, but it reasons one path at a time. Properties that must hold across all possible sequences of function calls require a technique that reasons about the entire state space. This is precisely what model checking provides.
 
 \subsection{Model Checking}
 \label{subsec:model-checking}
 
-Model checking is an automated technique that exhaustively explores the state space of a system to determine whether it satisfies a given property, typically expressed in temporal logic. Unlike symbolic execution, which reasons about individual execution paths, model checking reasons about the \emph{entire transition system} of a program, making it well-suited for verifying properties that span multiple invocations or depend on the ordering of events.
+Model checking is another technique that exhaustively explores the state space of a system to determine whether it satisfies a given property, typically expressed in temporal logic. Unlike symbolic execution, which reasons about individual execution paths, model checking reasons about the \emph{entire transition system} of a program, making it well-suited for verifying properties that span multiple invocations or depend on the ordering of events.
 
 Two principal algorithmic strategies underlie modern model checkers:
 \begin{itemize}
@@ -577,9 +525,7 @@ However, the cost is substantial. Proofs require significant human expertise to 
 
 This chapter has surveyed the foundational techniques for program analysis. Static analysis, operating on representations from abstract syntax trees to inter-procedural data flow, provides scalable vulnerability detection with soundness guaranties but may produce false positives. Dynamic analysis, through transaction tracing and fuzz testing, observes actual execution behaviors with precision but cannot guaranty the absence of vulnerabilities. Formal verification offers mathematical certainty, but at a significant computational and human cost.
 
-Each technique occupies a distinct point in the trade-off space. The key characteristics are summarized in Table~\ref{tab:analysis-comparison}. No single technique is ideal on its own, so in practice, effective security analysis combines multiple techniques in a defense-in-depth approach.
-
-\begin{table}[ht]
+\begin{table}[!ht]
 \centering
 \resizebox{\textwidth}{!}{%
 \renewcommand{\arraystretch}{1.4}
@@ -609,16 +555,14 @@ Each technique occupies a distinct point in the trade-off space. The key charact
 \end{table}
 
 
+Each technique occupies a distinct point in the trade-off space. The key characteristics are summarized in Table~\ref{tab:analysis-comparison}. No single technique is ideal on its own, so in practice, effective security analysis combines multiple techniques in a defense-in-depth approach.
+
 Despite the sophistication of these techniques, significant challenges remain. The semantic gap between source code and programmer intent makes it difficult for automated approaches to reason about what code \emph{should} do, as opposed to what it \emph{does} do. The rapidly evolving landscape of smart contract patterns continuously introduces new vulnerabilities that existing approaches may not recognize. Moreover, the composability of smart contracts means that individual components verified in isolation may exhibit emergent vulnerabilities when composed, a problem that no single analysis technique currently addresses in a fully satisfactory way.
 
 These limitations point toward the need for approaches that can bridge the gap between natural-language intent and formal specification, that can generalize from known vulnerability patterns to detect novel ones, and that can reason about the higher-level semantics of contract interactions rather than just their syntactic structure. Recent advances in Large Language Models (LLMs) offer a promising complementary direction. The following chapter examines these models, their architecture, and their emerging role in smart contract security.
 
 \chapter{Large Language Models}
 \label{ch:llm}
-
-% ============================================================
-%  CHAPTER OPENING
-% ============================================================
 
 [TODO correct bried text conmnection] of Large Language Models (LLMs)~--- the class of deep neural networks that has transformed natural language processing over the past several years.  LLMs learn to predict and generate text by training on massive corpora, and in doing so they acquire rich internal representations of syntax, semantics, and even multi-step reasoning. The architectures behind these models grew directly out of attempts to assign probabilities to sequences of symbols, a problem with a long history in machine learning.
 
@@ -628,7 +572,7 @@ This chapter traces that history and the ideas it produced. It begins with the m
 \section{Sequence Probabilities}
 \label{sec:seq-prob}
 
-Let $\mathbf{x} = (x_1, x_2, \dots, x_T)$ be a sequence of tokens --- these could be words in a sentence, symbols in a formula, or any discrete units drawn from a finite vocabulary.  A \emph{language model} assigns a probability to the whole sequence by factoring it with the chain rule of probability:
+Let $\mathbf{x} = (x_1, x_2, \dots, x_T)$ be a sequence of tokens --- these could be words in a sentence, symbols in a formula, or any discrete units drawn from a finite vocabulary. A \emph{language model} assigns a probability to the whole sequence by factoring it with the chain rule of probability:
 
 \begin{equation}
     P(\mathbf{x}) \;=\; \prod_{t=1}^{T} P\!\bigl(x_t \mid x_1, \dots, x_{t-1}\bigr).
@@ -678,7 +622,7 @@ The transformer, introduced by Vaswani et al.\ in 2017, addressed both limitatio
 \begin{figure}[!h]
     \centering
     \includegraphics[width=0.6\linewidth]{images/transformer.png}
-    \caption{The original encoder--decoder transformer architecture~\cite{vaswani2023attentionneed}.
+    \caption{The original encoder--decoder transformer architecture. Adapted from~\cite{vaswani2023attentionneed}.
     % The encoder (left) processes the input sequence bidirectionally, while the decoder (right) generates the output sequence autoregressively.  Modern LLMs typically use only one half: decoder-only models for generation, or encoder-only models for representation learning.
     }
     \label{fig:transformer}
@@ -956,42 +900,39 @@ TODO SOMEWHRE COMPARE TO OTHERS IN TABLE BASED ON SOME METRICS
 \section{Overview}
 \label{sec:wake-overview}
 
-Wake is an open source Python-based development, testing, and security analysis framework specifically designed for Solidity smart contracts~\cite{wake-docs} [TODO how to correctly cite this docs]. Developed by Ackee Blockchain Security\footnote{\url{https://ackee.xyz/}}, Wake addresses the critical need for comprehensive tooling in the blockchain security ecosystem. 
-
-The framework provides several core capabilities:
+Wake is an open source Python-based development, testing, and security analysis framework specifically designed for Solidity smart contracts~\cite{wake-docs} [TODO how to correctly cite this docs]. Developed by Ackee Blockchain Security\footnote{\url{https://ackee.xyz/}}, Wake addresses the critical need for comprehensive tooling in the blockchain security ecosystem. The framework provides several core capabilities:
 
 \begin{itemize}
-    \item \textbf{Testing Framework}: Built on top of \texttt{pytest}~\cite{pytest}, Wake enables developers to write unit tests and integration tests for smart contracts using Python's familiar testing idioms.
+    \item \textbf{Testing Framework}: Built on top of \texttt{pytest}\footnote{\url{https://docs.pytest.org/en/stable/}}, Wake enables developers to write unit tests and integration tests for smart contracts using Python's familiar testing idioms.
 
     \item \textbf{Property-Based Fuzzer}: Wake includes a sophisticated fuzzer supporting both property-based and manually-guided fuzzing strategies to discover edge cases and vulnerabilities through automated input generation.
 
-    \item \textbf{Vulnerability Detectors}: The framework ships with built-in detectors for common vulnerability patterns such as reentrancy, integer overflows, and logic flaws. These detectors are designed with a low false-positive philosophy to minimize manual investigation overhead during audits.
+    \item \textbf{Vulnerability Detectors}: The framework ships with built-in detectors for common vulnerability patterns such as reentrancy, integer overflows, and others. These detectors are designed with a low false-positive philosophy to minimize manual investigation overhead during audits.
 
     \item \textbf{Printers}: Information extraction tools that generate structured outputs about contract properties, including control flow graphs, inheritance hierarchies, and data dependencies.
 
-    \item \textbf{Development Tools}: Wake integrates with modern development workflows through a Language Server Protocol (LSP) implementation and a Visual Studio Code extension called ``Tools for Solidity''~\cite{tools-for-solidity}, providing real-time feedback on vulnerabilities and code quality.
+    \item \textbf{Development Tools}: Wake integrates with modern development workflows through a Language Server Protocol (LSP) implementation and a Visual Studio Code extension \emph{Solidity (Wake)}\footnote{\url{https://marketplace.visualstudio.com/items?itemName=AckeeBlockchain.tools-for-solidity}}, providing real-time feedback on vulnerabilities and code quality.
 
     \item \textbf{Deployment and Interaction}: Support for mainnet interactions and contract deployments, enabling seamless transition from testing to production.
 \end{itemize}
 
-Wake has been actively used by Ackee Blockchain Security in professional smart contract audits, where it has helped discover numerous high and critical severity vulnerabilities in protocols such as IPOR Protocol\footnote{\url{https://www.ipor.io/}}, PWN Protocol\footnote{\url{https://pwn.xyz/}}, Brahma Console\footnote{\url{https://console.brahma.fi/}}, and Lido Community Staking Module\footnote{\url{https://csm.lido.fi/}} \cite{wake-docs}.
+Wake has been actively used by Ackee Blockchain Security in professional smart contract audits, where it has helped to discover numerous high and critical severity vulnerabilities in protocols such as IPOR Protocol, PWN Protocol, Brahma Console, and Lido Community Staking Module.
 
 
 \section{Internal Model}
 \label{sec:wake-internal-model}
 
-Wake constructs a rich internal representation of Solidity smart contracts that serves as the foundation for all analysis capabilities. Because of Wake build base on static analysis, all its components were described in Section \ref{sec:static-analysis}.
+Wake constructs a rich internal representation of Solidity smart contracts that serves as the foundation for all analysis capabilities. Due to Wake build based on different code analysis techniques, all its components were described in Chapter \ref{ch:code-analysis}.
 
 \subsubsection*{Intermediate Representation}
 \label{subsubsec:wake-ir}
 
-At the core of Wake's analysis capabilities lies a typed intermediate representation (IR) derived from the Solidity compiler's Abstract Syntax Tree (AST). The IR provides a structured view of the source code, representing all language constructs. The IR preserves type information and cross-references between declarations and their usages, enabling precise semantic analysis. Each IR node maintains references to its parent and children, facilitating traversal in any direction. Wake's IR is fully typed using Python's type system, ensuring type safety during analysis development.
-
+At the core of Wake's analysis capabilities lies a typed intermediate representation derived from the Solidity compiler's Abstract Syntax Tree. The IR provides a structured view of the source code, representing all language constructs. The IR preserves type information and cross-references between declarations and their usages, enabling precise semantic analysis. Each IR node maintains references to its parents and children, facilitating traversal in any direction.
 
 \subsubsection*{Control Flow Graph}
 \label{subsubsec:wake-cfg}
 
-Wake constructs CFGs for functions and modifiers, representing the possible execution paths through the code. It provides utility functions for reachability analysis, such as determining whether the start node is reachable from a given position (backward reachability), or whether the success/revert end nodes are reachable from a statement (forward reachability). These primitives are essential for detecting issues like dead code or functions that always revert.
+Wake constructs CFGs for functions and modifiers, representing the possible execution paths through the code. It provides utility functions for reachability analysis, such as determining whether the start node is reachable from a given position (backward reachability), or whether the success/revert end nodes are reachable from a statement (forward reachability). These primitives are essential for detecting issues such as dead code or functions that always revert.
 
 \subsubsection*{Data Dependency Graph}
 \label{subsubsec:wake-ddg}
@@ -1035,29 +976,13 @@ Wake has been used to discover critical vulnerabilities through fuzzing in produ
 \subsubsection*{Printers}
 \label{subsubsec:wake-printers}
 
-Wake includes auxiliary tools that support development and audit workflows:
+Wake includes special printers that support development and audit workflows:
 
 \begin{itemize}
-    \item \textbf{Printers}: Extract and visualize structural information from contracts:
-    \begin{itemize}
-        \item Contract cross-reference graphs showing relationships between contracts
-        \item Data dependency graph visualization using Graphviz
-        \item Contract size estimation for deployment gas optimization
-        \item Contract summaries and function signature extraction
-        \item C3 linearization visualization for inheritance analysis
-    \end{itemize}
-
-    \item \textbf{Language Server Protocol (LSP)}: Real-time analysis integration with editors, providing:
-    \begin{itemize}
-        \item On-the-fly vulnerability detection
-        \item Code navigation and go-to-definition
-        \item Hover information with type details
-        \item Variable DDG visualization within the editor
-    \end{itemize}
-
-    \item \textbf{Compiler Management}: Built-in \texttt{solc} version management for reproducible builds across different Solidity versions.
-
-    \item \textbf{Code Flattening}: Utility for combining multi-file contracts into a single file for verification on block explorers.
+    \item Contract cross-reference graphs showing relationships between contracts.
+    \item Data dependency graph visualization using Graphviz.
+    \item Contract size estimation for gas deployment optimization.
+    \item Contract summaries and function signature extraction.
 \end{itemize}
 
 \section {Audit Methodology}
@@ -1148,7 +1073,7 @@ that both preceding phases identified as critical.
 \section{Wake-AI}
 \label{sec:wake-ai}
 
-With fast developing of tehcnologies, growing LLM capabilities and often their usage in practice, as we were able notice in Chapter \ref{ch:llm}, LLMs are integrated into Wake as special separate tool aimed to comprehensive AI audit of smart contracts. Unfortunateylly, challneges of static analysis described above, restricted a lo of spce and other rtypes of vulnerabilities. So there is time, when huge language models come to help auditors with security analysis. 
+With fast developing of tehcnologies, growing LLM capabilities and often their usage in practice, as we were able notice in Chapter \ref{ch:llm}, LLMs are integrated into Wake as special separate tool aimed to comprehensive AI audit of smart contracts. [TODO add a few sentences]
 
 \subsection{Architecture}
 \label{subsec:wake-ai-architecture}
@@ -1156,36 +1081,36 @@ With fast developing of tehcnologies, growing LLM capabilities and often their u
 Wake-AI extends the Wake framework with artificial intelligence capabilities for automated security auditing. It implements a multi-stage workflow architecture where each stage performs a specific analysis task. The system orchestrates AI models through structured sessions:
 
 \begin{itemize}
-    \item \textbf{Session Management}: Wake-AI supports multiple AI backends, including Claude (via MCP---Model Context Protocol) and OpenAI Codex models. Sessions maintain conversation context and can be forked for parallel processing.
+    \item \textbf{Session Management}: Wake-AI supports multiple AI backends [TODO not BEs, it should be called correctly], including Claude and OpenAI Codex models. Sessions maintain conversation context and can be forked for parallel processing.
 
-    \item \textbf{MCP Integration}: Wake exposes its analysis capabilities as MCP tools, allowing AI models to query the IR, retrieve function signatures, access CFG information, and invoke static analysis detectors during their reasoning process.
+    \item \textbf{Prompt-Based Reasoning and Validation}: [TODO describe correctly] important note, that it consists of different prompt-templates for each stage, that smart contract is going through such as discovery, triage, deduplication and other. Each issue is validated with high reasoning effort. 
+
+    \item \textbf{MCP Integration}: Wake exposes its analysis capabilities as Model Context Protocol (MCP) tools, allowing AI models to query the IR, retrieve function signatures, access CFG information, and invoke static analysis detectors during their reasoning process.
 
     \item \textbf{Working Directory}: Each audit maintains a structured working directory containing intermediate results, allowing workflow resumption and result inspection.
 
     \item \textbf{Progress Tracking}: The framework provides real-time progress updates and token usage tracking for cost management.
-
-    \item Prompt-Based Reasoning and Validation
 \end{itemize}
+
+[TODO reasonable and smeeth transition to limitations]
 
 
 \subsection{Limitations}
 \label{subsec:wake-ai-limitations}
 
-Despite its capabilities, Wake-AI faces several limitations:
+Despite its capabilities, Wake-AI faces several limitations [TODO add smth also ]:
 
 \begin{itemize}
     \item \textbf{Context Window Constraints}: LLMs have limited context windows, restricting the amount of code and analysis data that can be processed simultaneously. Large codebases may require chunking strategies that could miss cross-file vulnerabilities.
 
-    \item \textbf{Hallucination Risk}: AI models may generate plausible-sounding but incorrect vulnerability reports. The triage phase mitigates this through evidence requirements, but some false positives may persist.
+    \item \textbf{Hallucination Risk}: AI models may generate plausible, but incorrect vulnerability reports. The triage phase mitigates this through evidence requirements, but some false positives may persist.
 
     \item \textbf{Determinism}: AI model outputs are inherently non-deterministic, potentially producing different findings on repeated runs of the same codebase.
 
     \item \textbf{Knowledge Cutoff}: Models may lack awareness of recently discovered vulnerability patterns or new Solidity language features introduced after their training data cutoff.
-
-    \item \textbf{Limited Tool Access}: While MCP integration provides access to Wake's analysis tools, the AI cannot execute arbitrary code or perform dynamic testing during analysis. Complex vulnerabilities requiring runtime behavior observation may be missed.
 \end{itemize}
 
-Some of these limitations merit attention and can be addressed through alternative approaches. Others, such as hallucination risk and non-determinism, cannot be fully resolved due to the inherent nature of LLMs. This thesis focuses on one of the most critical limitations: knowledge cutoff. The following chapter presents a proposed solution designed to increase the detection of genuine security issues while reducing false positives. This is achieved by providing the LLM with similar historical issues, enabling it to make more informed judgments about vulnerabilities.
+Some of these limitations merit attention and can be addressed through alternative approaches. Others, such as hallucination risk and non-determinism, cannot be fully resolved due to the inherent nature of LLMs. This thesis focuses on one of the most critical limitations: \empth{knowledge cutoff}. The following chapter presents a proposed solution designed to increase the detection of genuine security issues while reducing false positives. This is achieved by providing the LLM with similar historical issues, enabling it to make more informed judgments about vulnerabilities.
 
 \chapter{Proposed Methodology}
 \label{ch:methodology}
