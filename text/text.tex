@@ -764,25 +764,46 @@ A transformer architecture on its own is simply a parameterized function; it bec
 \subsection{Pre-training}
 \label{subsec:pretraining}
 
-Pre-training exposes the model to massive text corpora using self-supervised objectives that require no human labelling. For decoder-only models, the objective is \emph{next-token prediction} (causal language modelling): given a prefix $x_1, \ldots, x_{t-1}$, maximise $\log P(x_t \mid x_1, \ldots, x_{t-1})$ summed over all positions and all documents in the corpus. For encoder-only models like BERT~\cite{devlin2019bert}, the objective is \emph{masked language modelling}: randomly mask a fraction of tokens and train the model to recover them from bidirectional context.
- 
-The simplicity of these objectives belies the enormous computational cost. State-of-the-art models are trained on corpora containing trillions of tokens, using thousands of GPUs running continuously for weeks or months. These costs mean that pre-training a frontier dense model from scratch is feasible only for a handful of well-resourced organisations. However, MoE architectures (Section~\ref{subsec:moe}) have begun to challenge this assumption: DeepSeek-V3 demonstrated frontier-level performance at a fraction of the cost of comparable dense models~\cite{deepseekai2025deepseekv3}. For most practitioners and researchers, the practical path remains to start from an existing pre-trained model and adapt it through fine-tuning.
+Pre-training exposes the model to massive text corpora using self-supervised objectives that require no human labeling. For decoder-only models, the objective is \emph{next-token prediction} (causal language modeling): minimize the cross-entropy loss from equation~\eqref{eq:nll} over all positions and all documents in the corpus. For encoder-only models like BERT, the objective is \emph{masked language modeling}: randomly mask a fraction of tokens and train the model to recover them from bidirectional context.
+
+The simplicity of these objectives belies the enormous computational cost. State-of-the-art models are trained on corpora containing trillions of tokens, using thousands of GPUs running continuously for weeks or months. These costs mean that pre-training a frontier dense model from scratch is feasible only for a handful of well-resourced organizations. For most practitioners and researchers, the practical path remains to start from an existing pre-trained model and adapt it through fine-tuning.
 
 
 \subsection{Fine-tuning}
 \label{subsec:finetuning}
 
-Fine-tuning adapts a pre-trained model to specific downstream tasks by continuing training on a smaller, curated dataset. The most common modern approach is \emph{Supervised Fine-tuning} (SFT) on instruction--response pairs, which teaches the model to follow user intent reliably. By exposing the model to examples of the desired input--output behaviour, SFT can bias it toward structured output, improve adherence to constraints, and sharpen performance on domain-specific tasks.
- 
-Fine-tuning carries risks. Training on a narrow dataset can cause \emph{catastrophic forgetting}, where the model loses general capabilities acquired during pre-training---for example, a model fine-tuned exclusively on Solidity code might lose its ability to explain concepts in natural language. Overfitting is a related concern: a model fine-tuned on a small, homogeneous dataset may perform well on similar examples but generalise poorly to novel inputs.
- 
-\textbf{Parameter-efficient methods} have made fine-tuning accessible even for the largest models. Full fine-tuning updates every parameter, which for billion-parameter architectures requires substantial GPU memory. LoRA (Low-Rank Adaptation) offers an alternative: it freezes the pre-trained weights entirely and injects small trainable low-rank matrices into each layer, reducing the number of trainable parameters by orders of magnitude while preserving most of the model's original knowledge. QLoRA extends this by combining LoRA with 4-bit quantisation of the frozen weights, making it possible to fine-tune models with tens of billions of parameters on a single consumer GPU~\cite{hu2021lora, xu2023qalora}.
+Fine-tuning adapts a pre-trained model to specific downstream tasks by continuing training on a smaller, curated dataset. The most common modern approach is Supervised Fine-tuning (SFT) on instruction--response pairs, which teaches the model to follow user intent reliably. By exposing the model to examples of the desired input--output behavior, SFT can bias it toward structured output, improve adherence to constraints, and sharpen performance on domain-specific tasks.
+
+Fine-tuning carries risks. Training on a narrow dataset can cause forgetting, where the model loses general capabilities acquired during pre-training. For example, a model fine-tuned exclusively on Solidity code might lose its ability to explain concepts in natural language. Overfitting is a related concern: a model fine-tuned on a small, homogeneous dataset may perform well on similar examples but generalize poorly to novel inputs.
+
+\subsubsection*{Parameter-Efficient Fine-Tuning}
+
+Full fine-tuning updates every parameter in the model, which for billion-parameter architectures requires substantial GPU memory and risks catastrophic forgetting. Low-Rank Adaptation (LoRA)~\cite{hu2021lora} offers an elegant alternative. Instead of updating a weight matrix $\mathbf{W}_0 \in \mathbb{R}^{d \times k}$ directly, LoRA freezes it and adds a low-rank decomposition:
+
+\begin{equation}
+    \mathbf{W} = \mathbf{W}_0 + \Delta\mathbf{W} 
+    = \mathbf{W}_0 + \mathbf{B}\mathbf{A},
+    \label{eq:lora}
+\end{equation}
+
+where $\mathbf{B} \in \mathbb{R}^{d \times r}$ and $\mathbf{A} \in \mathbb{R}^{r \times k}$ are small trainable matrices with rank $r \ll \min(d, k)$. Only $\mathbf{A}$ and $\mathbf{B}$ are updated during training; the original weights $\mathbf{W}_0$ remain frozen. For a typical transformer layer with $d = k = 4096$ and $r = 16$, this reduces the number of trainable parameters from $\sim$16.8~million to $\sim$131~thousand per matrix---a reduction of over 99\%. QLoRA~\cite{xu2023qalora} extends this further by storing the frozen $\mathbf{W}_0$ in 4-bit precision, making it possible to fine-tune models with tens of billions of parameters on a single consumer GPU.
+
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=0.7\linewidth]{images/lora.pdf}
+    \caption{LoRA injects a trainable low-rank path 
+    $\mathbf{B}\mathbf{A}$ alongside the frozen pre-trained weight 
+    matrix $\mathbf{W}_0$. Only the small matrices $\mathbf{A}$ and 
+    $\mathbf{B}$ are updated during fine-tuning.}
+    \label{fig:lora}
+\end{figure}
+
+These parameter-efficient methods make it practical to adapt large models to domain-specific tasks such as smart contract analysis. However, even a well-fine-tuned model may produce outputs that are technically correct but poorly structured, overly verbose, or misaligned with what a user actually needs. The next challenge is shaping the model's output.
  
 \subsection{Reinforcement Learning from Human Feedback}
 \label{subsec:rlvr}
 
-Supervised fine-tuning teaches a model \emph{what} to say, but not necessarily \emph{how} to say it in a way that aligns with human preferences. Reinforcement Learning from Human Feedback (RLHF) addresses this gap by optimising the model's output to match human judgements of quality~\cite{ouyang2022training}. The process involves three stages:
- 
+Reinforcement Learning from Human Feedback (RLHF) addresses this gap by optimizing the model's output to match human judgments of quality~\cite{ouyang2022training}. The process involves three stages:
 \begin{enumerate}
     \item \textbf{Reward model training.} Human annotators rank multiple model outputs for the same prompt. A separate reward model is trained on these preference pairs to predict which outputs humans would prefer.
  
@@ -820,10 +841,10 @@ Together, these prompting techniques allow practitioners to adapt a single gener
 \label{sec:llm-auditing}
 % ============================================================
 
-The application of LLMs to smart contract security has evolved rapidly since 2023, with approaches spanning four broad categories: prompt-only and agentic pipelines, fine-tuned detection models, RAG-augmented frameworks, and hybrid systems that combine multiple strategies.  Each category represents a different trade-off between accessibility, precision, and the amount of domain-specific engineering required.
+The application of LLMs to smart contract security has evolved rapidly since 2023, with approaches spanning four broad categories: prompt-only agentic pipelines, fine-tuned detection models, RAG-augmented frameworks, and hybrid systems that combine multiple strategies.  Each category represents a different trade-off between accessibility, precision, and the amount of domain-specific engineering required.
 
 
-\subsection{Prompt-Only and Agentic Auditing Pipelines}
+\subsection{Prompt-Only Agentic Pipelines}
 \label{subsec:prompt-only}
 
 The simplest approach feeds smart contract source code directly into a general-purpose LLM with appropriate instructions.  Chen et al.~\cite{chen2024chatgpt} conducted a systematic evaluation of GPT-3.5 and GPT-4 on the SmartBugs-Curated benchmark and found high recall but poor precision, with roughly 4 out of 5 flagged issues being false positives (GPT-4 achieved 88.2\% recall but only 22.6\% precision).  Perhaps more concerning, 42\% of contracts showed unstable detection outcomes across repeated runs, highlighting the non-deterministic nature of LLM-based analysis.
@@ -835,7 +856,7 @@ More structured prompt-based approaches improve on this baseline.  \textbf{GPTLe
 These results collectively establish that general-purpose LLMs can identify security issues in smart contracts but lack the precision needed for production use without additional grounding mechanisms.
 
 
-\subsection{Fine-Tuned Models for Smart Contract Vulnerability Detection}
+\subsection{Fine-Tuned Models}
 \label{subsec:fine-tuned}
 
 Fine-tuning domain-specific models on labelled vulnerability datasets produces substantially stronger results than prompting alone.
@@ -864,7 +885,7 @@ Retrieval-Augmented Generation (RAG) addresses a fundamental limitation of LLMs:
 
 The most comprehensive framework is \textbf{LLM-BSCVM}~\cite{llmbscvm2025}, which implements a full vulnerability management lifecycle using a ``Decompose-Retrieve-Generate'' pipeline with multi-agent collaboration and LoRA-fine-tuned CodeLlama-13B, achieving 91\% accuracy with a 5.1\% false positive rate.
 
-While not targeting smart contracts specifically, \textbf{ReVul-CoT}~\cite{chen2025revulcot} demonstrates the effectiveness of the RAG+CoT paradigm for general software vulnerability severity assessment.  Using retrieval from NVD and CWE databases combined with structured chain-of-thought reasoning, it achieved 87.50\% accuracy and 83.75\% Macro-F1 on 12,070 vulnerability records---improvements exceeding 10 percentage points over all baselines.  Its architecture provides a transferable blueprint for smart contract severity assessment.
+Although not specifically targeting smart contracts, \textbf{ReVul-CoT}~\cite{chen2025revulcot} demonstrates the effectiveness of the RAG+CoT paradigm for the general assessment of the severity of software vulnerabilities. Using retrieval from NVD and CWE databases combined with structured chain-of-thought reasoning, it achieved 87.50\% accuracy and 83.75\% Macro-F1 on 12,070 vulnerability records --- improvements exceeding 10 percentage points over all baselines. This architecture provides a transferable blueprint for the assessment of the severity of smart contracts.
 
 
 \section{Challenges and Limitations}
