@@ -72,7 +72,7 @@ This chapter introduces the foundations needed to understand Ethereum and its co
 
 \section{Overview}
 \label{sec:overview}
-Ethereum, launched in 2015, marked a significant evolution in blockchain technology. First proposed by \texttt{Vitalik Buterin} in a 2013 white paper, Ethereum extends the ledger-centric model to a full application platform that supports smart contracts and decentralized applications (dApps) \cite{Buterin2013}. Rather than simply recording value transfers, it enables general-purpose programmable logic through the EVM while preserving the core properties of transparency, decentralization,and immutability \cite{wood2014yellow}. In effect, Ethereum transformed the blockchain as a generalized state-transition machine, broadening its applicability well beyond simple currency use cases.
+Ethereum, launched in 2015, marked a significant evolution in blockchain technology. First proposed by \texttt{Vitalik Buterin} in a 2013 white paper, Ethereum extends the ledger-centric model to a full application platform that supports smart contracts and decentralized applications (dApps) \cite{Buterin2013}. Rather than simply recording value transfers, it enables general-purpose programmable logic through the EVM while preserving the core properties of transparency, decentralization, and immutability \cite{wood2014yellow}. In effect, Ethereum transformed the blockchain as a generalized state-transition machine, broadening its applicability well beyond simple currency use cases.
 
 
 \subsection{Blockchain}
@@ -124,7 +124,7 @@ Proof-of-Stake (PoS) emerged as a direct response to the energy and scalability 
     \item \textbf{Energy efficiency at the cost of maturity.} PoS eliminates the need for specialized mining hardware and its associated electricity consumption, though the mechanism has a shorter track record and its long-term security guarantees are still being studied.
 \end{itemize}
 
-The most prominent real-world transition to PoS occurred on Ethereum. Under its original PoW design, the network consumed an estimated 113 terawatt-hours~of electricity annually while processing only about 15 transactions per second. On 15 September 2022, the Ethereum development community completed \textit{The Merge}~\cite{mit_merge}, a long-planned switch to PoS that proceeded without major disruption to the live network and reduced energy consumption by over 99\%\footnote{\url{https://en.wikipedia.org/wiki/Proof_of_stake}}.
+The most prominent real-world transition to PoS occurred on Ethereum. Under its original PoW design, the annual electricity consumption of the network was approximately 113~terawatt-hours, despite processing only about 15~transactions per second. On 15~September 2022, the Ethereum development community completed \textit{The Merge}~\cite{mit_merge}, a long-planned switch to PoS that proceeded without major disruption to the live network and reduced energy consumption by over 99\,\%\footnote{\url{https://en.wikipedia.org/wiki/Proof_of_stake}}.
 
 Under Ethereum's current PoS implementation, a validator must deposit a minimum of 32~ETH into a dedicated smart contract. Block proposers are then selected pseudo-randomly and the remaining validators attest to each proposed block's validity. Finality is enforced by the Casper Friendly Finality Gadget (Casper-FFG): a block is considered final once two consecutive checkpoint blocks have been justified by a supermajority (2/3 of all staked ETH). Reverting a finalized block would require an attacker to burn at least one-third of the total staked supply, making such an attack economically devastating and practically infeasible~\cite{ethereum_pos, buterin2019casperfriendlyfinalitygadget}.
 
@@ -160,18 +160,18 @@ Blocks have an elastic gas target and the base fee increases or decreases depend
 \end{figure}
 
 \begin{itemize}
-    \item Program Counter (PC) -- component that tracks the current instruction that it is executing;
-    \item EVM code -- an immutable component holds the bytecode of the smart contract that is being executed.
-    \item Account Storage -- part of the persistent state of the blockchain where the data of smart contracts are stored permanently. There are two types of account in the Ethereum environment:\texttt{ (i) }Externally Owned Account (EOA) that is owned by any external entity. Most often, it is referred to as a user account; and\texttt{ (ii) }Smart Contract Account that is owned by a smart contract and often controlled by an EOA that interacts with the deployed smart contract~\cite{Buterin2013}.
+    \item Program Counter (PC) --- component that tracks the current instruction that it is executing;
+    \item EVM code --- an immutable component holds the bytecode of the smart contract that is being executed.
+    \item Account Storage --- part of the persistent state of the blockchain where the data of smart contracts are stored permanently. There are two types of account in the Ethereum environment:\texttt{ (i) }Externally Owned Account (EOA) that is owned by any external entity. Most often, it is referred to as a user account; and\texttt{ (ii) }Smart Contract Account that is owned by a smart contract and often controlled by an EOA that interacts with the deployed smart contract~\cite{Buterin2013}.
 \end{itemize}
 
 \subsection{Memory}
 
 \begin{itemize}
-    \item \textbf{Stack} -- low-level memory structure that operates on a last-in, first-out (LIFO) principle. It stores small local variables and value types that are required for immediate execution. The stack is limited to 1024 elements, each 256 bits wide, and is accessible only through EVM opcodes or inline assembly. Careful management is essential, as exceeding its capacity causes the execution of the contract to fail \cite{evm_storage}.
-    \item \textbf{Memory} -- dynamic and expandable storage area allocated for each function execution, which is then discarded once the function has finished. Unlike the stack, which is restricted to temporary data storage, memory allows for more flexible and longer-lived data retention.
-    \item \textbf{Storage} -- persistent storage is associated with every smart contract and holds its state. Read and write operations in storage are relatively more expensive than those performed in memory. The data in storage are maintained as key-value pairs.
-    \item \textbf{Calldata} -- read-only and immutable storage that holds function arguments and transaction data for the duration of a transaction call.
+    \item \textbf{Stack} --- low-level memory structure that operates on a last-in, first-out (LIFO) principle. It stores small local variables and value types that are required for immediate execution. The stack is limited to 1024 elements, each 256 bits wide, and is accessible only through EVM opcodes or inline assembly. Careful management is essential, as exceeding its capacity causes the execution of the contract to fail \cite{evm_storage}.
+    \item \textbf{Memory} --- dynamic and expandable storage area allocated for each function execution, which is then discarded once the function has finished. Unlike the stack, which is restricted to temporary data storage, memory allows for more flexible and longer-lived data retention.
+    \item \textbf{Storage} --- persistent storage is associated with every smart contract and holds its state. Read and write operations in storage are relatively more expensive than those performed in memory. The data in storage are maintained as key-value pairs.
+    \item \textbf{Calldata} --- read-only and immutable storage that holds function arguments and transaction data for the duration of a transaction call.
 \end{itemize}
 
 \section{Smart Contracts}
@@ -219,9 +219,9 @@ In Ethereum, security is not an add-on layer, but a property that must be delibe
 Smart contract vulnerabilities can be broadly classified into three categories based on their origin~\cite{atzei2017survey}:
 
 \begin{itemize}
-    \item \textbf{Solidity-related} -- flaws arising from the design and semantics of the Solidity programming language itself.
-    \item \textbf{EVM-related} -- issues rooted in the behavior and constraints of the Ethereum Virtual Machine.
-    \item \textbf{Ethereum blockchain design-related} -- vulnerabilities that exploit properties of the underlying blockchain protocol, such as transaction ordering or block-level mechanics.
+    \item \textbf{Solidity-related} --- flaws arising from the design and semantics of the Solidity programming language itself.
+    \item \textbf{EVM-related} --- issues rooted in the behavior and constraints of the Ethereum Virtual Machine.
+    \item \textbf{Ethereum blockchain design-related} --- vulnerabilities that exploit properties of the underlying blockchain protocol, such as transaction ordering or block-level mechanics.
 \end{itemize}
 
 The rest of section illustrates the most popular attack patterns and minimal code examples. All vulnerable code snippets are provided strictly for educational purposes and must not be used in production.
@@ -640,23 +640,23 @@ In its simplest form, the embedding is a table lookup. The model maintains a mat
 
 In a transformer, the initial embedding is only the starting point. As the token's vector passes through successive attention layers, it is progressively enriched with contextual information from the surrounding sequence. The output of the final layer is a \emph{contextual embedding} that represents not just the token in isolation, but the token in the context of everything around it. This is a critical distinction: the word ``bank'' receives different final-layer representations in ``river bank'' and ``bank account,'' even though it starts from the same row in the embedding table.
 
-\begin{figure}[!h]
-    \centering
-    % Suggested TikZ or imported figure:
-    % Left: token IDs [7, 42, 103] pointing into embedding table rows
-    % Middle: initial vectors (static, context-free)
-    % Right: after N transformer layers, vectors have shifted 
-    %         (contextualised)
-    % Caption explains the progression from discrete ID to 
-    % context-dependent vector
-    \includegraphics[width=0.85\linewidth]{images/embeddings.pdf}
-    \caption{From tokens to contextual embeddings. Each token index 
-    selects a row from the embedding table, producing a static vector. 
-    Successive transformer layers refine these vectors into contextual 
-    representations that capture the token's meaning within the 
-    surrounding sequence.}
-    \label{fig:embeddings}
-\end{figure}
+% \begin{figure}[!h]
+%     \centering
+%     % Suggested TikZ or imported figure:
+%     % Left: token IDs [7, 42, 103] pointing into embedding table rows
+%     % Middle: initial vectors (static, context-free)
+%     % Right: after N transformer layers, vectors have shifted 
+%     %         (contextualised)
+%     % Caption explains the progression from discrete ID to 
+%     % context-dependent vector
+%     \includegraphics[width=0.85\linewidth]{images/embeddings.pdf}
+%     \caption{From tokens to contextual embeddings. Each token index 
+%     selects a row from the embedding table, producing a static vector. 
+%     Successive transformer layers refine these vectors into contextual 
+%     representations that capture the token's meaning within the 
+%     surrounding sequence.}
+%     \label{fig:embeddings}
+% \end{figure}
 
 This contextual embedding mechanism is what makes pre-trained transformers so versatile. A model like BERT~\cite{devlin2019bert} can be used as a general-purpose feature extractor: feed in a passage of text, extract the final-layer embeddings, and use them for downstream tasks---classification, similarity search, clustering---without modifying the model's weights. Code-specialized variants such as CodeBERT~\cite{feng2020codebert} apply the same principle to source code, and their embeddings form the basis for vulnerability detection and code search systems that we survey in Section~\ref{sec:llm-auditing}.
 
@@ -1117,7 +1117,7 @@ Despite its capabilities, Wake-AI faces several limitations [TODO add smth also 
     \item \textbf{Knowledge Cutoff}: Models may lack awareness of recently discovered vulnerability patterns or new Solidity language features introduced after their training data cutoff.
 \end{itemize}
 
-Some of these limitations merit attention and can be addressed through alternative approaches. Others, such as hallucination risk and non-determinism, cannot be fully resolved due to the inherent nature of LLMs. This thesis focuses on one of the most critical limitations: \empth{knowledge cutoff}. The following chapter presents a proposed solution designed to increase the detection of genuine security issues while reducing false positives. This is achieved by providing the LLM with similar historical issues, enabling it to make more informed judgments about vulnerabilities.
+Some of these limitations merit attention and can be addressed through alternative approaches. Others, such as hallucination risk and non-determinism, cannot be fully resolved due to the inherent nature of LLMs. This thesis focuses on one of the most critical limitations: \emph{knowledge cutoff}. The following chapter presents a proposed solution designed to increase the detection of genuine security issues while reducing false positives. This is achieved by providing the LLM with similar historical issues, enabling it to make more informed judgments about vulnerabilities.
 
 \chapter{Proposed Methodology}
 \label{ch:methodology}

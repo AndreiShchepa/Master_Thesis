@@ -109,14 +109,14 @@
 \usepackage{xurl}
 \usepackage{listings} % typesetting of sources
 %\usepackage{minted}
-\usepackage{csquotes}
 \usepackage{caption}
 \usepackage{minted}
+\usepackage{booktabs}
 
 %%%%%%%%%%%%%%%%%%%%%%
 % PACKAGES SETTINGS END
 %%%%%%%%%%%%%%%%%%%%%%
-
+\usepackage{csquotes}
 \begin{document}
 \frontmatter\frontmatterinit % do not remove these two commands
 
@@ -249,7 +249,10 @@ on the utilization of this thesis as a school work pursuant of Section 60 (1) of
 
 \backmatter % do not remove this command
 
+\begingroup
+\raggedright
 \printbibliography % print out the BibLaTeX-generated bibliography list
+\endgroup
 
 \include{text/medium} % include `medium.tex' from `text/' subdirectory
 
