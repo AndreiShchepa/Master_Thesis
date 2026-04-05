@@ -446,7 +446,7 @@ Regardless of the search strategy, the effectiveness of a fuzzing campaign is he
 
 Despite its practical effectiveness, fuzzing provides no completeness guaranty: if the fuzzer does not find a bug, this does not prove that the program is correct. Bugs that require very specific, unlikely input sequences or that depend on environmental conditions, which the fuzzer does not model, may be missed entirely. Coverage metrics offer some confidence that a large portion of the code has been used, but coverage is a necessary rather than a sufficient condition for bug detection.
 
-These inherent limitations of dynamic analysis motivate the pursuit of \textit{formal verification}: techniques that aim to provide mathematical guaranties about program behavior across \emph{all} possible inputs, rather than merely the inputs explored during testing. Where fuzzing asks "can I find an input that breaks this property?", formal verification asks "can I \emph{prove} that no such input exists?".
+These inherent limitations of dynamic analysis motivate the pursuit of \textit{formal verification}: techniques that aim to provide mathematical guaranties about program behavior across \emph{all} possible inputs, rather than merely the inputs explored during testing. Where fuzzing asks ``can I find an input that breaks this property?'', formal verification asks ``can I \emph{prove} that no such input exists?''.
 
 \section{Formal Verification}
 \label{sec:formal-verification}
@@ -573,15 +573,34 @@ The chapter traces the ideas behind these models from first principles. It begin
 \section{Sequence Probabilities}
 \label{sec:seq-prob}
 
-Let $\mathbf{x} = (x_1, x_2, \dots, x_T)$ be a sequence of tokens --- these could be words in a sentence, symbols in a formula, or any discrete units drawn from a finite vocabulary. A \emph{language model} assigns a probability to the whole sequence by factoring it with the chain rule of probability:
+Let $\mathbf{x} = (x_1, x_2, \dots, x_T)$ be a sequence of tokens --- these could be words in a sentence, symbols in a formula, or any discrete units drawn from a finite vocabulary. A language model assigns a probability to the whole sequence by factoring it with the chain rule of probability:
 
 \begin{equation}
-    P(\mathbf{x}) \;=\; \prod_{t=1}^{T} P\,\bigl(x_t \mid x_1, \dots, x_{t-1}\bigr)
+    P(\mathbf{x}) \;=\; \prod_{t=1}^{T} 
+    P\!\bigl(x_t \mid x_1, \dots, x_{t-1}\bigr).
     \label{eq:chain-rule}
 \end{equation}
 
-Each factor on the right-hand side determines the likelihood of the next token given everything that preceded \cite{jm3}. Classical $n$-gram models approximate this by truncating the history to a fixed window of $n{-}1$ tokens, an assumption that works acceptably for short phrases but collapses when the prediction depends on context dozens or hundreds of tokens back. To handle longer-range dependencies, the field turned to neural networks that could, in principle, condition on the entire preceding sequence \cite{hindle2012naturalness}.
+Each factor on the right-hand side determines the likelihood of the next token given everything that preceded it~\cite{jm3}. Classical $n$-gram models approximate this by truncating the history to a fixed window of $n{-}1$ tokens, an assumption that works acceptably for short phrases but collapses when the prediction depends on context dozens or hundreds of tokens back.
 
+The quality of a language model is measured by how well its predicted distribution matches the tokens that actually occur. The standard measure is the \textit{cross-entropy} --- the average negative log-probability assigned to the true next token:
+
+\begin{equation}
+    \mathcal{L} \;=\; -\frac{1}{T}\sum_{t=1}^{T} 
+    \log P_\theta\,\bigl(x_t \mid x_1, \dots, x_{t-1}\bigr),
+    \label{eq:nll}
+\end{equation}
+
+where $\theta$ denotes the model's parameters. A related and more interpretable quantity is \textit{perplexity}, defined as:
+
+\begin{equation}
+    \text{PPL} \;=\; \exp(\mathcal{L}).
+    \label{eq:perplexity}
+\end{equation}
+
+Perplexity can be read as the effective number of tokens the model is choosing between at each step: a model with perplexity 20 is, on average, as uncertain as if it were picking uniformly from 20 equally likely options. The lower perplexity indicates a better model.
+
+To move beyond the fixed-window limitation of $n$-gram models, the field turned to neural networks that could, in principle, condition on the entire preceding sequence~\cite{hindle2012naturalness}.
 
 \subsection{Recurrent Neural Networks}
 \label{subsec:rnn}
@@ -623,42 +642,31 @@ The transformer, introduced by Vaswani~et~al. in 2017, addressed both limitation
 \subsection{Tokenization}
 \label{subsec:tokenization}
  
-Before any computation can occur, the model must convert the raw text into a sequence of discrete tokens from a fixed vocabulary. Modern LLMs use \emph{subword tokenization}, most commonly Byte-Pair Encoding (BPE)\footnote{\url{https://en.wikipedia.org/wiki/Byte-pair_encoding}}, which was adapted for neural machine translation by \texttt{Sennrich et al.}~\cite{sennrich2016bpe}. BPE starts with a vocabulary of individual characters and iteratively merges the most frequent adjacent pair into a single token, repeating until a target vocabulary size is reached. The result is a vocabulary of variable-length subword units: common words like "the" remain single tokens, while rare or compound words are split into recognizable pieces.
+Before any computation can occur, the model must convert the raw text into a sequence of discrete tokens from a fixed vocabulary. Modern LLMs use \emph{subword tokenization}, most commonly Byte-Pair Encoding (BPE)\footnote{\url{https://en.wikipedia.org/wiki/Byte-pair_encoding}}, which was adapted for neural machine translation by Sennrich~et~al.~\cite{sennrich2016bpe}. BPE starts with a vocabulary of individual characters and iteratively merges the most frequent adjacent pair into a single token, repeating until a target vocabulary size is reached. The result is a vocabulary of variable-length subword units: common words like ``the'' remain single tokens, while rare or compound words are split into recognizable pieces.
  
-For source code, tokenization has particular implications. A Solidity identifier like \texttt{transferFrom} might be split into \texttt{transfer} and \texttt{From}, preserving meaningful subcomponents. However, hexadecimal addresses, large numeric constants, and domain-specific syntax may be tokenized into long sequences of opaque fragments, consuming the context window budget without conveying proportional semantic information. These tokenization artifacts are one reason why code-specialized models often use vocabularies trained on mixed code-and-text corpora rather than general-purpose text vocabularies.
+For source code, tokenization has particular implications. Subword tokenizers trained predominantly on natural language corpora develop merge rules optimized for English words and common punctuation, not for programming language syntax. As a result, identifiers, hexadecimal  addresses, and numeric constants in Solidity are often split into fragments that carry little individual meaning, consuming context window budget without conveying proportional semantic information. This mismatch motivates training tokenizers on mixed code-and-text corpora, as is done by several code-specialized models.
  
 Once tokenized, each token is mapped to a dense vector through a learned \emph{embedding table} --- a matrix $\mathbf{E} \in \mathbb{R}^{|\mathcal{V}| \times d_{\text{model}}}$ where each row corresponds to one vocabulary entry. These vectors are the model's initial numerical representation of each token, and they are refined through the subsequent attention layers. These embedding vectors, not raw characters, serve as input to the transformer.
+
+The output of tokenization is a sequence of integer indices drawn from a fixed vocabulary. These integers are what the model receives as input, but neural networks cannot operate on discrete indices directly. The next step is to convert them into continuous vectors that the transformer can process.
 
 \subsection{Embeddings}
 \label{subsec:embeddings}
 
-Tokenisation converts raw text into a sequence of integer indices. However, neural networks operate on continuous vectors, not discrete symbols. The bridge between the two is an \emph{embedding}: a fixed-dimensional dense vector that represents a token in a continuous space where arithmetic operations are meaningful.
+An embedding maps each token index to a fixed-dimensional dense vector in a continuous space where arithmetic operations are meaningful. The model maintains a learned matrix where $|\mathcal{V}|$ is the vocabulary size and $d_{\text{model}}$ is the embedding dimension. To embed a token with index $i$, the model retrieves the $i$-th row of $\mathbf{E}$. These rows are not hand-designed; they are learned parameters, updated during training alongside all other weights. Over the course of pre-training on billions of tokens, the embedding space develops a geometric structure in which tokens with similar meaning or function occupy nearby regions. This idea was demonstrated at scale by \textit{Word2Vec}, which showed that word embeddings capture semantic relationships as vector arithmetic: the vector for ``king'' minus ``man'' plus ``woman'' produces a vector close to ``queen''~\cite{mikolov2013}.
 
-In its simplest form, the embedding is a table lookup. The model maintains a matrix $\mathbf{E} \in \mathbb{R}^{|\mathcal{V}| \times d_{\text{model}}}$, where $|\mathcal{V}|$ is the vocabulary size and $d_{\text{model}}$ is the embedding dimension (typically 768 to 4{,}096 in modern models). To embed a token with index $i$, the model simply retrieves the $i$-th row of $\mathbf{E}$. These rows are not hand-designed---they are learned parameters, updated during training alongside all other weights. Over the course of pre-training on billions of tokens, the embedding space develops a geometric structure in which tokens with similar meaning or function occupy nearby regions. This idea dates back to the distributional hypothesis in linguistics---``a word is characterized by the company it keeps''~\cite{firth1957synopsis}---and was first demonstrated at scale by Word2Vec, which showed that word embeddings trained on large corpora capture semantic relationships as vector arithmetic: the vector for ``king'' minus ``man'' plus "woman" produces a vector close to "queen"~\cite{mikolov2013word2vec}.
+\begin{figure}[!ht]
+    \centering
+    \includegraphics[width=9cm, height=7cm]{images/word_embeddings_analogy.pdf}
+    \caption{TODO.}
+    \label{fig:word_embeddings}
+\end{figure}
 
-In a transformer, the initial embedding is only the starting point. As the token's vector passes through successive attention layers, it is progressively enriched with contextual information from the surrounding sequence. The output of the final layer is a \emph{contextual embedding} that represents not just the token in isolation, but the token in the context of everything around it. This is a critical distinction: the word ``bank'' receives different final-layer representations in ``river bank'' and ``bank account,'' even though it starts from the same row in the embedding table.
+In a transformer, the initial embedding is only the starting point. As the token's vector passes through successive attention layers, it is progressively enriched with contextual information from the surrounding sequence. The output of the final layer is a \emph{contextual embedding} that represents not just the token in isolation, but the token in the context of everything around it. This is a critical distinction: the word ``bank'' receives different final-layer representations in ``river bank'' and ``bank account'', even though it starts from the same row in the embedding table.
 
-% \begin{figure}[!h]
-%     \centering
-%     % Suggested TikZ or imported figure:
-%     % Left: token IDs [7, 42, 103] pointing into embedding table rows
-%     % Middle: initial vectors (static, context-free)
-%     % Right: after N transformer layers, vectors have shifted 
-%     %         (contextualised)
-%     % Caption explains the progression from discrete ID to 
-%     % context-dependent vector
-%     \includegraphics[width=0.85\linewidth]{images/embeddings.pdf}
-%     \caption{From tokens to contextual embeddings. Each token index 
-%     selects a row from the embedding table, producing a static vector. 
-%     Successive transformer layers refine these vectors into contextual 
-%     representations that capture the token's meaning within the 
-%     surrounding sequence.}
-%     \label{fig:embeddings}
-% \end{figure}
+This contextual embedding mechanism is what makes pre-trained transformers so versatile. A model like BERT~\cite{devlin2019bert} can be used as a general-purpose feature extractor: feed in a passage of text, extract the final-layer embeddings, and use them for downstream tasks: classification, similarity search, clustering. Code-specialized variants such as CodeBERT~\cite{feng2020codebert} apply the same principle to source code. [TODO change and improve]
 
-This contextual embedding mechanism is what makes pre-trained transformers so versatile. A model like BERT~\cite{devlin2019bert} can be used as a general-purpose feature extractor: feed in a passage of text, extract the final-layer embeddings, and use them for downstream tasks---classification, similarity search, clustering---without modifying the model's weights. Code-specialized variants such as CodeBERT~\cite{feng2020codebert} apply the same principle to source code, and their embeddings form the basis for vulnerability detection and code search systems that we survey in Section~\ref{sec:llm-auditing}.
-
-These embedding vectors are also the representations that positional encoding (Section~\ref{subsec:pos-enc}) is added to before the first attention layer, and they are the vectors that the self-attention mechanism (Section~\ref{subsec:self-attention}) operates on. With this foundation in place, we now turn to the overall transformer architecture and the attention mechanism at its core.
+These embedding vectors are also the representations that positional encoding (Section~\ref{subsec:pos-enc}) is added before the first attention layer, and they are the vectors on which the self-attention mechanism (Section~\ref{subsec:self-attention}) operates. With this foundation in place, we now turn to the overall transformer architecture and the attention mechanism at its core.
 
 
 \subsection{Architecture Overview}
@@ -667,49 +675,48 @@ These embedding vectors are also the representations that positional encoding (S
 \begin{figure}[!h]
     \centering
     \includegraphics[width=0.6\linewidth]{images/transformer.png}
-    \caption{The original encoder--decoder transformer architecture. Adapted from~\cite{vaswani2023attentionneed}.
-    }
+    \caption{The original encoder--decoder transformer architecture. Adapted from~\cite{vaswani2023attentionneed}.}
     \label{fig:transformer}
 \end{figure}
 
-The full transformer architecture, shown in Figure~\ref{fig:transformer}, consists of two stacks: an encoder (left) and a decoder (right), each composed of $N$ identical layers. On the encoder side, each layer contains two sub-layers: a multi-head self-attention mechanism and a position-wise feed-forward network, both wrapped in residual connections and layer normalisation. The encoder processes the entire input sequence in parallel and produces a sequence of contextual representations.
+The complete transformer architecture, shown in Figure~\ref{fig:transformer}, consists of two stacks: an encoder (left) and a decoder (right), each composed of $N$ identical layers. On the encoder side, each layer contains two sub-layers: a multi-head self-attention mechanism and a position-wise feed-forward network, both wrapped in residual connections and layer normalization. The encoder processes the entire input sequence in parallel and produces a sequence of contextual representations.
 
-The decoder mirrors this structure but adds a third sub-layer: a cross-attention mechanism that attends to the encoder's output, allowing each generated token to draw on the full input representation. Critically, the decoder's self-attention is \emph{masked}---each position can only attend to earlier positions---which enforces the autoregressive property: tokens are generated one at a time, left to right, with each prediction conditioned only on previously generated tokens.
+The decoder mirrors this structure but adds a third sub-layer: a cross-attention mechanism that attends to the encoder's output, allowing each generated token to draw on the full input representation. Critically, the decoder's self-attention is \textit{masked} --- each position can only attend to earlier positions, which enforces the autoregressive property: tokens are generated one at a time, left to right, with each prediction conditioned only on previously generated tokens.
 
-At the bottom of both stacks, the input and output tokens pass through their respective embedding layers and receive positional encodings. At the top of the decoder, a linear projection followed by softmax converts the final hidden states into a probability distribution over the vocabulary, from which the next token is selected.
+At the bottom of both stacks, the input and output tokens pass through their respective embedding layers and receive positional encodings. At the top of the decoder, a linear projection followed by \textit{softmax} converts the final hidden states into a probability distribution over the vocabulary, from which the next token is selected.
 
-In practice, most modern LLMs use only one half of this design. Encoder-only architectures discard the decoder and use the encoder's contextual representations directly for tasks like classification and retrieval. Decoder-only architectures discard the encoder and generate text purely autoregressively---this is the variant used by the majority of today's frontier models. Encoder--decoder architectures retain both halves and are well suited to sequence-to-sequence tasks such as translation and summarization. The remainder of this section examines the mechanisms that make all three variants work: self-attention, positional encoding, and Mixture-of-Experts scaling.
+In practice, most modern LLMs use only half of this design. Encoder-only architectures discard the decoder and use the encoder's contextual representations directly for tasks like classification and retrieval. Decoder-only architectures discard the encoder and generate text purely autoregressively. This is the variant used by the majority of today's frontier models. The remainder of this section examines the mechanisms that make all three variants work: self-attention and positional encoding.
 
 
 \subsection{Self-Attention Mechanism}
 \label{subsec:self-attention}
 
-Self-attention is the core operation that gives transformers their representational power.  The central idea is to let each token in a sequence compute a weighted combination of all other tokens, where the weights are determined by learned compatibility functions.  Concretely, each token's embedding [TODO do not use embedings here, they wre not explained yet] is projected into three vectors --- a \emph{query}~$\mathbf{q}$, a \emph{key}~$\mathbf{k}$, and a \emph{value}~$\mathbf{v}$---through learned linear maps:
-
+Self-attention is the core operation that gives the transformers their representational power. The central idea is to let each token in a sequence compute a weighted combination of all other tokens, where the weights are determined by learned compatibility functions. The vector representation of each token is projected into three vectors, \emph{query}~$\mathbf{q}$, \emph{key}~$\mathbf{k}$, and \emph{value}~$\mathbf{v}$, through learned linear maps:
+ 
 \begin{equation}
     \mathbf{Q} = \mathbf{X}\mathbf{W}^Q, \qquad
     \mathbf{K} = \mathbf{X}\mathbf{W}^K, \qquad
     \mathbf{V} = \mathbf{X}\mathbf{W}^V,
     \label{eq:qkv}
 \end{equation}
-
-where $\mathbf{X} \in \mathbb{R}^{T \times d_{\text{model}}}$ is the matrix of input embeddings and $\mathbf{W}^Q, \mathbf{W}^K \in \mathbb{R}^{d_{\text{model}} \times d_k}$, $\mathbf{W}^V \in \mathbb{R}^{d_{\text{model}} \times d_v}$ are the projection matrices.  The attention output is then computed as:
-
+ 
+where $\mathbf{X} \in \mathbb{R}^{T \times d_{\text{model}}}$ is the matrix of token representations and $\mathbf{W}^Q, \mathbf{W}^K \in \mathbb{R}^{d_{\text{model}} \times d_k}$, $\mathbf{W}^V \in \mathbb{R}^{d_{\text{model}} \times d_v}$ are the projection matrices. The attention output is then computed as:
+ 
 \begin{equation}
     \text{Attention}(\mathbf{Q}, \mathbf{K}, \mathbf{V})
     \;=\; \text{softmax}\!\left(\frac{\mathbf{Q}\mathbf{K}^{\!\top}}{\sqrt{d_k}}\right)\mathbf{V}.
     \label{eq:attention}
 \end{equation}
-
-The matrix $\mathbf{Q}\mathbf{K}^{\!\top} \in \mathbb{R}^{T \times T}$ contains the compatibility score of every query--key pair.  Dividing by $\sqrt{d_k}$ is essential: without this scaling, the dot products grow in magnitude with the embedding dimension, pushing softmax into regions where its gradients are vanishingly small~\cite{vaswani2017attention}.  After softmax normalization, each row becomes a probability distribution over positions, and the output for each token is the corresponding weighted average of value vectors.
-
-An intuitive reading: the query at position~$t$ asks ``what do I need to know?'', the keys at all other positions advertise ``here is what I contain'', and the resulting attention weights decide how much each position contributes to the updated representation at~$t$.  This mechanism allows the model to relate any two positions in a sequence with a single computational step, regardless of their distance---a stark contrast to RNNs, where information must traverse every intermediate hidden state.
+ 
+The matrix $\mathbf{Q}\mathbf{K}^{\!\top} \in \mathbb{R}^{T \times T}$ contains the compatibility score of every query--key pair. Dividing by $\sqrt{d_k}$ prevents the dot products from growing with the embedding dimension, which would push softmax into regions where its gradients are vanishingly small~\cite{vaswani2023attentionneed}. After softmax normalization\footnote{\url{https://en.wikipedia.org/wiki/Softmax_function}}, each row becomes a probability distribution over positions, and the output for each token is the corresponding weighted average of the value vectors.
+ 
+An intuitive reading: the query at position~$t$ asks ``what do I need to know?'', the keys at all other positions advertise ``here is what I contain'', and the resulting attention weights decide how much each position contributes to the updated representation at~$t$. This mechanism allows the model to relate any two positions in a sequence with a single computational step, regardless of their distance.
 
 
 \subsubsection*{Multi-Head Attention}
 
 Rather than computing a single attention function, transformers run $h$ independent attention heads in parallel, each with its own set of projection matrices, and concatenate the results:
-
+ 
 \begin{equation}
     \text{MultiHead}(\mathbf{Q}, \mathbf{K}, \mathbf{V})
     = \text{Concat}\!\bigl(\text{head}_1,\;\ldots,\;\text{head}_h\bigr)\,\mathbf{W}^O,
@@ -719,102 +726,97 @@ Rather than computing a single attention function, transformers run $h$ independ
     \text{where}\quad \text{head}_i = \text{Attention}\!\bigl(\mathbf{X}\mathbf{W}^Q_i,\;\mathbf{X}\mathbf{W}^K_i,\;\mathbf{X}\mathbf{W}^V_i\bigr).
     \label{eq:head-i}
 \end{equation}
-
-The motivation for multiple heads is that a single attention function can only capture one type of relationship at a time. By running several heads in parallel, the model can attend to different aspects of the input simultaneously. Empirical probing studies confirm that different heads do indeed specialise in different relation types---some track syntactic dependencies, others capture coreference or semantic similarity---even without explicit supervision~\cite{clark2019does, vig2019analyzing}. The output projection~$\mathbf{W}^O$ then combines these diverse perspectives into a single representation for each token.
-
+ 
+The motivation for multiple heads is that a single attention function can capture only one type of relationship at a time. By running several heads in parallel, the model can attend to different aspects of the input simultaneously. Empirical probing studies confirm that different heads do indeed specialize --- some track syntactic dependencies, others capture coreference or semantic similarity---even without explicit supervision~\cite{clark2019does, vig2019analyzing}. The output projection~$\mathbf{W}^O$ then combines these diverse perspectives into a single representation for each token.
 
 \subsection{Positional Encoding}
 \label{subsec:pos-enc}
 
-Self-attention is \emph{permutation-equivariant}: if the input tokens are shuffled, the outputs are shuffled in exactly the same way, with no change in their values. Since token order carries critical semantic information, both in natural language and in structured formats, the model must be given explicit information about position. This is the role of \emph{positional encoding}, which is added to the input embeddings before they enter the attention layers.
-
-The original transformer~\cite{vaswani2023attentionneed} used fixed sinusoidal functions to encode position. For each position $\text{pos}$ and each dimension $i$ of the embedding:
-
+Self-attention is \emph{permutation-equivariant}: if the input tokens are shuffled, the outputs are shuffled in exactly the same way, with no change in their values. Since token order carries critical semantic information, the model must be given explicit information about position. This is the role of \emph{positional encoding}, which is added to the token vectors before they enter the attention layers.
+ 
+The original transformer used fixed sinusoidal functions to encode position~\cite{vaswani2023attentionneed}. For each position $\text{pos}$ and each dimension $i$ of the representation:
+ 
 \begin{equation}
     \text{PE}_{(\text{pos},\, 2i)} = \sin\!\left(\frac{\text{pos}}{10000^{2i/d_{\text{model}}}}\right), \qquad
     \text{PE}_{(\text{pos},\, 2i+1)} = \cos\!\left(\frac{\text{pos}}{10000^{2i/d_{\text{model}}}}\right).
     \label{eq:sinusoidal-pe}
 \end{equation}
-
+ 
 This design has an elegant property: the positional encoding of any fixed offset $k$ can be expressed as a linear function of the encoding at position $\text{pos}$, which in principle allows the model to learn to attend to relative positions. However, sinusoidal encodings are fixed and cannot adapt to the data.
 
-More recent models have moved to \emph{learned} positional encodings or, increasingly, to \emph{relative} positional encoding schemes.  Rotary Position Embedding (RoPE)~\cite{su2024roformer} encodes position by rotating query and key vectors in the complex plane, so that the dot product between a query at position $m$ and a key at position $n$ depends only on their relative distance $m - n$. RoPE has become the dominant choice in modern decoder-only LLMs, including LLaMA~\cite{touvron2023llama} and many of its derivatives, because it combines the benefits of relative encoding with straightforward integration into the standard attention mechanism.
-
-
-\subsection{Mixture-of-Experts}
-\label{subsec:moe}
-
-Standard transformers are \emph{dense}: every parameter is involved in processing every input token. Scaling such models to hundreds of billions of parameters therefore increases compute cost proportionally.  \emph{Mixture-of-Experts} (MoE) architectures~\cite{shazeer2017outrageously} offer a way to decouple model capacity from per-token compute.  In an MoE transformer, each feed-forward sublayer is replaced by a set of $N$ parallel ``expert'' networks, and a learned \emph{router} selects only the top-$K$ experts to process each token. The remaining experts are inactive for that token, so the model can hold far more parameters than it actually uses on any single input.
-
-This idea has moved from a niche research topic to the dominant architecture for frontier LLMs.  The Switch Transformer~\cite{fedus2022switch} demonstrated that routing each token to a single expert could scale efficiently to trillion-parameter models. Mixtral~\cite{jiang2024mixtral} brought MoE to open-weight models with strong performance.  Most significantly, the DeepSeek model family~\cite{deepseekai2025deepseekv3} introduced fine-grained expert segmentation---splitting experts into many smaller units and activating more of them per token---alongside shared experts that capture common knowledge across tasks, an auxiliary-loss-free load-balancing strategy, and Multi-head Latent Attention (MLA) for efficient inference. DeepSeek-V3, with 671~billion total parameters but only 37~billion activated per token, was reportedly trained for approximately \$5.6~million---an order of magnitude less than comparable dense models---while achieving competitive performance with the best proprietary systems.
-
-With self-attention providing the ability to relate tokens across arbitrary distances, positional encoding supplying the necessary notion of order, and MoE enabling efficient scaling, the transformer has the representational machinery to model complex sequential structure at enormous scale.  The next question is how to turn this architecture into a capable model---that is, how to train it.
-
+\begin{figure}[!h]
+    \centering
+    \includegraphics[width=0.9\linewidth]{images/pos_encode_example.png}
+    \caption{TODO. Adapted from~\cite{mehreen2024positional}.}
+    \label{fig:pe_example}
+\end{figure}
+ 
+More recent models have moved to \emph{relative} positional encoding schemes. Rotary Position Embedding (RoPE) encodes position by rotating query and key vectors in the complex plane, so that the dot product between a query at position $m$ and a key at position $n$ depends only on their relative distance $m - n$~\cite{su2024roformer}. RoPE has become the dominant choice in modern decoder-only LLMs, including LLaMA~\cite{touvron2023llama} and its derivatives, because it combines the benefits of relative encoding with straightforward integration into the standard attention mechanism.
 
 % ============================================================
 \section{Model Training}
 \label{sec:training}
 % ============================================================
 
-A transformer architecture on its own is simply a parameterized function; it becomes useful only through training. Building a capable LLM involves three broad stages, each operating at a different scale and serving a different purpose. \emph{Pre-training} exposes the model to vast quantities of text to learn general-purpose representations. \emph{Fine-tuning} adapts these representations to specific tasks or desired behaviours. \emph{Prompting} shapes the model's output at inference time through instructions and examples, without modifying any parameters. The following subsections describe each stage in turn.
+A transformer architecture on its own is simply a parameterized function; it becomes useful only through training. Building a capable LLM involves three broad stages, each operating at a different scale and serving a different purpose. \emph{Pre-training} exposes the model to vast quantities of text to learn general-purpose representations. \emph{Fine-tuning} adapts these representations to specific tasks or desired behaviors. \emph{Prompting} shapes the model's output at inference time through instructions and examples, without modifying any parameters. The following subsections describe each stage in turn.
 
 
 \subsection{Pre-training}
 \label{subsec:pretraining}
 
-Pre-training exposes the model to massive text corpora using self-supervised objectives that require no human labeling. For decoder-only models, the objective is \emph{next-token prediction} (causal language modelling): given a prefix $x_1, \ldots, x_{t-1}$, maximise $\log P(x_t \mid x_1, \ldots, x_{t-1})$ summed over all positions and all documents in the corpus.  For encoder-only models like BERT~\cite{devlin2019bert}, the objective is \emph{masked language modelling}: randomly mask a fraction of tokens and train the model to recover them from bidirectional context.
-
-The simplicity of these objectives belies the enormous computational cost of pre-training.  State-of-the-art models are trained on corpora containing trillions of tokens, using thousands of GPUs or TPUs running continuously for weeks or months. These costs mean that pre-training a frontier dense model from scratch is feasible only for a handful of well-resourced organizations.  However, architectural innovations like Mixture-of-Experts (discussed in Section~\ref{subsec:moe}) --- have begun to challenge this assumption: DeepSeek-V3~\cite{deepseekai2025deepseekv3} demonstrated frontier-level performance at a fraction of the cost of comparable dense models. For most practitioners and researchers, the practical path remains to start from an existing pre-trained model and adapt it through fine-tuning, a far more accessible process that we turn to next.
+Pre-training exposes the model to massive text corpora using self-supervised objectives that require no human labelling. For decoder-only models, the objective is \emph{next-token prediction} (causal language modelling): given a prefix $x_1, \ldots, x_{t-1}$, maximise $\log P(x_t \mid x_1, \ldots, x_{t-1})$ summed over all positions and all documents in the corpus. For encoder-only models like BERT~\cite{devlin2019bert}, the objective is \emph{masked language modelling}: randomly mask a fraction of tokens and train the model to recover them from bidirectional context.
+ 
+The simplicity of these objectives belies the enormous computational cost. State-of-the-art models are trained on corpora containing trillions of tokens, using thousands of GPUs running continuously for weeks or months. These costs mean that pre-training a frontier dense model from scratch is feasible only for a handful of well-resourced organisations. However, MoE architectures (Section~\ref{subsec:moe}) have begun to challenge this assumption: DeepSeek-V3 demonstrated frontier-level performance at a fraction of the cost of comparable dense models~\cite{deepseekai2025deepseekv3}. For most practitioners and researchers, the practical path remains to start from an existing pre-trained model and adapt it through fine-tuning.
 
 
 \subsection{Fine-tuning}
 \label{subsec:finetuning}
 
-Fine-tuning adapts a pre-trained model to specific downstream tasks by continuing training on a smaller, curated dataset.  The most common modern approach is Supervised Fine-tuning (SFT) on instruction-response pairs, which teaches the model to follow user intent reliably. By exposing the model to examples of the desired input-output behavior, fine-tuning can bias it toward structured output, improve adherence to constraints, and sharpen performance on domain-specific tasks.
+Fine-tuning adapts a pre-trained model to specific downstream tasks by continuing training on a smaller, curated dataset. The most common modern approach is \emph{Supervised Fine-tuning} (SFT) on instruction--response pairs, which teaches the model to follow user intent reliably. By exposing the model to examples of the desired input--output behaviour, SFT can bias it toward structured output, improve adherence to constraints, and sharpen performance on domain-specific tasks.
+ 
+Fine-tuning carries risks. Training on a narrow dataset can cause \emph{catastrophic forgetting}, where the model loses general capabilities acquired during pre-training---for example, a model fine-tuned exclusively on Solidity code might lose its ability to explain concepts in natural language. Overfitting is a related concern: a model fine-tuned on a small, homogeneous dataset may perform well on similar examples but generalise poorly to novel inputs.
+ 
+\textbf{Parameter-efficient methods} have made fine-tuning accessible even for the largest models. Full fine-tuning updates every parameter, which for billion-parameter architectures requires substantial GPU memory. LoRA (Low-Rank Adaptation) offers an alternative: it freezes the pre-trained weights entirely and injects small trainable low-rank matrices into each layer, reducing the number of trainable parameters by orders of magnitude while preserving most of the model's original knowledge. QLoRA extends this by combining LoRA with 4-bit quantisation of the frozen weights, making it possible to fine-tune models with tens of billions of parameters on a single consumer GPU~\cite{hu2021lora, xu2023qalora}.
+ 
+\subsection{Reinforcement Learning from Human Feedback}
+\label{subsec:rlvr}
 
-However, fine-tuning is not without risks. Training on a narrow dataset can cause \emph{catastrophic forgetting} [TODO maybe just underfitting/overfitting], where the model loses general capabilities it acquired during pre-training.  Overfitting is also a concern: a model fine-tuned on a small, homogeneous dataset may perform well on similar examples but generalise poorly to novel inputs.
-
-\textbf{Parameter-efficient methods} have made fine-tuning accessible even for large models. Full fine-tuning updates every parameter in the model, which for billion-parameter architectures requires substantial GPU memory and risks overfitting. LoRA (Low-Rank Adaptation)offers an elegant alternative: it freezes the pre-trained weights entirely and injects small trainable low-rank matrices into each layer, reducing the number of trainable parameters by orders of magnitude while preserving most of the model's original knowledge. QLoRA extends this further by combining LoRA with 4-bit quantization of the frozen weights, making it possible to fine-tune models with tens of billions of parameters on a single consumer GPU~\cite{hu2021lora, xu2023qalora}.
-
-\subsubsection*{Reinforcement Learning from Human Feedback}
-
-Supervised fine-tuning teaches a model \emph{what} to say, but not necessarily \emph{how} to say it in a way that aligns with human preferences. Reinforcement Learning from Human Feedback (RLHF) addresses this gap by optimizing the model's output to match human judgments of quality~\cite{ouyang2022training}. The process has three stages:
-
+Supervised fine-tuning teaches a model \emph{what} to say, but not necessarily \emph{how} to say it in a way that aligns with human preferences. Reinforcement Learning from Human Feedback (RLHF) addresses this gap by optimising the model's output to match human judgements of quality~\cite{ouyang2022training}. The process involves three stages:
+ 
 \begin{enumerate}
-    \item \textbf{Reward model training.} Human annotators rank multiple model outputs for the same prompt.  A separate reward model is trained on these preference pairs to predict which outputs humans would prefer.
-    
-    \item \textbf{Policy optimization.} The language model is treated as a reinforcement learning agent whose "action" at each step is the next token. Using Proximal Policy Optimization (PPO), the model is fine-tuned to maximize the reward model's score while staying close to the SFT policy via a KL-divergence penalty, which prevents the model from drifting too far from coherent language~\cite{schulman2017proximal}.
-    
+    \item \textbf{Reward model training.} Human annotators rank multiple model outputs for the same prompt. A separate reward model is trained on these preference pairs to predict which outputs humans would prefer.
+ 
+    \item \textbf{Policy optimisation.} The language model is treated as a reinforcement learning agent whose ``action'' at each step is the next token. Using Proximal Policy Optimisation (PPO), the model is fine-tuned to maximise the reward model's score while staying close to the SFT policy via a KL-divergence penalty, which prevents the model from drifting too far from coherent language~\cite{schulman2017proximal}.
+ 
     \item \textbf{Iteration.} The process repeats: new outputs are collected, annotators provide fresh rankings, and both the reward model and the policy are updated.
 \end{enumerate}
-
+ 
 \begin{figure}[!h]
     \centering
     \includegraphics[width=9cm, height=6cm]{images/rlhf.pdf}
     \caption{Reinforcement Learning from Human Feedback pipeline.}
     \label{fig:rlhf_diagram}
 \end{figure}
+ 
+Figure~\ref{fig:rlhf_diagram} illustrates this pipeline. While effective, RLHF is expensive: it requires training and maintaining a separate reward model, collecting large volumes of human preference data, and managing the instability of RL training. These costs have motivated the development of simpler alignment methods such as Direct Preference Optimisation (DPO), which reformulates the RLHF objective to directly optimise on preference pairs without an explicit reward model~\cite{rafailov2023direct}.
 
-[TODO even the pipeline in Figure \ref{fig:rlhf_diagram} does not seem complex, it is still smth...]. That is why sometimes the most easiest way to interact/change LLM behavior (another word) is prompts.
 
+\section{Prompting}
+\label{sec:prompting}
 
-\subsection{Prompting}
-\label{subsec:prompting}
-
-While pre-training and fine-tuning adjust model parameters, \emph{prompting} shapes model behavior at inference time through instructions, context, and examples without changing any weights. Brown et al.~\cite{brown2020languagemodelsfewshotlearners} demonstrated that including a few input--output examples (\emph{few-shot prompting}) can elicit task-specific behaviour from large decoder-only models without any fine-tuning at all.  This discovery opened the door to a rich set of techniques, collectively known as \emph{prompt engineering}, that exploit the model's in-context learning capabilities. [TODO rephrase this pragapragh, because ending of previous zoom us comes to this thiought] + [TODO do not use construction Brown at el]
-
-\textbf{Task decomposition} breaks a complex problem into smaller sub-tasks, each with narrower scope and clearer success criteria.  Rather than asking a model to solve a difficult problem in one step, the prompt guides it through a sequence of manageable steps whose outputs compose into a final answer.  This approach reduces the cognitive burden on any single inference call and makes it easier to verify intermediate results.
-
-\textbf{Chain-of-thought (CoT)} prompting~\cite{wei2023chain} is a specific form of task decomposition in which the model is encouraged to produce intermediate reasoning steps before arriving at a final answer.  By including examples that show step-by-step reasoning, the prompt elicits similar behavio
-r from the model, which has been shown to improve performance on arithmetic, commonsense reasoning, and other multi-step tasks.
-
-\textbf{Few-shot learning} calibrates what "good" output looks like by providing concrete examples in the prompt.  The model uses these examples to infer the desired format, style, level of detail, and reasoning strategy, then applies these inferred patterns to the actual query.  Few-shot prompting is particularly powerful when combined with retrieval: instead of relying on fixed examples, relevant demonstrations can be retrieved dynamically from a knowledge base, tailoring the prompt to each specific input.
-
+While pre-training and fine-tuning adjust model parameters, \emph{prompting} shapes model behavior at inference time through instructions, context, and examples---without changing any weights. The discovery that including a few input--output examples in the prompt (\emph{few-shot prompting}) can elicit task-specific behavior from large decoder-only models without any fine-tuning opened the door to a set of techniques collectively known as \emph{prompt engineering} that exploit the model's in-context learning capabilities~\cite{brown2020languagemodelsfewshotlearners}.
+ 
+\textbf{Task decomposition} breaks a complex problem into smaller sub-tasks, each with narrower scope and clearer success criteria. Rather than asking a model to solve a difficult problem in one step, the prompt guides it through a sequence of manageable steps whose outputs compose into a final answer. This reduces the cognitive burden on any single inference call and makes it easier to verify intermediate results.
+ 
+\textbf{Chain-of-thought (CoT)} prompting is a specific form of task decomposition in which the model is encouraged to produce intermediate reasoning steps before arriving at a final answer. By including examples that show step-by-step reasoning, the prompt elicits similar behaviour from the model, which has been shown to improve performance on arithmetic, commonsense reasoning, and other multi-step tasks~\cite{wei2023chain}.
+ 
+\textbf{Few-shot learning} calibrates what ``good'' output looks like by providing concrete examples in the prompt. The model uses these examples to infer the desired format, style, level of detail, and reasoning strategy, then applies these inferred patterns to the actual query. Few-shot prompting is particularly effective when combined with retrieval: instead of relying on fixed examples, relevant demonstrations can be retrieved dynamically from a knowledge base, tailoring the prompt to each specific input.
+ 
 Together, these prompting techniques allow practitioners to adapt a single general-purpose model to a wide range of tasks at inference time, complementing the more permanent adaptations achieved through fine-tuning.
 
 
 % ============================================================
-\section{LLMs in Smart Contract Auditing}
+\section{LLMs in Smart Contract Security}
 \label{sec:llm-auditing}
 % ============================================================
 
