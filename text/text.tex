@@ -847,11 +847,9 @@ The application of LLMs to smart contract security has evolved rapidly since 202
 \subsection{Prompt-Only Agentic Pipelines}
 \label{subsec:prompt-only}
 
-The simplest approach feeds smart contract source code directly into a general-purpose LLM with appropriate instructions.  Chen et al.~\cite{chen2024chatgpt} conducted a systematic evaluation of GPT-3.5 and GPT-4 on the SmartBugs-Curated benchmark and found high recall but poor precision, with roughly 4 out of 5 flagged issues being false positives (GPT-4 achieved 88.2\% recall but only 22.6\% precision).  Perhaps more concerning, 42\% of contracts showed unstable detection outcomes across repeated runs, highlighting the non-deterministic nature of LLM-based analysis.
+% The simplest approach feeds smart contract source code directly into a general-purpose LLM with appropriate instructions. Chen et al.~\cite{chen2024chatgpt} conducted a systematic evaluation of GPT-3.5 and GPT-4 on the SmartBugs-Curated benchmark and found high recall but poor precision, with roughly 4 out of 5 flagged issues being false positives (GPT-4 achieved 88.2\% recall but only 22.6\% precision).  Perhaps more concerning, 42\% of contracts showed unstable detection outcomes across repeated runs, highlighting the non-deterministic nature of LLM-based analysis.
 
-More structured prompt-based approaches improve on this baseline.  \textbf{GPTLens}~\cite{hu2023gptlens} introduced an adversarial two-stage pipeline: a high-temperature ``Auditor'' agent generates vulnerability candidates, and a separate ``Critic'' agent filters false positives.  \textbf{GPTScan}~\cite{sun2024gptscan} combined GPT with static analysis for token contract auditing, achieving over 90\% precision and discovering 9~vulnerabilities missed by human auditors, at a cost of approximately \$0.01 per 1,000 lines of code.
-
-\textbf{LLM-SmartAudit}~\cite{wei2024smartaudit} deployed multi-agent conversational frameworks with role specialisation across 6,454 contracts from Code4rena competitions.  The multi-agent design mirrors how human audit teams operate, with different agents responsible for different vulnerability categories.
+More structured prompt-based approaches improve on this baseline. \textbf{LLM-SmartAudit}~\cite{wei2024smartaudit} deployed multi-agent conversational frameworks with role specialization across 6,454 contracts from Code4rena\footnote{\url{https://code4rena.com/}} competitions.  The multi-agent design mirrors how human audit teams operate, with different agents responsible for different vulnerability categories.
 
 These results collectively establish that general-purpose LLMs can identify security issues in smart contracts but lack the precision needed for production use without additional grounding mechanisms.
 
@@ -859,33 +857,30 @@ These results collectively establish that general-purpose LLMs can identify secu
 \subsection{Fine-Tuned Models}
 \label{subsec:fine-tuned}
 
-Fine-tuning domain-specific models on labelled vulnerability datasets produces substantially stronger results than prompting alone.
+Fine-tuning domain-specific models on labeled vulnerability datasets produces substantially stronger results than prompting alone.
 
-\textbf{iAudit}~\cite{ma2025iaudit} introduced a two-stage fine-tuning pipeline: a Detector model for binary vulnerability classification and a Reasoner model for generating human-readable explanations.  These are complemented by Ranker and Critic LLM agents that iteratively debate and refine the outputs, outperforming baselines including CodeBERT, GraphCodeBERT, CodeT5, and UniXcoder.
+% \textbf{iAudit}~\cite{ma2025iaudit} introduced a two-stage fine-tuning pipeline: a Detector model for binary vulnerability classification and a Reasoner model for generating human-readable explanations.  These are complemented by Ranker and Critic LLM agents that iteratively debate and refine the outputs, outperforming baselines including CodeBERT, GraphCodeBERT, CodeT5, and UniXcoder.
 
-\textbf{Smart-LLaMA-DPO}~\cite{yu2025smartllama} applies three-stage training to LLaMA-3.1-8B: continual pre-training on smart contract code, supervised fine-tuning, then Direct Preference Optimisation using paired quality explanations.  The result surpasses GPT-4o (accuracy 58.91\%) and iAudit (accuracy 64.42\%) with improvements of +10.43\% in F1 and +7.87\% in accuracy over the previous state of the art.
+% \textbf{Smart-LLaMA-DPO}~\cite{yu2025smartllama} applies three-stage training to LLaMA-3.1-8B: continual pre-training on smart contract code, supervised fine-tuning, then Direct Preference Optimisation using paired quality explanations.  The result surpasses GPT-4o (accuracy 58.91\%) and iAudit (accuracy 64.42\%) with improvements of +10.43\% in F1 and +7.87\% in accuracy over the previous state of the art.
 
-Bu et al.~\cite{bu2025dapp} fine-tuned Llama3-8B on 4,998 real DApp contracts with full-parameter fine-tuning and random oversampling, reaching F1~=~0.83 and precision~0.97 for price manipulation vulnerabilities---up from F1~=~0.20 without fine-tuning.
+% Bu et al.~\cite{bu2025dapp} fine-tuned Llama3-8B on 4,998 real DApp contracts with full-parameter fine-tuning and random oversampling, reaching F1~=~0.83 and precision~0.97 for price manipulation vulnerabilities---up from F1~=~0.20 without fine-tuning.
 
-\textbf{LLMBugScanner}~\cite{yuan2024llmbugscanner} takes an ensemble approach, combining multiple LoRA-fine-tuned models from the OpenCode leaderboard through weighted voting.  This reduces the impact of individual model weaknesses but introduces complexity in deployment.
+\textbf{LLMBugScanner}~\cite{yuan2025large} takes an ensemble approach, combining multiple LoRA-fine-tuned models from the OpenCode leaderboard through weighted voting.  This reduces the impact of individual model weaknesses, but introduces complexity in deployment.
 
 
 \subsection{RAG-Augmented Detection Frameworks}
 \label{subsec:rag-augmented}
 
-Retrieval-Augmented Generation (RAG) addresses a fundamental limitation of LLMs: they cannot ``know'' about vulnerability patterns not present in their training data, and their fixed context windows may be insufficient for analysing entire protocols.  By retrieving relevant external knowledge at inference time, RAG frameworks augment the model's capabilities without retraining.
+Retrieval-Augmented Generation (RAG) addresses a fundamental limitation of LLMs: they cannot ``know'' about vulnerability patterns not present in their training data, and their fixed context windows may be insufficient for analyzing entire protocols.  By retrieving relevant external knowledge at inference time, RAG frameworks augment the model's capabilities without retraining.
 
 \textbf{ParaVul}~\cite{huang2025paravul} represents the most architecturally sophisticated approach.  It runs a SLoRA-fine-tuned LLaMA-13B detector and a hybrid RAG detector (combining dense embedding retrieval with BM25 lexical matching) in parallel, fusing their outputs through a meta-learning gated verification module.  The system achieves F1 scores of 0.9398 (single-label) and 0.9330 (multi-label), outperforming both standalone fine-tuning and standalone retrieval.  A final stage generates vulnerability reports using chain-of-thought prompts fed to a cloud-based LLM.
 
-\textbf{SmartLLM}~\cite{smartllm2025} combines RAG with fine-tuned LLaMA~3.1, integrating ERC documentation for domain context.  It achieves 100\% recall with 62.5\% precision (F1~=~76.9\%), demonstrating how retrieval of standard documentation can reduce false negatives.
+% \textbf{SmartLLM}~\cite{smartllm2025} combines RAG with fine-tuned LLaMA~3.1, integrating ERC documentation for domain context.  It achieves 100\% recall with 62.5\% precision (F1~=~76.9\%), demonstrating how retrieval of standard documentation can reduce false negatives.
 
-\textbf{PropertyGPT}~\cite{liu2025propertygpt} applies RAG in a different direction: rather than retrieving vulnerable code examples, it retrieves human-written formal verification properties from Certora audit reports and uses them to guide LLM-based property generation.  This yielded 80\% recall against ground-truth properties and uncovered 12~zero-day vulnerabilities.
 
-\textbf{SmartGuard}~\cite{smartguard2025} retrieves semantically similar code snippets to generate chain-of-thought reasoning chains, achieving recall of 95.06\% and F1 of 94.95\% on the SolidiFI benchmark.
+% The most comprehensive framework is \textbf{LLM-BSCVM}~\cite{llmbscvm2025}, which implements a full vulnerability management lifecycle using a ``Decompose-Retrieve-Generate'' pipeline with multi-agent collaboration and LoRA-fine-tuned CodeLlama-13B, achieving 91\% accuracy with a 5.1\% false positive rate.
 
-The most comprehensive framework is \textbf{LLM-BSCVM}~\cite{llmbscvm2025}, which implements a full vulnerability management lifecycle using a ``Decompose-Retrieve-Generate'' pipeline with multi-agent collaboration and LoRA-fine-tuned CodeLlama-13B, achieving 91\% accuracy with a 5.1\% false positive rate.
-
-Although not specifically targeting smart contracts, \textbf{ReVul-CoT}~\cite{chen2025revulcot} demonstrates the effectiveness of the RAG+CoT paradigm for the general assessment of the severity of software vulnerabilities. Using retrieval from NVD and CWE databases combined with structured chain-of-thought reasoning, it achieved 87.50\% accuracy and 83.75\% Macro-F1 on 12,070 vulnerability records --- improvements exceeding 10 percentage points over all baselines. This architecture provides a transferable blueprint for the assessment of the severity of smart contracts.
+Although not specifically targeting smart contracts, ReVul-CoT~\cite{chen2025revulcot} demonstrates the effectiveness of the RAG+CoT paradigm for the general assessment of the severity of software vulnerabilities. Using retrieval from NVD and CWE databases combined with structured chain-of-thought reasoning, it achieved 87.50\% accuracy and 83.75\% Macro-F1 on 12,070 vulnerability records --- improvements exceeding 10 percentage points over all baselines. This architecture provides a transferable blueprint for the assessment of the severity of smart contracts.
 
 
 \section{Challenges and Limitations}
@@ -897,9 +892,11 @@ Despite rapid progress, LLM-based smart contract auditing faces fundamental chal
  
 \subsection*{Hallucinations}
  
-LLMs can produce plausible-sounding but factually incorrect outputs---\emph{hallucination}. In code generation, this manifests as references to non-existent libraries, fabricated API calls, and invented vulnerability reports. Spracklen et al.~\cite{spracklen2025package} tested 16~LLMs generating 576,000~code samples and found that 19.7\% of the 2.23~million referenced packages were hallucinated, creating a direct supply-chain attack vector. Pearce et al.~\cite{pearce2022asleep} found that approximately 40\% of GitHub Copilot's code completions contained vulnerabilities, while Perry et al.~\cite{perry2023users} demonstrated that users with AI coding assistant access wrote significantly less secure code while being more confident in its correctness---a dangerous combination of automation bias and misplaced trust.
+LLMs can produce plausible-sounding but factually incorrect outputs ---~\emph{hallucination}. In code generation, this manifests as references to non-existent libraries, fabricated API calls, and invented vulnerability reports. Spracklen et al.~\cite{spracklen2025} tested 16~LLMs generating 576,000~code samples and found that 19.7\% of the 2.23~million referenced packages were hallucinated, creating a direct supply-chain attack vector.
+
+% Pearce et al.~\cite{pearce2022asleep} found that approximately 40\% of GitHub Copilot's code completions contained vulnerabilities, while Perry et al.~\cite{perry2023users} demonstrated that users with AI coding assistant access wrote significantly less secure code while being more confident in its correctness---a dangerous combination of automation bias and misplaced trust.
  
-In the smart contract domain specifically, Chen et al.~\cite{chen2024chatgpt} identified several hallucination patterns: the model assumes protective code exists when it does not (``Protected Mechanism Bias''), assumes developers followed best practices (``Development Intent Bias''), and misinterprets Solidity-specific constructs like \texttt{msg.value}. The primary mitigation is to require \emph{grounded evidence} for every finding---each reported vulnerability should reference specific code locations, static analysis outputs, or retrieved documentation rather than relying on the model's unsupported assertions.
+% In the smart contract domain specifically, Chen et al.~\cite{chen2024chatgpt} identified several hallucination patterns: the model assumes protective code exists when it does not (``Protected Mechanism Bias''), assumes developers followed best practices (``Development Intent Bias''), and misinterprets Solidity-specific constructs like \texttt{msg.value}. The primary mitigation is to require \emph{grounded evidence} for every finding---each reported vulnerability should reference specific code locations, static analysis outputs, or retrieved documentation rather than relying on the model's unsupported assertions.
  
  
 \subsection*{Context Window Limitations}
