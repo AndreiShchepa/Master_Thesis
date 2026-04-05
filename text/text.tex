@@ -330,6 +330,7 @@ Figure~\ref{fig:front-running} illustrates how a sandwich attack exploits the me
 
 Several mitigation strategies have been proposed. Commit-reveal schemes split a transaction into two phases: the user first submits a hashed commitment that hides the transaction details, and only reveals the actual parameters in a subsequent block, preventing attackers from reading and reacting to the contents in the mempool. Private transaction pools allow users to submit transactions directly to block builders rather than broadcasting them to the public mempool, removing the visibility that front-runners rely on. At the application level, decentralized exchanges can enforce maximum slippage tolerances, causing the transaction to revert if the price moves beyond an acceptable threshold between submission and execution. Although none of these approaches eliminate front-running entirely, they significantly raise the cost and complexity of carrying out such attacks.
 
+\bigskip
 
 The preceding discussion establishes that well-known smart contract vulnerabilities are well-defined and follow certain patterns, respectively. Manual code review, while indispensable, does not scale to the volume and pace at which new contracts are deployed. Even experienced auditors can miss subtle instances of a vulnerability buried in complex inheritance hierarchies or proxy patterns. This is precisely where static analysis can provide systematic, scalable assistance. 
 
@@ -559,14 +560,16 @@ Each technique occupies a distinct point in the trade-off space. The key charact
 
 Despite the sophistication of these techniques, significant challenges remain. The semantic gap between source code and programmer intent makes it difficult for automated approaches to reason about what code \emph{should} do, as opposed to what it \emph{does} do. The rapidly evolving landscape of smart contract patterns continuously introduces new vulnerabilities that existing approaches may not recognize. Moreover, the composability of smart contracts means that individual components verified in isolation may exhibit emergent vulnerabilities when composed, a problem that no single analysis technique currently addresses in a fully satisfactory way.
 
+\bigskip
+
 These limitations point toward the need for approaches that can bridge the gap between natural-language intent and formal specification, that can generalize from known vulnerability patterns to detect novel ones, and that can reason about the higher-level semantics of contract interactions rather than just their syntactic structure. Recent advances in Large Language Models (LLMs) offer a promising complementary direction. The following chapter examines these models, their architecture, and their emerging role in smart contract security.
 
 \chapter{Large Language Models}
 \label{ch:llm}
 
-[TODO correct bried text conmnection] of Large Language Models (LLMs)~--- the class of deep neural networks that has transformed natural language processing over the past several years.  LLMs learn to predict and generate text by training on massive corpora, and in doing so they acquire rich internal representations of syntax, semantics, and even multi-step reasoning. The architectures behind these models grew directly out of attempts to assign probabilities to sequences of symbols, a problem with a long history in machine learning.
-
-This chapter traces that history and the ideas it produced. It begins with the mathematical foundations of sequence probability and early neural approaches to sequence modeling. Then it introduces the transformer architecture and its core mechanisms with the following discussion about training paradigms. Finally, it examines how all of these techniques have been brought to bear on the specific problem of smart contract security auditing.
+The previous chapters examined techniques for analyzing smart contract code through structural and mathematical lenses. Each technique operates on the syntactic and semantic properties of the code itself, and each has characteristic blind spots. This chapter turns to a fundamentally different class of approaches built on Large Language Models (LLMs) --- deep neural networks that learn to predict and generate text by training on massive corpora and, in doing so, acquire rich internal representations of syntax, semantics, and multi-step reasoning.
+ 
+The chapter traces the ideas behind these models from first principles. It begins with the mathematical foundations of sequence probability and the limitations of early neural approaches. Then it introduces the transformer architecture and the mechanisms that make it work, followed by a discussion of how transformers are trained, aligned, and guided through prompting. Finally, it examines how these capabilities have been brought to bear on the specific problem of smart contract security auditing.
 
 
 \section{Sequence Probabilities}
@@ -585,14 +588,14 @@ Each factor on the right-hand side determines the likelihood of the next token g
 \subsection{Recurrent Neural Networks}
 \label{subsec:rnn}
 
-Recurrent Neural Networks (RNNs) offered the first neural solution to variable-length conditioning. At each time step $t$, an RNN updates a hidden state that summarises the entire prefix:
+Recurrent Neural Networks (RNNs) offered the first neural solution to variable-length conditioning. At each time step $t$, an RNN updates a hidden state that summarizes the entire prefix:
 
 \begin{equation}
     \mathbf{h}_t = f\!\bigl(\mathbf{W}_h \mathbf{h}_{t-1} + \mathbf{W}_x \mathbf{x}_t + \mathbf{b}\bigr),
     \label{eq:rnn}
 \end{equation}
 
-where $f$ is a nonlinearity such as $\tanh$ or ReLU\footnote{\url{https://en.wikipedia.org/wiki/Rectified_linear_unit}}, and $\mathbf{W}_h$, $\mathbf{W}_x$ are learned weight matrices.  The conditional distribution for the next token is then read off from $\mathbf{h}_t$ \cite{Goodfellow-et-al-2016}.
+where $f$ is a nonlinearity such as $\tanh$ or ReLU\footnote{\url{https://en.wikipedia.org/wiki/Rectified_linear_unit}}, and $\mathbf{W}_h$, $\mathbf{W}_x$ are learned weight matrices. The conditional distribution for the next token is then read off from $\mathbf{h}_t$ \cite{Goodfellow-et-al-2016}.
 
 \begin{figure}[!h]
     \centering
@@ -601,15 +604,15 @@ where $f$ is a nonlinearity such as $\tanh$ or ReLU\footnote{\url{https://en.wik
     \label{fig:rnn_diagram}
 \end{figure}
 
-Figure~\ref{fig:rnn_diagram} illustrates the three main layers of an RNN and the recurrent connection that feeds the hidden state from one time step to the next.  This feedback loop allows the network to maintain a form of memory over previous inputs.  Crucially, all recurrent connections share the same weight matrix, enabling the network to process sequences of arbitrary length.
+Figure~\ref{fig:rnn_diagram} illustrates the three main layers of an RNN and the recurrent connection that feeds the hidden state from one time step to the next. This feedback loop allows the network to maintain a form of memory over previous inputs. Crucially, all recurrent connections share the same weight matrix, enabling the network to process sequences of arbitrary length.
 
-In principle, the hidden state can carry information from arbitrarily far back.  In practice, however, the repeated multiplication of weight matrices during backpropagation causes gradients to either shrink exponentially toward zero or grow without bound --- the \emph{vanishing} and \emph{exploding gradient} problems. Bengio et al.~\cite{279181} analyzed this phenomenon formally, showing that the influence of an input at time step $\tau$ on the hidden state at a later time step $t$ decays exponentially with the distance $t - \tau$.  The consequence is that standard RNNs struggle to learn dependencies that span more than roughly 10--20 time steps, even though many meaningful patterns in language and other sequential data require much longer memory.
+In principle, the hidden state can carry information from arbitrarily far back. In practice, however, the repeated multiplication of weight matrices during backpropagation causes gradients to either shrink exponentially toward zero or grow without bound --- the \emph{vanishing} and \emph{exploding gradient} problems. \texttt{Bengio et al.} analyzed this phenomenon formally, showing that the influence of an input at the time step $\tau$ on the hidden state at a later time step $t$ decays exponentially with distance $t - \tau$. The consequence is that standard RNNs struggle to learn dependencies that span more than roughly 10--20 time steps, even though many meaningful patterns in language and other sequential data require much longer memory~\cite{279181}.
 
 \subsubsection*{Long Short-Term Memory}
 
-To address this problem, Long Short-Term Memory (LSTM) networks were specifically designed~\cite{hochreiter1997long}. They introduce a dedicated \emph{cell state} that runs through the entire sequence like a conveyor belt, regulated by three learned gates: a \emph{forget gate} that decides what information to discard, an \emph{input gate} that controls what new information to store, and an \emph{output gate} that determines what part of the cell state to expose as the hidden state.  By learning to open and close these gates, LSTMs can preserve information over hundreds of time steps.
+To address this problem, Long Short-Term Memory (LSTM) networks were specifically designed~\cite{hochreiter1997long}. They introduce a dedicated \emph{cell state} that runs through the entire sequence like a conveyor belt, regulated by three learned gates: a \emph{forget gate} that decides what information to discard, an \emph{input gate} that controls what new information to store, and an \emph{output gate} that determines what part of the cell state to expose as the hidden state. By learning to open and close these gates, LSTMs can preserve information over hundreds of time steps.
 
-Despite this advance, a fundamental bottleneck remained: processing is strictly sequential. The token $t$ cannot be computed until the token $t{-}1$ has been processed.  This sequential dependency has two consequences.  First, it makes training on large corpora prohibitively slow, since parallelism across positions within a sequence is impossible.  Second, information about an element early in the sequence must survive passage through every intermediate hidden state before it can influence the processing of a distant element, even if the two are directly related.  Both limitations motivated the search for an architecture that could process all positions simultaneously while maintaining the ability to model long-range dependencies.
+Despite this advance, a fundamental bottleneck remained: the processing is strictly sequential. The token $t$ cannot be computed until the token $t{-}1$ has been processed. This sequential dependency has two consequences. First, it makes training on large corpora prohibitively slow, since parallelism across positions within a sequence is impossible. Second, information about an element early in the sequence must survive passage through every intermediate hidden state before it can influence the processing of a distant element, even if the two are directly related. Both limitations motivated the search for an architecture that could process all positions simultaneously while maintaining the ability to model long-range dependencies.
 
 
 % ============================================================
@@ -617,20 +620,67 @@ Despite this advance, a fundamental bottleneck remained: processing is strictly 
 \label{sec:transformers}
 % ============================================================
 
-The transformer, introduced by Vaswani et al.\ in 2017, addressed both limitations of recurrent models in a single architectural innovation~\cite{vaswani2023attentionneed}. It replaced the sequential hidden-state chain with a mechanism that lets every token attend directly to every other token --- \emph{self-attention}. The result is a model that can be trained in parallel across all positions and that provides short, direct gradient paths between any pair of tokens regardless of their distance in the sequence.
+The transformer, introduced by \texttt{Vaswani et al.}\ in 2017, addressed both limitations of recurrent models in a single architectural innovation. It replaced the sequential hidden-state chain with a mechanism that lets every token attend directly to every other token --- \emph{self-attention}. The result is a model that can be trained in parallel across all positions and that provides short, direct gradient paths between any pair of tokens regardless of their distance in the sequence~\cite{vaswani2023attentionneed}.
+
+\subsection{Tokenization}
+\label{subsec:tokenization}
+ 
+Before any computation can occur, the model must convert the raw text into a sequence of discrete tokens from a fixed vocabulary. Modern LLMs use \emph{subword tokenization}, most commonly Byte-Pair Encoding (BPE)\footnote{\url{https://en.wikipedia.org/wiki/Byte-pair_encoding}}, which was adapted for neural machine translation by \texttt{Sennrich et al.}~\cite{sennrich2016bpe}. BPE starts with a vocabulary of individual characters and iteratively merges the most frequent adjacent pair into a single token, repeating until a target vocabulary size is reached. The result is a vocabulary of variable-length subword units: common words like "the" remain single tokens, while rare or compound words are split into recognizable pieces.
+ 
+For source code, tokenization has particular implications. A Solidity identifier like \texttt{transferFrom} might be split into \texttt{transfer} and \texttt{From}, preserving meaningful subcomponents. However, hexadecimal addresses, large numeric constants, and domain-specific syntax may be tokenized into long sequences of opaque fragments, consuming the context window budget without conveying proportional semantic information. These tokenization artifacts are one reason why code-specialized models often use vocabularies trained on mixed code-and-text corpora rather than general-purpose text vocabularies.
+ 
+Once tokenized, each token is mapped to a dense vector through a learned \emph{embedding table} --- a matrix $\mathbf{E} \in \mathbb{R}^{|\mathcal{V}| \times d_{\text{model}}}$ where each row corresponds to one vocabulary entry. These vectors are the model's initial numerical representation of each token, and they are refined through the subsequent attention layers. These embedding vectors, not raw characters, serve as input to the transformer.
+
+\subsection{Embeddings}
+\label{subsec:embeddings}
+
+Tokenisation converts raw text into a sequence of integer indices. However, neural networks operate on continuous vectors, not discrete symbols. The bridge between the two is an \emph{embedding}: a fixed-dimensional dense vector that represents a token in a continuous space where arithmetic operations are meaningful.
+
+In its simplest form, the embedding is a table lookup. The model maintains a matrix $\mathbf{E} \in \mathbb{R}^{|\mathcal{V}| \times d_{\text{model}}}$, where $|\mathcal{V}|$ is the vocabulary size and $d_{\text{model}}$ is the embedding dimension (typically 768 to 4{,}096 in modern models). To embed a token with index $i$, the model simply retrieves the $i$-th row of $\mathbf{E}$. These rows are not hand-designed---they are learned parameters, updated during training alongside all other weights. Over the course of pre-training on billions of tokens, the embedding space develops a geometric structure in which tokens with similar meaning or function occupy nearby regions. This idea dates back to the distributional hypothesis in linguistics---``a word is characterized by the company it keeps''~\cite{firth1957synopsis}---and was first demonstrated at scale by Word2Vec, which showed that word embeddings trained on large corpora capture semantic relationships as vector arithmetic: the vector for ``king'' minus ``man'' plus "woman" produces a vector close to "queen"~\cite{mikolov2013word2vec}.
+
+In a transformer, the initial embedding is only the starting point. As the token's vector passes through successive attention layers, it is progressively enriched with contextual information from the surrounding sequence. The output of the final layer is a \emph{contextual embedding} that represents not just the token in isolation, but the token in the context of everything around it. This is a critical distinction: the word ``bank'' receives different final-layer representations in ``river bank'' and ``bank account,'' even though it starts from the same row in the embedding table.
+
+\begin{figure}[!h]
+    \centering
+    % Suggested TikZ or imported figure:
+    % Left: token IDs [7, 42, 103] pointing into embedding table rows
+    % Middle: initial vectors (static, context-free)
+    % Right: after N transformer layers, vectors have shifted 
+    %         (contextualised)
+    % Caption explains the progression from discrete ID to 
+    % context-dependent vector
+    \includegraphics[width=0.85\linewidth]{images/embeddings.pdf}
+    \caption{From tokens to contextual embeddings. Each token index 
+    selects a row from the embedding table, producing a static vector. 
+    Successive transformer layers refine these vectors into contextual 
+    representations that capture the token's meaning within the 
+    surrounding sequence.}
+    \label{fig:embeddings}
+\end{figure}
+
+This contextual embedding mechanism is what makes pre-trained transformers so versatile. A model like BERT~\cite{devlin2019bert} can be used as a general-purpose feature extractor: feed in a passage of text, extract the final-layer embeddings, and use them for downstream tasks---classification, similarity search, clustering---without modifying the model's weights. Code-specialized variants such as CodeBERT~\cite{feng2020codebert} apply the same principle to source code, and their embeddings form the basis for vulnerability detection and code search systems that we survey in Section~\ref{sec:llm-auditing}.
+
+These embedding vectors are also the representations that positional encoding (Section~\ref{subsec:pos-enc}) is added to before the first attention layer, and they are the vectors that the self-attention mechanism (Section~\ref{subsec:self-attention}) operates on. With this foundation in place, we now turn to the overall transformer architecture and the attention mechanism at its core.
+
+
+\subsection{Architecture Overview}
+\label{subsec:transformer-arch}
 
 \begin{figure}[!h]
     \centering
     \includegraphics[width=0.6\linewidth]{images/transformer.png}
     \caption{The original encoder--decoder transformer architecture. Adapted from~\cite{vaswani2023attentionneed}.
-    % The encoder (left) processes the input sequence bidirectionally, while the decoder (right) generates the output sequence autoregressively.  Modern LLMs typically use only one half: decoder-only models for generation, or encoder-only models for representation learning.
     }
     \label{fig:transformer}
 \end{figure}
 
-The full architecture, shown in Figure~\ref{fig:transformer}, consists of an encoder--decoder stack. The encoder maps an input sequence to a sequence of continuous representations, which the decoder then uses to generate output tokens one at a time.  However, most models relevant to contemporary NLP and code analysis use only one half of this design.  Encoder-only models such as BERT~\cite{devlin2019bert} and CodeBERT~\cite{feng2020codebert} produce contextual embeddings useful for classification and retrieval.  Decoder-only models in the GPT family~\cite{radford2019language, brown2020language} generate text autoregressively and form the backbone of today's chat-capable LLMs (GPT-5~\cite{openai2025gpt5}, Claude~\cite{anthropic2025claude}, DeepSeek~\cite{deepseekai2025deepseekv3}, Qwen~\cite{qwen2025qwen3}).  Encoder--decoder models such as T5~\cite{raffel2020exploring} and CodeT5~\cite{wang2021codet5} excel at sequence-to-sequence tasks like summarisation and translation. 
+The full transformer architecture, shown in Figure~\ref{fig:transformer}, consists of two stacks: an encoder (left) and a decoder (right), each composed of $N$ identical layers. On the encoder side, each layer contains two sub-layers: a multi-head self-attention mechanism and a position-wise feed-forward network, both wrapped in residual connections and layer normalisation. The encoder processes the entire input sequence in parallel and produces a sequence of contextual representations.
 
-The remainder of this section examines the two mechanisms that make the transformer work: self-attention, which allows tokens to exchange information regardless of distance, and positional encoding, which injects the notion of order into an otherwise position-agnostic architecture.
+The decoder mirrors this structure but adds a third sub-layer: a cross-attention mechanism that attends to the encoder's output, allowing each generated token to draw on the full input representation. Critically, the decoder's self-attention is \emph{masked}---each position can only attend to earlier positions---which enforces the autoregressive property: tokens are generated one at a time, left to right, with each prediction conditioned only on previously generated tokens.
+
+At the bottom of both stacks, the input and output tokens pass through their respective embedding layers and receive positional encodings. At the top of the decoder, a linear projection followed by softmax converts the final hidden states into a probability distribution over the vocabulary, from which the next token is selected.
+
+In practice, most modern LLMs use only one half of this design. Encoder-only architectures discard the decoder and use the encoder's contextual representations directly for tasks like classification and retrieval. Decoder-only architectures discard the encoder and generate text purely autoregressively---this is the variant used by the majority of today's frontier models. Encoder--decoder architectures retain both halves and are well suited to sequence-to-sequence tasks such as translation and summarization. The remainder of this section examines the mechanisms that make all three variants work: self-attention, positional encoding, and Mixture-of-Experts scaling.
 
 
 \subsection{Self-Attention Mechanism}
@@ -653,7 +703,7 @@ where $\mathbf{X} \in \mathbb{R}^{T \times d_{\text{model}}}$ is the matrix of i
     \label{eq:attention}
 \end{equation}
 
-The matrix $\mathbf{Q}\mathbf{K}^{\!\top} \in \mathbb{R}^{T \times T}$ contains the compatibility score of every query--key pair.  Dividing by $\sqrt{d_k}$ is essential: without this scaling, the dot products grow in magnitude with the embedding dimension, pushing softmax into regions where its gradients are vanishingly small~\cite{vaswani2017attention}.  After softmax normalisation, each row becomes a probability distribution over positions, and the output for each token is the corresponding weighted average of value vectors.
+The matrix $\mathbf{Q}\mathbf{K}^{\!\top} \in \mathbb{R}^{T \times T}$ contains the compatibility score of every query--key pair.  Dividing by $\sqrt{d_k}$ is essential: without this scaling, the dot products grow in magnitude with the embedding dimension, pushing softmax into regions where its gradients are vanishingly small~\cite{vaswani2017attention}.  After softmax normalization, each row becomes a probability distribution over positions, and the output for each token is the corresponding weighted average of value vectors.
 
 An intuitive reading: the query at position~$t$ asks ``what do I need to know?'', the keys at all other positions advertise ``here is what I contain'', and the resulting attention weights decide how much each position contributes to the updated representation at~$t$.  This mechanism allows the model to relate any two positions in a sequence with a single computational step, regardless of their distance---a stark contrast to RNNs, where information must traverse every intermediate hidden state.
 
@@ -672,15 +722,15 @@ Rather than computing a single attention function, transformers run $h$ independ
     \label{eq:head-i}
 \end{equation}
 
-The motivation for multiple heads is that a single attention function can only capture one type of relationship at a time.  By running several heads in parallel, the model can attend to different aspects of the input simultaneously.  Empirical probing studies confirm that different heads do indeed specialise in different relation types---some track syntactic dependencies, others capture coreference or semantic similarity---even without explicit supervision~\cite{clark2019does, vig2019analyzing}.  The output projection~$\mathbf{W}^O$ then combines these diverse perspectives into a single representation for each token.
+The motivation for multiple heads is that a single attention function can only capture one type of relationship at a time. By running several heads in parallel, the model can attend to different aspects of the input simultaneously. Empirical probing studies confirm that different heads do indeed specialise in different relation types---some track syntactic dependencies, others capture coreference or semantic similarity---even without explicit supervision~\cite{clark2019does, vig2019analyzing}. The output projection~$\mathbf{W}^O$ then combines these diverse perspectives into a single representation for each token.
 
 
 \subsection{Positional Encoding}
 \label{subsec:pos-enc}
 
-Self-attention is \emph{permutation-equivariant}: if the input tokens are shuffled, the outputs are shuffled in exactly the same way, with no change in their values.  Since token order carries critical semantic information, both in natural language and in structured formats, the model must be given explicit information about position. This is the role of \emph{positional encoding}, which is added to the input embeddings before they enter the attention layers.
+Self-attention is \emph{permutation-equivariant}: if the input tokens are shuffled, the outputs are shuffled in exactly the same way, with no change in their values. Since token order carries critical semantic information, both in natural language and in structured formats, the model must be given explicit information about position. This is the role of \emph{positional encoding}, which is added to the input embeddings before they enter the attention layers.
 
-The original transformer~\cite{vaswani2023attentionneed} used fixed sinusoidal functions to encode position.  For each position $\text{pos}$ and each dimension $i$ of the embedding:
+The original transformer~\cite{vaswani2023attentionneed} used fixed sinusoidal functions to encode position. For each position $\text{pos}$ and each dimension $i$ of the embedding:
 
 \begin{equation}
     \text{PE}_{(\text{pos},\, 2i)} = \sin\!\left(\frac{\text{pos}}{10000^{2i/d_{\text{model}}}}\right), \qquad
@@ -688,28 +738,27 @@ The original transformer~\cite{vaswani2023attentionneed} used fixed sinusoidal f
     \label{eq:sinusoidal-pe}
 \end{equation}
 
-This design has an elegant property: the positional encoding of any fixed offset $k$ can be expressed as a linear function of the encoding at position $\text{pos}$, which in principle allows the model to learn to attend to relative positions.  However, sinusoidal encodings are fixed and cannot adapt to the data.
+This design has an elegant property: the positional encoding of any fixed offset $k$ can be expressed as a linear function of the encoding at position $\text{pos}$, which in principle allows the model to learn to attend to relative positions. However, sinusoidal encodings are fixed and cannot adapt to the data.
 
-More recent models have moved to \emph{learned} positional encodings or, increasingly, to \emph{relative} positional encoding schemes.  Rotary Position Embedding (RoPE)~\cite{su2024roformer} encodes position by rotating query and key vectors in the complex plane, so that the dot product between a query at position $m$ and a key at position $n$ depends only on their relative distance $m - n$.  RoPE has become the dominant choice in modern decoder-only LLMs, including LLaMA~\cite{touvron2023llama} and many of its derivatives, because it combines the benefits of relative encoding with straightforward integration into the standard attention mechanism.
+More recent models have moved to \emph{learned} positional encodings or, increasingly, to \emph{relative} positional encoding schemes.  Rotary Position Embedding (RoPE)~\cite{su2024roformer} encodes position by rotating query and key vectors in the complex plane, so that the dot product between a query at position $m$ and a key at position $n$ depends only on their relative distance $m - n$. RoPE has become the dominant choice in modern decoder-only LLMs, including LLaMA~\cite{touvron2023llama} and many of its derivatives, because it combines the benefits of relative encoding with straightforward integration into the standard attention mechanism.
 
 
 \subsection{Mixture-of-Experts}
 \label{subsec:moe}
 
-Standard transformers are \emph{dense}: every parameter is involved in processing every input token.  Scaling such models to hundreds of billions of parameters therefore increases compute cost proportionally.  \emph{Mixture-of-Experts} (MoE) architectures~\cite{shazeer2017outrageously} offer a way to decouple model capacity from per-token compute.  In an MoE transformer, each feed-forward sublayer is replaced by a set of $N$ parallel ``expert'' networks, and a learned \emph{router} selects only the top-$K$ experts to process each token.  The remaining experts are inactive for that token, so the model can hold far more parameters than it actually uses on any single input.
+Standard transformers are \emph{dense}: every parameter is involved in processing every input token. Scaling such models to hundreds of billions of parameters therefore increases compute cost proportionally.  \emph{Mixture-of-Experts} (MoE) architectures~\cite{shazeer2017outrageously} offer a way to decouple model capacity from per-token compute.  In an MoE transformer, each feed-forward sublayer is replaced by a set of $N$ parallel ``expert'' networks, and a learned \emph{router} selects only the top-$K$ experts to process each token. The remaining experts are inactive for that token, so the model can hold far more parameters than it actually uses on any single input.
 
-This idea has moved from a niche research topic to the dominant architecture for frontier LLMs.  The Switch Transformer~\cite{fedus2022switch} demonstrated that routing each token to a single expert could scale efficiently to trillion-parameter models.  Mixtral~\cite{jiang2024mixtral} brought MoE to open-weight models with strong performance.  Most significantly, the DeepSeek model family~\cite{deepseekai2025deepseekv3} introduced fine-grained expert segmentation---splitting experts into many smaller units and activating more of them per token---alongside shared experts that capture common knowledge across tasks, an auxiliary-loss-free load-balancing strategy, and Multi-head Latent Attention (MLA) for efficient inference.  DeepSeek-V3, with 671~billion total parameters but only 37~billion activated per token, was reportedly trained for approximately \$5.6~million---an order of magnitude less than comparable dense models---while achieving competitive performance with the best proprietary systems.
-
+This idea has moved from a niche research topic to the dominant architecture for frontier LLMs.  The Switch Transformer~\cite{fedus2022switch} demonstrated that routing each token to a single expert could scale efficiently to trillion-parameter models. Mixtral~\cite{jiang2024mixtral} brought MoE to open-weight models with strong performance.  Most significantly, the DeepSeek model family~\cite{deepseekai2025deepseekv3} introduced fine-grained expert segmentation---splitting experts into many smaller units and activating more of them per token---alongside shared experts that capture common knowledge across tasks, an auxiliary-loss-free load-balancing strategy, and Multi-head Latent Attention (MLA) for efficient inference. DeepSeek-V3, with 671~billion total parameters but only 37~billion activated per token, was reportedly trained for approximately \$5.6~million---an order of magnitude less than comparable dense models---while achieving competitive performance with the best proprietary systems.
 
 With self-attention providing the ability to relate tokens across arbitrary distances, positional encoding supplying the necessary notion of order, and MoE enabling efficient scaling, the transformer has the representational machinery to model complex sequential structure at enormous scale.  The next question is how to turn this architecture into a capable model---that is, how to train it.
 
 
 % ============================================================
-\section{Training Paradigms}
+\section{Model Training}
 \label{sec:training}
 % ============================================================
 
-A transformer architecture on its own is simply a parameterised function; it becomes useful only through training. Building a capable LLM involves three broad stages, each operating at a different scale and serving a different purpose. \emph{Pre-training} exposes the model to vast quantities of text to learn general-purpose representations. \emph{Fine-tuning} adapts these representations to specific tasks or desired behaviours. \emph{Prompting} shapes the model's output at inference time through instructions and examples, without modifying any parameters. The following subsections describe each stage in turn.
+A transformer architecture on its own is simply a parameterized function; it becomes useful only through training. Building a capable LLM involves three broad stages, each operating at a different scale and serving a different purpose. \emph{Pre-training} exposes the model to vast quantities of text to learn general-purpose representations. \emph{Fine-tuning} adapts these representations to specific tasks or desired behaviours. \emph{Prompting} shapes the model's output at inference time through instructions and examples, without modifying any parameters. The following subsections describe each stage in turn.
 
 
 \subsection{Pre-training}
@@ -764,38 +813,6 @@ r from the model, which has been shown to improve performance on arithmetic, com
 \textbf{Few-shot learning} calibrates what "good" output looks like by providing concrete examples in the prompt.  The model uses these examples to infer the desired format, style, level of detail, and reasoning strategy, then applies these inferred patterns to the actual query.  Few-shot prompting is particularly powerful when combined with retrieval: instead of relying on fixed examples, relevant demonstrations can be retrieved dynamically from a knowledge base, tailoring the prompt to each specific input.
 
 Together, these prompting techniques allow practitioners to adapt a single general-purpose model to a wide range of tasks at inference time, complementing the more permanent adaptations achieved through fine-tuning.
-
-
-% ============================================================
-\section{Embeddings}
-\label{sec:embeddings}
-% ============================================================
-
-All of the approaches described so far, whether based on RNNs or transformers, whether pre-trained or fine-tuned, share a common foundation: they represent discrete symbols as continuous vectors~\cite{Goodfellow-et-al-2016}. An \emph{embedding} is a fixed-dimensional vector representation of an input, produced by passing it through a model and extracting an intermediate or final hidden state (typically via mean pooling or a special classification token). The key property of a good embedding is that inputs with similar meaning or function should be mapped to nearby points in vector space, enabling operations like nearest-neighbor search, clustering, and analogy reasoning to be performed directly on the representations.
-
-The quality of embeddings depends critically on the pre-training data and objective.  A model trained exclusively on English prose will embed text according to the semantic relationships present in natural language, which may not capture the structural and functional relationships that matter in other domains.  This observation motivated the development of domain-specific embedding models.
-
-
-\subsection{Encoder Models}
-\label{subsec:encoder-models}
-
-General-purpose text encoders like BERT~\cite{devlin2019bert} produce strong representations for natural language tasks, but they treat source code as just another form of text, missing the structural regularities that distinguish programming languages. Code-specialized encoder models address this gap.
-
-\textbf{CodeBERT}~\cite{feng2020codebert} was one of the first models to pre-train a BERT-style encoder on both natural language and source code across six programming languages.  It uses both masked language modelling and replaced-token detection on NL--PL pairs, learning alignments between code and its documentation.  CodeBERT embeddings have become a standard baseline for code search, clone detection, and vulnerability classification.
-
-\textbf{GraphCodeBERT}~\cite{guo2021graphcodebert} extends CodeBERT by incorporating data flow graphs into the pre-training objective, explicitly modelling variable definition-use chains.  This structural awareness improves performance on tasks that require understanding data dependencies---precisely the kind of reasoning needed to trace the flow of values through a program.
-
-For smart contract vulnerability detection specifically, several studies have used encoder models as feature extractors.  Lightning Cat~\cite{lightningcat2023} uses CodeBERT preprocessing to achieve F1~scores above 93\% on the SolidiFI benchmark.  Sendner et al.~\cite{sendner2025firetries} conducted a comprehensive comparison of seven pre-trained language models---BERT, CodeBERT, GraphCodeBERT, DeBERTa, RoBERTa, DistilBERT, and Longformer---for multi-label vulnerability detection across approximately 18,000 Ethereum smart contracts.
-
-
-\subsection{Seq2Seq Models}
-\label{subsec:seq2seq}
-
-\textbf{T5} (Text-to-Text Transfer Transformer)~\cite{raffel2020exploring} frames every NLP task as a text-to-text problem, enabling a single model architecture to handle classification, translation, summarisation, and generation through a unified interface.
-
-\textbf{CodeT5}~\cite{wang2021codet5} adapts the T5 architecture for code, using an identifier-aware pre-training objective that masks and recovers code identifiers rather than random tokens.  This targeted masking forces the model to learn the roles of variables and functions within their context.  Its successor, \textbf{CodeT5+}~\cite{wang2023codet5p}, scales the model and adds contrastive learning objectives for improved representation quality.  BreachT5~\cite{breacht5_2024} demonstrated that fine-tuned CodeT5+ ensembles can perform multi-label SWC classification over large smart contract datasets, though the model's 512-token input limit constrains analysis of longer contracts.
-
-These encoder--decoder models are particularly well-suited for tasks framed as sequence-to-sequence transformation: given a piece of code, generate a description of its behaviour; or given a natural-language specification, generate a corresponding formal property.  PropertyGPT~\cite{liu2025propertygpt} exploits this capability by using RAG over human-written verification properties to generate new formal specifications, uncovering 12~zero-day vulnerabilities that earned \$8,256 in bug bounties.
 
 
 % ============================================================
@@ -855,39 +872,29 @@ While not targeting smart contracts specifically, \textbf{ReVul-CoT}~\cite{chen2
 % ============================================================
 
 Despite rapid progress, LLM-based smart contract auditing faces fundamental challenges that constrain its reliability in production settings.
-
+ 
+ 
 \subsection*{Hallucinations}
-\label{subsec:hallucinations}
-
-LLMs can produce plausible-sounding but factually incorrect outputs --- \emph{hallucination}.  In code generation, this manifests as references to non-existent libraries, fabricated API calls, and invented vulnerability reports.  Spracklen et al.~\cite{spracklen2025package} tested 16~LLMs generating 576,000 code samples and found that 19.7\% of the 2.23~million referenced packages were hallucinated (non-existent), creating a direct supply-chain attack vector.
-
-For security specifically, the consequences are severe.  Pearce et al.~\cite{pearce2022asleep} found that approximately 40\% of GitHub Copilot's code completions contained vulnerabilities.  Perry et al.~\cite{perry2023users} demonstrated that users with AI coding assistant access wrote significantly less secure code while being more confident in its correctness—a dangerous automation bias.
-
-In the smart contract domain, Chen et al.~\cite{chen2024chatgpt} identified several hallucination patterns: ``Protected Mechanism Bias'' (the model assumes protective code exists when it does not), ``Development Intent Bias'' (the model assumes developers followed best practices), and ``Lack of Understanding of Actual Meaning'' of Solidity-specific constructs like \texttt{msg.value}.
-
-The primary mitigation is to require \emph{grounded evidence} for every finding.  Each reported vulnerability should reference specific code locations, static analysis outputs, or retrieved documentation rather than relying on the model's ``intuition'' alone.  RAG-based systems consistently reduce hallucination rates: LLM-BSCVM reduced false positives from 7.2\% to 5.1\% through retrieval-grounded multi-agent collaboration~\cite{llmbscvm2025}.
-
-
+ 
+LLMs can produce plausible-sounding but factually incorrect outputs---\emph{hallucination}. In code generation, this manifests as references to non-existent libraries, fabricated API calls, and invented vulnerability reports. Spracklen et al.~\cite{spracklen2025package} tested 16~LLMs generating 576,000~code samples and found that 19.7\% of the 2.23~million referenced packages were hallucinated, creating a direct supply-chain attack vector. Pearce et al.~\cite{pearce2022asleep} found that approximately 40\% of GitHub Copilot's code completions contained vulnerabilities, while Perry et al.~\cite{perry2023users} demonstrated that users with AI coding assistant access wrote significantly less secure code while being more confident in its correctness---a dangerous combination of automation bias and misplaced trust.
+ 
+In the smart contract domain specifically, Chen et al.~\cite{chen2024chatgpt} identified several hallucination patterns: the model assumes protective code exists when it does not (``Protected Mechanism Bias''), assumes developers followed best practices (``Development Intent Bias''), and misinterprets Solidity-specific constructs like \texttt{msg.value}. The primary mitigation is to require \emph{grounded evidence} for every finding---each reported vulnerability should reference specific code locations, static analysis outputs, or retrieved documentation rather than relying on the model's unsupported assertions.
+ 
+ 
 \subsection*{Context Window Limitations}
-\label{subsec:context-window-limits}
-
-Even with context windows reaching hundreds of thousands of tokens, real smart contract systems can exceed what is reasonable to include in a single prompt.  Imported libraries, interface definitions, deployment configurations, and cross-contract dependencies all contribute to the token budget.  Moreover, models have a fixed training cutoff: new vulnerability classes and evolving best practices emerge continuously but are absent from the model's parametric knowledge.
-
-RAG partially addresses both issues by retrieving up-to-date, task-relevant information at inference time and by focusing the prompt on high-signal content~\cite{lewis2021}.
-
-
+ 
+Even with context windows reaching hundreds of thousands of tokens, real smart contract systems can exceed what is reasonable to include in a single prompt. Imported libraries, interface definitions, deployment configurations, and cross-contract dependencies all consume the token budget. Moreover, models have a fixed training cutoff: new vulnerability classes and evolving best practices emerge continuously but are absent from the model's parametric knowledge. RAG partially addresses both issues by retrieving up-to-date, task-relevant information at inference time and by focusing the prompt on high-signal content~\cite{lewis2021}.
+ 
+ 
 \subsection*{Security}
-\label{subsec:security}
-
-When LLM agents can call external tools, additional safety concerns arise.  Prompt injection in retrieved documents could manipulate the agent's behavior, and unrestricted tool access could enable unintended actions. [TODO add a bit more bout security] 
-
-This chapter traced the mathematical foundations of sequence modeling through the transformer architecture and its modern extensions, arriving at a clear picture of where LLMs excel and where they fall short for smart contract auditing. [TODO a bit more]
-
-
-After having the overview about Ethereum, Code Analysis and LLMs, we can move to framework Wake, which comnined all of this for security purposes. [TODO write it better]
-
-
-[TODO transition to Wake framework]
+ 
+When LLM agents can call external tools---compilers, static analysers, blockchain RPCs---additional safety concerns arise. Prompt injection attacks embedded in retrieved documents or source code comments could manipulate the agent's behaviour, causing it to suppress genuine findings or fabricate false ones. Unrestricted tool access could enable unintended actions such as deploying contracts or initiating transactions. These risks require careful sandboxing of tool execution, input sanitisation of retrieved content, and human-in-the-loop confirmation for any actions with on-chain consequences.
+ 
+\bigskip
+ 
+This chapter traced the mathematical foundations of sequence modelling through the transformer architecture and its modern extensions, covering the training paradigms that turn raw architectures into capable systems and the prompting techniques that steer them at inference time. The survey of LLM applications to smart contract auditing revealed a clear pattern: prompting alone achieves high recall but suffers from poor precision and instability; fine-tuning substantially improves domain-specific performance; and retrieval-augmented approaches offer the most promising path toward reliable, production-grade analysis by grounding model outputs in verified external knowledge.
+ 
+The next chapter examines how these ideas come together in practice. The Wake framework combines static analysis infrastructure---the kind surveyed in Chapter~\ref{ch:analysis}---with the LLM-based techniques discussed here, providing an integrated platform for smart contract security that leverages the strengths of both approaches while mitigating their individual limitations.
 
 
 \chapter{The Wake Framework}
