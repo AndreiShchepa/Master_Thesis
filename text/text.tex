@@ -1140,7 +1140,7 @@ Some of these limitations merit attention and can be addressed through alternati
 \chapter{Proposed Methodology}
 \label{ch:methodology}
 
-The previous chapters established the theoretical and practical foundations for this work: blockchain and Ethereum fundamentals (Chapter~\ref{ch:ethereum}), code analysis techniques ranging from static analysis to formal verification (Chapter~\ref{ch:code-analysis}), large language models and their application to smart contract auditing (Chapter~\ref{ch:llm}), and the Wake framework with its AI extension and identified limitations (Chapter~\ref{chap:wake}). This chapter synthesises these elements into a concrete methodology for augmenting LLM-based smart contract auditing with Retrieval-Augmented Generation. We present the design goals, formalise the RAG framework, describe the system architecture, detail the knowledge base construction, explain the retrieval pipeline (including embedding strategies, multi-mode search, and re-ranking), specify the integration with Wake through the Model Context Protocol, and discuss the prompt engineering strategy that ties the components together.
+After establishing the theoretical and practical foundations in certain topics, we are ready to dive into disassemble the proposed idea. This chapter synthesizes previous knowledge into a concrete methodology for augmenting LLM-based smart contract auditing with Retrieval-Augmented Generation. It presents the design goals, formalizes the RAG approach, describe the system architecture, detail the knowledge base construction, explain the retrieval pipeline, specify the integration with Wake through the Model Context Protocol, and discuss the prompt engineering strategy that ties the components together.
 
 
 \section{Design Goals}
@@ -1149,22 +1149,23 @@ The previous chapters established the theoretical and practical foundations for 
 The design of our RAG-augmented auditing system is guided by five goals, each motivated by the limitations identified in Sections~\ref{sec:llm-challenges} and~\ref{subsec:wake-ai-limitations}.
 
 \begin{enumerate}
-    \item \textbf{Groundedness.} Every claim in the LLM's output should be traceable to a concrete piece of evidence: a retrieved audit finding, a static-analysis result, or a specific code location. This directly mitigates the hallucination risk described in Section~\ref{subsec:hallucinations}. The system must present the retrieved context alongside the LLM response so that a human auditor can verify each claim.
+    \item \textbf{Groundedness.} Every claim in the LLM's output should be traceable to a concrete piece of evidence: a retrieved audit finding, a static-analysis result, or a specific code location. This directly mitigates the risk of hallucination.
+    % The system must present the retrieved context alongside the LLM response so that a human auditor can verify each claim.
 
-    \item \textbf{Token efficiency.} LLM context windows are finite and costly. Rather than concatenating entire codebases or knowledge bases into the prompt, the system must retrieve a small, highly relevant subset of documents and inject only the most informative content. This keeps inference fast, reduces cost, and avoids the noise degradation observed when irrelevant material is included~\cite{lewis2020retrieval}.
+    \item \textbf{Token efficiency.} LLM context windows are finite and costly. Rather than concatenating entire codebases or knowledge bases into the prompt, the system must retrieve a small, highly relevant subset of documents and inject only the most informative content. This keeps inference fast, reduces cost, and avoids noise degradation when irrelevant material is included.
 
-    \item \textbf{Modularity.} Each component---knowledge base, embedding model, retrieval engine, re-ranker, LLM---should be independently replaceable. A modular design enables controlled ablation studies (e.g., disabling re-ranking to measure its contribution) and future upgrades (e.g., swapping embedding models or adding new data sources) without redesigning the pipeline.
+    % \item \textbf{Modularity.} Each component---knowledge base, embedding model, retrieval engine, re-ranker, LLM---should be independently replaceable. A modular design enables controlled ablation studies (e.g., disabling re-ranking to measure its contribution) and future upgrades (e.g., swapping embedding models or adding new data sources) without redesigning the pipeline.
 
-    \item \textbf{Reproducibility.} Audit findings must be reproducible. The system therefore logs every configuration parameter, retrieved document, similarity score, and LLM response. Experiment snapshots capture the full settings at run time, enabling exact reproduction of any evaluation run.
+    % \item \textbf{Reproducibility.} Audit findings must be reproducible. The system therefore logs every configuration parameter, retrieved document, similarity score, and LLM response. Experiment snapshots capture the full settings at run time, enabling exact reproduction of any evaluation run.
 
-    \item \textbf{Audit usefulness.} The ultimate consumers of the system's output are human auditors. The system must produce structured reports that include a verdict (vulnerable or safe), a confidence level, and a detailed reasoning trace that references specific past findings. This aligns with industry audit report conventions and allows auditors to use the output as a starting point for deeper investigation rather than a final answer.
+    \item \textbf{Audit usefulness.} The system must produce structured reports that include a verdict (vulnerable or safe), a confidence level, and a detailed reasoning trace that references specific past findings. This aligns with industry audit report conventions and allows auditors to use the output as a starting point for a deeper investigation rather than a final answer.
 \end{enumerate}
 
 
 \section{Retrieval-Augmented Generation}
 \label{sec:rag}
 
-Retrieval-Augmented Generation (RAG), introduced by Lewis et al.~\cite{lewis2020retrieval}, addresses two fundamental limitations of standalone language models: the inability to access information beyond the training data cutoff, and the tendency to hallucinate when answering questions requiring specialised knowledge. RAG augments a parametric generator with a non-parametric retrieval component that fetches relevant documents from an external corpus at inference time.
+Retrieval-Augmented Generation (RAG), introduced by Lewis et al.~\cite{lewis2021retrieval}, addresses two fundamental limitations of standalone language models: the inability to access information beyond the training data cutoff, and the tendency to hallucinate when answering questions requiring specialized knowledge. RAG augments a parametric generator with a non-parametric retrieval component that fetches relevant documents from an external corpus at inference time.
 
 \subsection{Formal Framework}
 \label{subsec:rag-formal}
@@ -1262,41 +1263,43 @@ The proposed system extends Wake-AI (Section~\ref{sec:wake-ai}) with a retrieval
 
 The end-to-end pipeline proceeds as follows:
 
-\begin{enumerate}
-    \item \textbf{Ingestion.} New vulnerability findings are fetched from the Solodit platform via its REST API, processed (text cleaning, code block extraction, summarisation, label assignment), and stored in a PostgreSQL~17 database with the pgvector extension.
+% \begin{enumerate}
+%     \item \textbf{Ingestion.} New vulnerability findings are fetched from the Solodit platform via its REST API, processed (text cleaning, code block extraction, summarisation, label assignment), and stored in a PostgreSQL~17 database with the pgvector extension.
 
-    \item \textbf{Embedding.} Each finding is embedded along two modalities: its textual summary is encoded with nomic-embed-text-v1.5 (768 dimensions), and its code blocks are encoded with CodeRankEmbed (768 dimensions). Both vectors are stored in the \texttt{finding\_embeddings} table using pgvector's \texttt{vector(768)} type.
+%     \item \textbf{Embedding.} Each finding is embedded along two modalities: its textual summary is encoded with nomic-embed-text-v1.5 (768 dimensions), and its code blocks are encoded with CodeRankEmbed (768 dimensions). Both vectors are stored in the \texttt{finding\_embeddings} table using pgvector's \texttt{vector(768)} type.
 
-    \item \textbf{Query formulation.} Given a piece of Solidity code and a suspected vulnerability, the system constructs a query using one of four strategies: description, code, description-with-label, or hybrid BM25.
+%     \item \textbf{Query formulation.} Given a piece of Solidity code and a suspected vulnerability, the system constructs a query using one of four strategies: description, code, description-with-label, or hybrid BM25.
 
-    \item \textbf{Retrieval.} The query is embedded and used to search the vector store via PostgreSQL functions (\texttt{search\_findings\_by\_text\_ranked}, \texttt{search\_findings\_by\_code\_ranked}). In hybrid BM25 mode, dense results are fused with BM25 keyword scores via RRF.
+%     \item \textbf{Retrieval.} The query is embedded and used to search the vector store via PostgreSQL functions (\texttt{search\_findings\_by\_text\_ranked}, \texttt{search\_findings\_by\_code\_ranked}). In hybrid BM25 mode, dense results are fused with BM25 keyword scores via RRF.
 
-    \item \textbf{Re-ranking.} An optional cross-encoder re-ranker (default: \texttt{cross-encoder/ms-marco-MiniLM-L-6-v2}, 22M parameters) refines the initial candidate set, improving precision before final top-$k$ selection.
+%     \item \textbf{Re-ranking.} An optional cross-encoder re-ranker (default: \texttt{cross-encoder/ms-marco-MiniLM-L-6-v2}, 22M parameters) refines the initial candidate set, improving precision before final top-$k$ selection.
 
-    \item \textbf{Context assembly.} The top-$k$ findings are formatted into a structured context block with each finding's title, label, severity, summary, and code blocks, separated by horizontal rules.
+%     \item \textbf{Context assembly.} The top-$k$ findings are formatted into a structured context block with each finding's title, label, severity, summary, and code blocks, separated by horizontal rules.
 
-    \item \textbf{LLM reasoning.} The assembled context, along with the Solidity code and issue description, is injected into a structured prompt. GPT-4o-mini generates a JSON response containing a verdict (\texttt{VULNERABLE} or \texttt{SAFE}), a confidence level (\texttt{HIGH}, \texttt{MEDIUM}, \texttt{LOW}), and a reasoning trace that references specific retrieved findings.
+%     \item \textbf{LLM reasoning.} The assembled context, along with the Solidity code and issue description, is injected into a structured prompt. GPT-4o-mini generates a JSON response containing a verdict (\texttt{VULNERABLE} or \texttt{SAFE}), a confidence level (\texttt{HIGH}, \texttt{MEDIUM}, \texttt{LOW}), and a reasoning trace that references specific retrieved findings.
 
-    \item \textbf{Evaluation.} Both the retrieval quality and the generation quality are evaluated against ground-truth labels and reference answers, producing quantitative metrics stored in the \texttt{evaluation\_results} table alongside the experiment configuration.
-\end{enumerate}
+%     \item \textbf{Evaluation.} Both the retrieval quality and the generation quality are evaluated against ground-truth labels and reference answers, producing quantitative metrics stored in the \texttt{evaluation\_results} table alongside the experiment configuration.
+% \end{enumerate}
 
 
 \section{Knowledge Base}
 \label{sec:knowledge-base}
 
-The quality of a RAG system is bounded by the quality and coverage of its knowledge base. Our knowledge base contains 16{,}780 audit findings from the Solodit aggregator, producing 44{,}002 embedding vectors (16{,}780 text + 27{,}222 code).
+The quality of a RAG system is bounded by the quality and coverage of its knowledge base. The knowledge base contains 16{,}780 audit findings from the Solodit aggregator.
 
-\subsection{Data Source: Solodit}
+\subsection{Data Source}
 \label{subsec:solodit}
 
-Solodit\footnote{\url{https://solodit.cyfrin.io}} is a comprehensive aggregator of smart contract audit findings, maintained by Cyfrin. It indexes findings from major audit firms (Trail of Bits, OpenZeppelin, Spearbit, Code4rena, Sherlock, and others). Each finding includes a title, a detailed markdown content (with vulnerability description, proof of concept, recommended mitigation, and inline Solidity code), a severity classification, source metadata, and community-contributed tags.
+Solodit\footnote{\url{https://solodit.cyfrin.io}} is a comprehensive aggregator of smart contract audit findings, maintained by Cyfrin\footnote{\url{https://www.cyfrin.io/}}. It indexes findings from major audit firms (Trail of Bits, OpenZeppelin, Spearbit, Code4rena, Sherlock, and others). Each finding includes a title, a detailed markdown content (with vulnerability description, proof of concept, recommended mitigation, and inline Solidity code), a severity classification, source metadata, and community-contributed tags.
 
-We access Solodit through its paginated REST API. The ingestion pipeline (\texttt{run\_incremental\_ingest}) fetches findings sorted by recency, stopping upon finding an already-ingested slug (incremental ingestion). This ensures the knowledge base grows monotonically without duplication.
+Solodit has been accessed through its REST API. The ingestion pipeline (\texttt{run\_incremental\_ingest}) fetches findings sorted by recency, stopping upon finding an already-ingested slug (incremental ingestion). This ensures the knowledge base grows monotonically without duplication with periodic updates running based on cron job. It helpss to be up to date with recent vulnerabilites, that were no included in data corpus that the models was trained on.
 
-\paragraph{Filtering.} We restrict ingestion to findings with severity \texttt{HIGH} or \texttt{MEDIUM}. Lower-severity findings (gas optimisations, informational notes) dilute the semantic coherence of the embedding space.
+Ingestion was limited to findings with severity: \texttt{MEDIUM}, \texttt{HIGH} and \texttt{CRITICAL}. Lower-severity findings (gas optimizations, informational notes) dilute the semantic coherence of the embedding space.
 
 \subsection{Preprocessing Pipeline}
 \label{subsec:preprocessing}
+
+Unfortunetely issues are written in a raw markdown format as plain text. 
 
 Raw audit findings vary widely in format, length, and quality. The preprocessing pipeline normalises findings into a uniform representation.
 
@@ -1391,6 +1394,14 @@ Extracted code blocks are normalised for embedding by flattening each block into
 
 \subsection{Database Schema}
 \label{subsec:db-schema}
+
+ 
+% \begin{figure}[!ht]
+%     \centering
+%     \includesvg[width=0.6\textwidth]{images/erd}
+%     \caption{Entity-Relationship Diagram of the system.}
+%     \label{fig:erd}
+% \end{figure}
 
 The system uses PostgreSQL~17 with the pgvector extension. The schema comprises five tables (Figure~\ref{fig:erd}).
 
@@ -1673,7 +1684,11 @@ The following chapter presents the evaluation framework designed to measure the 
 \chapter{Evaluation}
 \label{ch:evaluation}
 
-This chapter defines the evaluation framework for the RAG-augmented smart contract auditing system described in Chapter~\ref{ch:methodology}. We establish the research questions, describe the datasets, define the metrics for both retrieval and generation quality, present the experimental setup, and discuss threats to validity. Experimental results are presented in Chapter~\ref{ch:results}.
+This chapter defines the evaluation framework for the RAG-augmented smart contract auditing system described in Chapter~\ref{ch:methodology}. It establish the research questions, describe the datasets, define the metrics for both retrieval and generation quality, present the experimental setup, and discuss threats to validity.
+
+\begin{tcolorbox}[colback=gray!10, colframe=gray!40, boxrule=0.5pt]
+This thesis makes use of state-of-the-art Large Language Models, specifically GPT-5.1 from OpenAI, accessed via a paid API. Because querying such models is expensive in terms of cost, the experimental setup was designed to appropriately account for this constraint. Therefore, the experiment setup is hereby reflecting a balance between cost efficiency and satisfactory results.
+\end{tcolorbox}
 
 
 \section{Research Questions}
