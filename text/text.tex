@@ -1684,67 +1684,75 @@ The following chapter presents the evaluation framework designed to measure the 
 \chapter{Evaluation}
 \label{ch:evaluation}
 
-This chapter defines the evaluation framework for the RAG-augmented smart contract auditing system described in Chapter~\ref{ch:methodology}. It establish the research questions, describe the datasets, define the metrics for both retrieval and generation quality, present the experimental setup, and discuss threats to validity.
+This chapter defines the evaluation framework for the RAG-augmented smart contract auditing system described in Chapter~\ref{ch:methodology}. It establishes the research questions, describes the datasets, defines the metrics for both retrieval and generation quality, presents the experimental setup, and discusses threats to validity. 
 
 \begin{tcolorbox}[colback=gray!10, colframe=gray!40, boxrule=0.5pt]
-This thesis makes use of state-of-the-art Large Language Models, specifically GPT-5.1 from OpenAI, accessed via a paid API. Because querying such models is expensive in terms of cost, the experimental setup was designed to appropriately account for this constraint. Therefore, the experiment setup is hereby reflecting a balance between cost efficiency and satisfactory results.
+This thesis makes use of GPT-5.1 from OpenAI, accessed via a paid API. Because querying such models incurs non-trivial cost (\$1.25 per 1M input tokens, \$10 per 1M output tokens), the experimental setup was designed to balance thoroughness with cost efficiency.
 \end{tcolorbox}
 
 
 \section{Research Questions}
 \label{sec:research-questions}
 
-The evaluation is structured around four research questions:
+The evaluation is structured around five research questions:
 
 \begin{description}
-    \item[RQ1: Retrieval quality.] How effectively does the retrieval pipeline surface relevant historical findings for a given vulnerability query? We measure this across query strategies (description, code, description+label, hybrid BM25), with and without re-ranking, and using both reference-based and LLM-judged metrics.
+    \item[RQ1: Retrieval effectiveness.] How effectively does the retrieval pipeline surface relevant historical findings for a given vulnerability query? We compare five query strategies (description, code, description+label, hybrid BM25, chunked) with and without cross-encoder re-ranking.
 
-    \item[RQ2: Detection accuracy.] Does augmenting the LLM with retrieved findings improve its ability to correctly classify vulnerabilities (VULNERABLE vs.\ SAFE)? We compare RAG-augmented verdicts against ground truth on a curated golden dataset of 40 real-world findings.
+    \item[RQ2: RAG vs.\ LLM-only detection.] Does augmenting the LLM with retrieved findings improve its ability to correctly classify vulnerabilities compared to using the LLM alone? We measure this by running the same 40 golden findings through both a RAG-augmented pipeline and an LLM-only baseline, comparing true positive rates and false positive rates.
 
-    \item[RQ3: Groundedness and reasoning quality.] Are the LLM's explanations faithful to the retrieved evidence? Does the system reduce hallucinated vulnerability reports compared to ungrounded analysis?
+    \item[RQ3: Groundedness and reasoning quality.] Are the LLM's explanations faithful to the retrieved evidence? We evaluate whether RAG reduces hallucinated vulnerability reports by measuring faithfulness and context utilisation scores.
 
-    \item[RQ4: Component contributions.] What is the individual contribution of each pipeline component (re-ranking, BM25 fusion, self-retrieval)? Ablation experiments isolate the effect of removing or enabling each component.
+    \item[RQ4: Component contributions.] What is the individual contribution of each pipeline component --- re-ranking, BM25 fusion, chunked retrieval, self-retrieval exclusion? Ablation experiments isolate each component's effect.
+
+    \item[RQ5: Real-world applicability.] Can the system discover real vulnerabilities from full smart contracts in a realistic audit scenario? We evaluate this via whole-contract LLM review on the golden dataset and integration with the Wake static analyser.
 \end{description}
 
 
 \section{Datasets}
 \label{sec:dataset}
 
-\subsection{Knowledge Base Corpus}
+Three datasets are used, each testing a different aspect of the system.
+
+\subsection{Knowledge Base}
 \label{subsec:kb-corpus}
 
-The knowledge base contains 16{,}780 findings from the Solodit API, filtered to HIGH and MEDIUM severity. Each finding underwent the preprocessing pipeline described in Section~\ref{subsec:preprocessing}, producing 16{,}780 text embeddings (nomic-embed-text-v1.5) and 27{,}222 code embeddings (CodeRankEmbed). The label distribution is shown in Table~\ref{tab:label-dist}.
+The knowledge base contains 16{,}770 security audit findings ingested from the Solodit API, filtered to HIGH and MEDIUM severity. Each finding underwent the preprocessing pipeline described in Section~\ref{subsec:preprocessing}, producing three types of embeddings:
 
-\subsection{Evaluation Cases}
+\begin{itemize}
+    \item \textbf{Text embeddings:} 16{,}770 embeddings from preprocessed summaries (nomic-embed-text-v1.5, 768-dim).
+    \item \textbf{Code embeddings:} 27{,}222 embeddings from individual code blocks (CodeRankEmbed, 768-dim).
+    \item \textbf{Chunk embeddings:} 152{,}869 embeddings from overlapping 512-character windows over raw finding content (nomic-embed-text-v1.5, 768-dim), with 128-character overlap producing approximately 9 chunks per finding.
+\end{itemize}
+
+\subsection{RAG Evaluation}
 \label{subsec:eval-cases}
 
-44 evaluation cases are stored in the \texttt{evaluation\_cases} table. Each case consists of:
+This dataset will sever for RAG evaluation. Because of there is no huge labeled dataset, the following dataset was generated manually to combine convinience and distribution of different use cases [TODO]
+40 hand-crafted evaluation cases test the system on constructed vulnerability scenarios. Each case consists of:
 
 \begin{itemize}
-    \item \textbf{Solidity code} --- a code snippet exhibiting (or not exhibiting) a vulnerability.
+    \item \textbf{Solidity code} -- a function-level code snippet that demonstrates (or does not exhibit) a vulnerability.
     \item \textbf{Issue description} --- a natural-language description of the suspected vulnerability.
-    \item \textbf{Label} --- the vulnerability category (e.g., ``Reentrancy'').
-    \item \textbf{Expected verdict} --- ground-truth classification: VULNERABLE or SAFE.
-    \item \textbf{Reference answer} --- an expert-written explanation serving as reference for answer correctness evaluation.
-    \item \textbf{Reference finding IDs} --- UUIDs of findings known to be relevant, enabling reference-based retrieval metrics (context precision and context recall).
+    \item \textbf{Label} --- the vulnerability category.
+    \item \textbf{Expected verdict} --- ground-truth classification: \texttt{VULNERABLE} (28 cases) or \texttt{SAFE} (12 cases).
+    \item \textbf{Reference answer} --- an expert-written explanation for answer correctness evaluation.
 \end{itemize}
 
-\subsection{Golden Dataset}
+The cases range from straightforward patterns to sophisticated multi-step vulnerabilities. The 12 safe cases are constructed as variants of vulnerable cases with the bug fixed, testing whether the system can distinguish patched from unpatched code.
+
+\subsection{System Evaluation}
 \label{subsec:golden-dataset}
 
-A curated golden dataset of 40 real-world findings (all with \texttt{expected\_verdict = vulnerable}) is stored in \texttt{data/golden\_dataset/findings.json}. Each entry includes the finding slug (linking to the knowledge base), the vulnerable function's source code, the issue description, a reference answer, and the vulnerability label. The golden dataset spans 8 vulnerability categories and multiple projects (TraitForge, reNFT, Tapioca, Arrakis, Puffer, EigenLayer, Basin, Napier, and others). It is used for two evaluation types:
+A curated dataset of 40 real-world vulnerability findings from actual security audits. Unlike the evaluation cases (which are synthetic), these are genuine findings from projects audited on platforms aggregated by Solodit. Each entry includes: the complete Solidity source file, an expert-written issue description and other metadata.
+
+All 40 golden findings have \texttt{expected\_verdict = vulnerable}. The dataset is used for two evaluation types:
 
 \begin{itemize}
-    \item \textbf{Golden retrieval} --- given only the source code, the LLM generates a vulnerability hypothesis, which is used as the retrieval query. The target is to find the exact finding in the top-$k$ results. This measures real retrieval quality: can the system find the right vulnerability given only code, not the answer itself?
+    \item \textbf{Golden retrieval} --- the LLM reviews the \emph{entire smart contract} (not an isolated function) and identifies suspected vulnerable functions with short descriptions. These descriptions serve as retrieval queries. An LLM judge then verifies whether the system-identified issue matches the known golden vulnerability. This simulates a realistic audit workflow.
 
-    \item \textbf{Golden generation} --- the full RAG pipeline is executed for each golden finding: retrieval, context assembly, LLM analysis, and verdict evaluation across multiple quality metrics. The finding itself can optionally be excluded from retrieved context to prevent trivial self-matching.
+    \item \textbf{Golden generation} --- the full RAG pipeline is executed for each finding. The finding itself is excluded from the retrieved context to prevent trivial self-matching. A separate baseline runs the LLM without any retrieval, enabling a direct comparison of RAG-augmented vs.\ LLM-only detection.
 \end{itemize}
-
-\subsection{File-Level Test Contract}
-\label{subsec:test-contract}
-
-A purpose-built Solidity contract (\texttt{VulnerableVault.sol}) with ground-truth labels (\texttt{VulnerableVault\_labels.json}) provides an end-to-end evaluation target. The contract contains 9 functions: 4 with known vulnerabilities and 5 that are safe, covering reentrancy, access control, arithmetic, and logic error patterns.
-
 
 \section{Metrics}
 \label{sec:metrics}
@@ -1752,73 +1760,88 @@ A purpose-built Solidity contract (\texttt{VulnerableVault.sol}) with ground-tru
 \subsection{Retrieval Metrics}
 \label{subsec:retrieval-metrics}
 
-\subsubsection*{Reference-Based Metrics}
-Available when evaluation cases include \texttt{reference\_finding\_ids}:
+Available when evaluation cases include ground-truth relevant finding IDs:
+
 \begin{itemize}
-    \item \textbf{Context precision.} Fraction of retrieved findings that appear in the ground-truth relevant set:
+    \item \textbf{Context Precision.} Fraction of retrieved findings that are in the ground-truth relevant set:
     \begin{equation}
-        \text{ContextPrecision} = \frac{|\text{retrieved} \cap \text{relevant}|}{|\text{retrieved}|}.
+        \text{Precision} = \frac{|\text{retrieved} \cap \text{relevant}|}{|\text{retrieved}|}
     \end{equation}
 
-    \item \textbf{Context recall.} Fraction of ground-truth relevant findings that were retrieved:
+    \item \textbf{Context Recall.} Fraction of relevant findings that were retrieved:
     \begin{equation}
-        \text{ContextRecall} = \frac{|\text{retrieved} \cap \text{relevant}|}{|\text{relevant}|}.
+        \text{Recall} = \frac{|\text{retrieved} \cap \text{relevant}|}{|\text{relevant}|}
+    \end{equation}
+
+    \item \textbf{MAP@$k$ (Mean Average Precision).} Rewards relevant items appearing at earlier positions. For a single query:
+    \begin{equation}
+        \text{AP@}k = \frac{1}{\min(|\text{relevant}|, k)} \sum_{i=1}^{k} \text{Precision@}i \cdot \text{rel}(i)
+    \end{equation}
+    where $\text{rel}(i) = 1$ if the $i$-th result is relevant, 0 otherwise.
+
+    \item \textbf{Recall@$k$.} Recall computed at a specific cutoff position:
+    \begin{equation}
+        \text{Recall@}k = \frac{|\text{relevant} \cap \text{retrieved}_{1:k}|}{|\text{relevant}|}
+    \end{equation}
+
+    \item \textbf{Label Match Ratio.} Fraction of retrieved findings whose vulnerability label matches the query label (case-insensitive):
+    \begin{equation}
+        \text{LabelMatch} = \frac{|\{r \in \text{retrieved} : \text{label}(r) = \text{label}(q)\}|}{|\text{retrieved}|}
     \end{equation}
 \end{itemize}
 
-\subsubsection*{Label-Based Metric}
-\begin{itemize}
-    \item \textbf{Label match ratio.} Fraction of retrieved findings whose \texttt{custom\_label} matches the query label (case-insensitive). Returns \texttt{None} when no query label is provided:
-    \begin{equation}
-        \text{LabelMatch} = \frac{|\{r \in \text{retrieved} : \text{label}(r) = \text{label}(q)\}|}{|\text{retrieved}|}.
-    \end{equation}
-\end{itemize}
+\subsubsection*{LLM-Judged Retrieval Metrics}
 
-\subsubsection*{LLM-Judged Metrics}
-\begin{itemize}
-    \item \textbf{Context relevance (holistic).} An LLM judge evaluates the entire retrieved set, scoring on a 0--1 scale with structured feedback on coverage (\texttt{full/partial/none}) and specificity (\texttt{high/medium/low}).
+These metrics do not require ground-truth annotations and can evaluate retrieval quality on any query:
 
-    \item \textbf{Context precision (per-chunk).} Each retrieved finding is independently evaluated for binary relevance (verdict 0 or 1). The metric is the fraction of individually relevant findings. This requires one LLM call per retrieved finding but provides fine-grained diagnostics.
-\end{itemize}
-
-\subsubsection*{Golden Retrieval Metrics}
-For the golden dataset (known-target evaluation):
 \begin{itemize}
-    \item \textbf{Hit Rate@$k$} --- binary: did the target finding appear in the top-$k$?
-    \item \textbf{Mean Reciprocal Rank (MRR)} --- $\frac{1}{|Q|}\sum_{q \in Q} \frac{1}{\text{rank}(q)}$
-    \item \textbf{NDCG@$k$} --- simplified for single relevant item: $\frac{1}{\log_2(\text{rank} + 1)}$
-    \item \textbf{Label Hit Rate} --- fraction of queries where at least one retrieved finding shares the target's vulnerability label
+    \item \textbf{Context Relevance (holistic).} An LLM judge evaluates the entire retrieved set as a whole, scoring overall relevance on a 0--1 scale. The judge also provides structured feedback: coverage (\texttt{full}/\texttt{partial}/\texttt{none}) and specificity (\texttt{high}/\texttt{medium}/\texttt{low}).
+
+    \item \textbf{Context Precision (per-chunk).} Each retrieved finding is independently evaluated for binary relevance (1 = relevant, 0 = not). The metric is the fraction of individually relevant findings. This requires $k$ LLM calls per evaluation case but provides fine-grained per-finding diagnostics.
+
+    \item \textbf{LLM Match Rate} --- fraction of golden vulnerabilities independently identified by the LLM during whole-contract review (before retrieval).
+    \item \textbf{Hit Rate@$k$} --- binary: did the target finding appear in the top-$k$ results?
+    \item \textbf{MRR (Mean Reciprocal Rank)} --- $\frac{1}{|Q|}\sum_{q \in Q} \frac{1}{\text{rank}(q)}$, where $\text{rank}(q)$ is the position of the target finding.
+    \item \textbf{NDCG@$k$} --- for a single relevant item: $\frac{1}{\log_2(\text{rank} + 1)}$.
+    \item \textbf{Label Hit Rate} --- fraction of queries where at least one retrieved finding shares the target's vulnerability label.
 \end{itemize}
 
 \subsection{Generation Metrics}
 \label{subsec:generation-metrics}
 
 \begin{itemize}
-    \item \textbf{Verdict accuracy} (deterministic). Binary comparison between predicted and expected verdict. No LLM judge required.
+    \item \textbf{Verdict Accuracy} (deterministic). Binary match between predicted and expected verdict. No LLM judge required.
 
-    \item \textbf{Faithfulness} (LLM-judged). The judge counts total factual claims in the analysis and the number supported by retrieved context, producing a grounded-claims ratio on 0--1. The response includes \texttt{claim\_count} and \texttt{supported\_count}.
+    \item \textbf{Faithfulness} (LLM-judged). The judge counts factual claims in the analysis and the number supported by retrieved context, producing a groundedness ratio on 0--1.
 
-    \item \textbf{Reasoning quality} (LLM-judged). Evaluates how well the analysis references past findings, draws accurate parallels, and supports its verdict. Scored 0--1 with evidence usage feedback (\texttt{strong/adequate/weak/none}).
+    \item \textbf{Reasoning Quality} (LLM-judged). Evaluates how well the analysis references past findings, draws accurate parallels, and supports its verdict. Scored 0--1 with evidence usage feedback (\texttt{strong}/\texttt{adequate}/\texttt{weak}/\texttt{none}).
 
-    \item \textbf{Context utilization} (LLM-judged). Evaluates whether the analysis explicitly cites retrieved findings, draws parallels between past and current code, and logically derives the verdict from evidence. The response includes \texttt{citations\_count}, \texttt{parallels\_drawn}, and \texttt{verdict\_supported}.
+    \item \textbf{Context Utilisation} (LLM-judged). Evaluates whether the analysis explicitly cites retrieved findings, draws parallels between past and current code, and logically derives the verdict from evidence.
 
-    \item \textbf{Answer correctness} (LLM-judged). Compares the generated analysis against a reference answer: same verdict, same root cause, technically accurate explanation. Available only for cases with reference answers.
+    \item \textbf{Answer Correctness} (LLM-judged). Compares the generated analysis against a reference answer: same verdict, same root cause, technically accurate explanation. Available only when reference answers exist.
 \end{itemize}
 
 \subsection{Aggregate Classification Metrics}
 \label{subsec:classification-metrics}
 
-Across all evaluation cases, standard binary classification metrics are computed by treating VULNERABLE as the positive class:
+Across all evaluation cases, standard binary classification metrics are computed by treating \texttt{VULNERABLE} as the positive class:
 
-\begin{itemize}
-    \item \textbf{Precision}: $\text{TP} / (\text{TP} + \text{FP})$
-    \item \textbf{Recall}: $\text{TP} / (\text{TP} + \text{FN})$
-    \item \textbf{F1}: $2 \cdot \text{Precision} \cdot \text{Recall} / (\text{Precision} + \text{Recall})$
-    \item \textbf{False positive rate}: $\text{FP} / (\text{FP} + \text{TN})$
-    \item \textbf{Accuracy}: $(\text{TP} + \text{TN}) / N$
-\end{itemize}
-
-Reducing the false positive rate is a primary objective, as prior work has shown that ungrounded LLM analysis produces ${\sim}80\%$ false positives~\cite{chen2024chatgpt}.
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Metric} & \textbf{Formula} \\
+\midrule
+Precision & $\text{TP} / (\text{TP} + \text{FP})$ \\
+Recall & $\text{TP} / (\text{TP} + \text{FN})$ \\
+F1 Score & $2 \cdot \text{Precision} \cdot \text{Recall} / (\text{Precision} + \text{Recall})$ \\
+False Positive Rate & $\text{FP} / (\text{FP} + \text{TN})$ \\
+Accuracy & $(\text{TP} + \text{TN}) / N$ \\
+\bottomrule
+\end{tabular}
+\caption{Binary classification metrics for vulnerability detection.}
+\label{tab:classification-metrics}
+\end{table}
 
 
 \section{Experimental Setup}
@@ -1827,79 +1850,219 @@ Reducing the false positive rate is a primary objective, as prior work has shown
 \subsection{Infrastructure}
 \label{subsec:infrastructure}
 
-All experiments run on a single machine with Apple Silicon (MPS backend for sentence-transformers). PostgreSQL~17 with pgvector serves as both knowledge base and experiment store. The LLM (GPT-4o-mini, temperature~0) is accessed via the OpenAI API. Embedding models (nomic-embed-text-v1.5, CodeRankEmbed) and the cross-encoder re-ranker (ms-marco-MiniLM-L-6-v2) run locally via sentence-transformers.
+All experiments run on a single machine with Apple Silicon (MPS backend for local embedding models). PostgreSQL~17 with pgvector serves as both knowledge base and experiment store. The LLM (GPT-5.1, temperature~0) is accessed via the OpenAI API. Local models:
 
-\subsection{Experiment Tracking}
-\label{subsec:experiment-tracking}
+\begin{itemize}
+    \item \textbf{Text embedding:} nomic-ai/nomic-embed-text-v1.5 (768-dim, query prefix: \texttt{``search\_query: ''}).
+    \item \textbf{Code embedding:} nomic-ai/CodeRankEmbed (768-dim, query prefix: \texttt{``Represent this query for searching relevant code: ''}).
+    \item \textbf{Cross-encoder re-ranker:} cross-encoder/ms-marco-MiniLM-L-6-v2 (22M parameters).
+\end{itemize}
 
-Each experiment run is recorded as an \texttt{Experiment} entity with a unique name, a full \texttt{config\_snapshot} (all settings serialised to JSON, excluding API keys), and a Git commit hash. All evaluation results are stored as \texttt{EvaluationResult} rows linked to the experiment, with phase, metric name, score, and structured JSON details. This design enables post-hoc comparison of arbitrary experiment pairs.
+\subsection{Query Strategies}
+\label{subsec:query-strategies}
+
+Five retrieval strategies are evaluated, each varying the query construction and embedding space:
+
+\begin{table}[!ht]
+\centering
+\small
+\begin{tabular}{llp{5.5cm}}
+\toprule
+\textbf{Strategy} & \textbf{Query source} & \textbf{What it tests} \\
+\midrule
+\texttt{description} & Issue description & Semantic similarity from NL description \\
+\texttt{code} & Solidity code & Structural code similarity \\
+\texttt{description\_label} & Description + label & Category-enriched semantic search \\
+\texttt{hybrid\_bm25} & Description & Semantic + keyword fusion via RRF \\
+\texttt{chunked} & Description & Fine-grained matching against raw content \\
+\bottomrule
+\end{tabular}
+\caption{Retrieval query strategies. All strategies use 768-dimensional embeddings and $k=5$.}
+\label{tab:query-strategies}
+\end{table}
+
+% The \texttt{chunked} strategy differs from \texttt{description} in the search target: \texttt{description} searches against preprocessed summaries (one embedding per finding), while \texttt{chunked} searches against overlapping 512-character windows of the raw finding content (approximately 9 embeddings per finding). If any chunk of a finding matches the query, the entire finding is returned with the maximum chunk similarity as its score.
 
 \subsection{Experiment Grid}
 \label{subsec:experiment-grid}
 
-The evaluation comprises three suites totalling 12 experiments:
+The evaluation comprises 17 experiments across four suites:
 
-\subsubsection*{Suite 1: Retrieval (8 experiments)}
+\subsubsection*{Suite 1: Retrieval Quality (10 experiments)}
 
-\begin{itemize}
-    \item \textbf{Golden retrieval} (2 experiments): LLM generates vulnerability hypothesis from code, uses it as retrieval query. Measures Hit Rate@5, MRR, NDCG@5, Label Hit Rate.
-    \begin{itemize}
-        \item \texttt{golden-text-k5} --- dense text search, $k=5$
-        \item \texttt{golden-hybrid-k5} --- hybrid BM25, $k=5$
-    \end{itemize}
+Each of the 5 query strategies is evaluated with and without cross-encoder re-ranking on 44 evaluation cases:
 
-    \item \textbf{Case-based retrieval} (6 experiments): Uses 44 evaluation cases with reference finding IDs. Measures context precision, recall, label match, context relevance (LLM), context precision per-chunk (LLM).
-    \begin{itemize}
-        \item \texttt{ret-text-k5} / \texttt{ret-text-k5-rerank} --- text mode $\pm$ cross-encoder
-        \item \texttt{ret-code-k5} / \texttt{ret-code-k5-rerank} --- code mode $\pm$ cross-encoder
-        \item \texttt{ret-hybrid-bm25-k5} / \texttt{ret-hybrid-bm25-k5-rerank} --- hybrid BM25 $\pm$ cross-encoder
-    \end{itemize}
-\end{itemize}
+% \begin{table}[!ht]
+% \centering
+% \small
+% \renewcommand{\arraystretch}{1.3}
+% \begin{tabular}{lcc@{\hspace{1em}}cc@{\hspace{1em}}cc@{\hspace{1em}}cc}
+% \toprule
+%  & \multicolumn{2}{c}{\textbf{Label Match}} & \multicolumn{2}{c}{\textbf{Ctx. Relev.}} & \multicolumn{2}{c}{\textbf{MAP@$k$}} & \multicolumn{2}{c}{\textbf{Recall@$k$}} \\
+% \midrule
+% \textbf{Strategy} & no-rank & rank & no-rank & rank & no-rank & rank & no-rank & rank \\
+% \midrule
+% description       & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 \\
+% code              & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 \\
+% description+label & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 \\
+% hybrid+bm25      & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 \\
+% chunked           & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 \\
+% \bottomrule
+% \end{tabular}
+% \caption{Retrieval quality results across strategies and re-ranking settings. ``no'' = no rerank, ``re'' = with cross-encoder rerank. Values to be filled after experiments.}
+% \label{tab:retrieval-results}
+% \end{table}
 
-\subsubsection*{Suite 2: Generation (3 experiments)}
+\subsubsection*{Suite 2: End-to-End Pipeline (2 experiments)}
 
-Golden generation on 40 findings. For each finding: retrieve context $\rightarrow$ generate LLM analysis $\rightarrow$ evaluate via LLM-judge (verdict accuracy, faithfulness, reasoning quality, context utilization, answer correctness).
+Full pipeline (retrieve $\rightarrow$ generate $\rightarrow$ evaluate) on 44 evaluation cases:
 
-\begin{itemize}
-    \item \texttt{golden-gen-k5} --- exclude self from retrieved context (realistic scenario)
-    \item \texttt{golden-gen-k5-rerank} --- exclude self + cross-encoder re-ranking
-    \item \texttt{golden-gen-k5-self} --- include self in retrieved context (upper bound on what perfect retrieval would achieve)
-\end{itemize}
+\begin{table}[!ht]
+\centering
+\small
+\begin{tabular}{lccccccc}
+\toprule
+\textbf{Experiment} & \textbf{TP} & \textbf{FP} & \textbf{TN} & \textbf{FN} & \textbf{Precision} & \textbf{Recall} & \textbf{F1} \\
+\midrule
+Pipeline, no-rank & & & & & & & \\
+Pipeline, rank    & & & & & & & \\
+\bottomrule
+\end{tabular}
+\caption{End-to-end pipeline classification results. Values to be filled after experiments.}
+\label{tab:pipeline-results}
+\end{table}
 
-\subsubsection*{Suite 3: End-to-End File Evaluation (1 experiment)}
 
-\begin{itemize}
-    \item \texttt{file-vault-k5} --- Full pipeline on \texttt{VulnerableVault.sol}: extract 9 functions $\rightarrow$ generate hypothesis per function $\rightarrow$ retrieve $\rightarrow$ generate verdict $\rightarrow$ compare against ground-truth labels. Measures precision, recall, F1.
-\end{itemize}
+\begin{table}[h]
+\centering
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{lccccc}
+\toprule
+ & \textbf{Verdict} & \multicolumn{4}{c}{\textbf{LLM-Judge Scores (avg)}} \\
+\midrule
+\textbf{Experiment} & \textbf{Accuracy} & \textbf{Faithful.} & \textbf{Reasoning} & \textbf{Ctx.\ Util.} & \textbf{Ans.\ Corr.} \\
+\midrule
+Pipeline, no-rank & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 \\
+Pipeline, rank    & 0.00 & 0.00 & 0.00 & 0.00 & 0.00 \\
+\bottomrule
+\end{tabular}
+\caption{End-to-end pipeline generation quality scores (39 cases). Faithfulness measures groundedness in retrieved context. Reasoning quality measures evidence usage. Context utilization measures how well retrieved findings are cited. Answer correctness compares against reference answers.}
+\label{tab:pipeline-generation-results}
+\end{table}
 
-Full numerical results for all 12 experiments, including per-metric breakdowns, ablation comparisons, and the Wake-AI integration audit, are presented in Chapter~\ref{ch:results}.
+\subsubsection*{Suite 3: Golden Dataset (5 experiments)}
+
+Evaluation on 40 real-world findings from actual audits:
+
+\begin{table}[!ht]
+\centering
+\small
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Experiment} & \textbf{Hit Rate} & \textbf{MRR} & \textbf{NDCG@5} & \textbf{Label Hit} & \textbf{LLM Match} \\
+\midrule
+no-rank & & & & & \\
+rank    & & & & & \\
+\bottomrule
+\end{tabular}
+\caption{Golden retrieval results. ``LLM Match'' indicates the fraction of vulnerabilities identified by the LLM during whole-contract review.}
+\label{tab:golden-retrieval-results}
+\end{table}
+
+
+\subsubsection*{RAG vs.\ LLM-Only: Key Comparison}
+
+Table~\ref{tab:rag-vs-norag} isolates the RAG contribution by comparing the same LLM (GPT-5.1) with and without retrieved context on the golden dataset:
+
+\begin{table}[!ht]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Mode} & \textbf{TP} & \textbf{FP} & \textbf{FN} & \textbf{Verdict Accuracy} \\
+\midrule
+LLM-only (no RAG)   & & & & \\
+RAG-augmented        & & & & \\
+RAG + re-ranking     & & & & \\
+\bottomrule
+\end{tabular}
+\caption{RAG vs.\ LLM-only classification on 40 golden findings. All golden findings are vulnerable, so TN = 0 for all modes. Values to be filled after experiments.}
+\label{tab:rag-vs-norag}
+\end{table}
+
+\subsection{Suite 4: Wake-AI Integration}
+\label{subsec:wake-integration}
+
+To evaluate real-world applicability (\textbf{RQ5}), the RAG pipeline is integrated with Wake~\cite{ackee_wake}, a Solidity static analysis framework. Wake provides structural analysis capabilities (control flow graphs, call graphs, state variable tracking) via an MCP server, complementing the RAG system's knowledge-base retrieval.
+
+The integration test evaluates the combined system on previously unseen smart contracts:
+
+\begin{table}[!ht]
+\centering
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Mode} & \textbf{TP} & \textbf{FP} & \textbf{Precision} & \textbf{Recall} & \textbf{F1} \\
+\midrule
+Wake-AI     & & & & & \\
+Wake-AI + RAG             & & & & & \\
+\bottomrule
+\end{tabular}
+\caption{Wake-AI integration results: static analysis with and without RAG augmentation. Values to be filled after experiments.}
+\label{tab:wake-integration}
+\end{table}
+
+This comparison answers whether augmenting a static analyser with historical audit findings reduces false positives and improves detection quality in a practical tool setting.
 
 
 \section{Threats to Validity}
 \label{sec:threats}
 
+\paragraph{Internal validity.}
+\begin{itemize}
+    \item \textbf{LLM-as-judge limitations.} Faithfulness, reasoning quality, and context utilisation rely on GPT-5.1 as both generator and judge. We mitigate self-evaluation bias by requiring structured JSON output with specific quantitative subfields (e.g., \texttt{claim\_count}/\texttt{supported\_count} for faithfulness).
+    \item \textbf{Prompt sensitivity.} LLM outputs are sensitive to prompt phrasing. We use temperature~0 (greedy decoding) and fixed prompt templates, but non-determinism from API-side batching may still occur.
+    \item \textbf{Evaluation case construction.} The 39 evaluation cases are hand-crafted, with safe cases as mirrors of vulnerable ones. This may make the classification task artificially easy for pattern-matching approaches.
+\end{itemize}
+
+\paragraph{External validity.}
 \begin{itemize}
     \item \textbf{Dataset bias.} The knowledge base is sourced exclusively from Solodit, which aggregates findings from specific audit firms. Novel vulnerability classes not covered by past audits will have no relevant findings.
-
-    \item \textbf{Label quality.} Vulnerability labels are assigned by GPT-4o-mini. Label errors introduce noise into label-based metrics and label-filtered retrieval. The ``Logic error'' category (27\% of corpus) may be over-broad, conflating distinct vulnerability patterns.
-
-    \item \textbf{Prompt sensitivity.} LLM outputs are sensitive to prompt phrasing. We mitigate this by using temperature~0 (greedy decoding) and fixed prompt templates, but non-determinism from API-side batching may still occur.
-
-    \item \textbf{LLM-as-judge limitations.} Faithfulness, reasoning quality, context utilization, and answer correctness rely on GPT-4o-mini as both generator and judge. The judge may apply inconsistent scoring criteria. We mitigate this by requiring structured JSON output with specific subfields (e.g., \texttt{claim\_count}, \texttt{supported\_count} for faithfulness; \texttt{citations\_count}, \texttt{parallels\_drawn} for context utilization).
-
-    \item \textbf{Golden dataset composition.} All 40 golden findings have \texttt{expected\_verdict = vulnerable}. The dataset contains no true negatives, so false positive rates cannot be measured from golden evaluation alone. The file-level evaluation (\texttt{VulnerableVault.sol}) compensates by including both vulnerable and safe functions.
-
-    \item \textbf{Self-retrieval confound.} In golden retrieval, the target finding exists in the knowledge base. A hit may reflect lexical overlap between the LLM-generated hypothesis and the finding's summary rather than genuine semantic understanding. The golden generation suite with \texttt{exclude\_self=True} addresses this for the generation phase.
-
-    \item \textbf{Reproducibility.} While all configurations and results are logged, exact reproduction depends on deterministic LLM behaviour (which OpenAI does not guarantee) and on the knowledge base state at evaluation time.
+    \item \textbf{Golden dataset composition.} All 40 golden findings have \texttt{expected\_verdict = vulnerable}. True negative rates cannot be measured from golden evaluation alone; the evaluation cases (with 12 safe examples) and the Wake-AI integration compensate for this.
+    \item \textbf{Label quality.} Vulnerability labels are assigned by GPT-4o-mini during preprocessing. The ``Logic error'' category (27\% of corpus) may be over-broad, conflating distinct vulnerability patterns.
 \end{itemize}
+
+\paragraph{Construct validity.}
+\begin{itemize}
+    \item \textbf{Self-retrieval confound.} In golden retrieval, the target finding exists in the knowledge base. A hit may reflect lexical overlap rather than genuine semantic understanding. Golden generation with \texttt{--exclude-self} addresses this.
+    \item \textbf{Metric completeness.} Reference-based retrieval metrics (precision, recall, MAP@k) require annotated \texttt{reference\_finding\_ids}, which are not available for all evaluation cases. LLM-judged metrics compensate but introduce judge bias.
+\end{itemize}
+
+\paragraph{Reproducibility.} All experiment configurations and results are stored in the database with Git commit hashes. The evaluation script (\texttt{scripts/run\_full\_evaluation.sh}) enables single-command reproduction of all 17 experiments.
 
 
 \section{Summary}
 \label{sec:eval-summary}
 
-This chapter defined the evaluation framework for our RAG-augmented auditing system. Four research questions structure the evaluation around retrieval quality, detection accuracy, reasoning groundedness, and component contributions. The metric suite covers retrieval (reference-based precision/recall, LLM-judged relevance, golden Hit Rate/MRR/NDCG) and generation (verdict accuracy, faithfulness, reasoning quality, context utilization, answer correctness, and aggregate classification metrics). The experimental design comprises 12 experiments across three suites: retrieval quality (golden + case-based), generation quality (golden with/without self-retrieval), and end-to-end file evaluation. Threats to validity are acknowledged, with particular attention to LLM-as-judge limitations and golden dataset composition.
+This chapter defined the evaluation framework for the RAG-augmented auditing system.
 
+\begin{description}
+    \item[RQ1 Answer: Retrieval effectiveness.]
+    
+    \item[RQ2 Answer: RAG vs.\ LLM-only detection.]
+    
+    \item[RQ3 Answer: Groundedness and reasoning quality.]
+    
+    \item[RQ4 Answer: Component contributions.]
+
+    \item[RQ5 Answer: Real-world applicability.]
+\end{description}
+
+
+
+% The metric suite covers retrieval (reference-based precision/recall/MAP@$k$, LLM-judged relevance, golden Hit Rate/MRR/NDCG), generation (verdict accuracy, faithfulness, reasoning quality, context utilisation, answer correctness), and aggregate classification (precision, recall, F1, false positive rate).
+
+% The experimental design comprises 17 experiments across four suites: retrieval quality (10 experiments across 5 strategies $\times$ 2 re-ranking settings), end-to-end pipeline (2 experiments), golden dataset evaluation (5 experiments including an LLM-only baseline), and Wake-AI integration. Pre-prepared result tables (Tables~\ref{tab:retrieval-results}--\ref{tab:wake-integration}) will be populated with experimental data in Chapter~\ref{ch:results}.
+ 
 
 
 
