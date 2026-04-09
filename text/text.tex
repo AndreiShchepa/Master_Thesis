@@ -1319,12 +1319,12 @@ The retrieval pipeline transforms a query into a ranked list of the $k$ most rel
 \subsection{Dense Vector Search}
 \label{subsec:vector-search}
 
-For dense retrieval, the query is embedded using the appropriate model (nomic-embed-text-v1.5 for text queries, CodeRankEmbed for code queries) and compared against stored embeddings using cosine similarity computed inside PostgreSQL. Depending on the search mode, the system invokes the corresponding database function:
+For dense retrieval, the query is embedded using the appropriate model and compared against stored embeddings using cosine similarity computed inside PostgreSQL. Depending on the search mode, the system invokes the corresponding database function:
 
 \begin{itemize}
     \item \textbf{Text search} retrieves findings by comparing against text embeddings generated from preprocessed summaries.
     \item \textbf{Code search} retrieves findings by comparing against code embeddings generated from extracted code blocks.
-    \item \textbf{Hybrid search} (text+code) performs both searches independently, then merges results by finding identifier, keeping the higher similarity score when a finding appears in both result sets.
+    \item \textbf{Hybrid search} (text + code) performs both searches independently, then merges results by finding identifier, keeping the higher similarity score when a finding appears in both result sets.
 \end{itemize}
 
 The hybrid mode exploits the complementary nature of the two modalities: text embeddings capture vulnerability semantics (e.g., ``reentrancy in token transfer''), while code embeddings capture structural patterns (e.g., an external call followed by a state update).
@@ -1332,15 +1332,18 @@ The hybrid mode exploits the complementary nature of the two modalities: text em
 \subsection{Re-ranking}
 \label{subsec:reranking}
 
-Initial dense retrieval optimises for recall: it casts a wide net using embedding similarity, which is fast but may rank marginally relevant findings above highly relevant ones. A re-ranker refines the candidate set for precision by jointly processing each (query, document) pair through a cross-encoder transformer~\cite{nogueira2019passage}.
+[TODO describe formaula]
 
-The system implements the Strategy pattern: all re-rankers conform to an abstract base class with a \texttt{rerank(query, results, k)} interface. Three strategies are available:
+Initial dense retrieval optimizes for recall: it casts a wide net using embedding similarity, which is fast but may rank marginally relevant findings above highly relevant ones. The fundamental limitation is that bi-encoder models embed the query and each document \emph{independently},so the similarity score cannot capture fine-grained token-level interactions between them. A cross-encoder~\cite{nogueira2019passage} overcomes this by processing the query and document as a single concatenated input:
+%
+\begin{equation}
+    s(q, d) = \sigma\,\bigl(W^\top \mathbf{h}_{\texttt{[CLS]}}(q \oplus d)\bigr),
+    \label{eq:cross-encoder}
+\end{equation}
+%
+where $q \oplus d$ denotes the concatenation of the query and document tokens, $\mathbf{h}_{\texttt{[CLS]}}$ is the final hidden state of the \texttt{[CLS]} token, and $\sigma$ is the sigmoid function. Because attention flows across both inputs jointly, the model can detect relevance signals that depend on the specific \emph{combination} of query and document content. The cost is quadratic in sequence length, making cross-encoders impractical for first-stage retrieval over the full corpus but well-suited for re-scoring a small candidate set.
 
-\begin{itemize}
-    \item \textbf{Cross-encoder re-ranking.} Each candidate's content (truncated to 4{,}096 characters) is paired with the query and scored in a single batch. Candidates are re-sorted by descending score and truncated to~$k$.
-    \item \textbf{Cloud re-ranking.} The Cohere Rerank API serves as an alternative when local GPU resources are unavailable.
-    \item \textbf{No-op baseline.} The candidate list is simply truncated to~$k$ without re-scoring, enabling ablation experiments that isolate the contribution of re-ranking.
-\end{itemize}
+The system implements re-ranking through a cross-encoder model. Each candidate's content (truncated to 4{,}096 characters) is paired with the query and scored via Equation~\ref{eq:cross-encoder} in a single batch. Candidates are re-sorted by descending score and the top~$k$ are retained. For ablation purposes, re-ranking can be disabled entirely, in which case the retriever's original ranking is preserved and simply truncated to~$k$.
 
 The specific re-ranker models and their comparative performance are evaluated in Chapter~\ref{ch:evaluation}.
 
@@ -1389,47 +1392,9 @@ The proactive strategy is motivated by a key observation: an auditor may not rec
     \item \textbf{Deterministic logging.} All MCP tool invocations, inputs, and outputs are logged with timestamps for post-hoc auditing and reproducibility.
 \end{itemize}
 
-
-% \subsection{Prompt Engineering}
-% \label{subsec:prompt-engineering}
-%
-% Prompt design governs how the LLM interprets the retrieved context and generates its analysis. Our strategy follows three principles: \emph{structured input} (clear separation of code, issue description, label, and retrieved findings), \emph{structured output} (machine-parseable JSON verdict), and \emph{evidence requirements} (explicit instruction to reference retrieved findings).
-
-% \subsection{System Prompt}
-% \label{subsec:system-prompt}
-
-% The system prompt (\texttt{REASONING\_SYSTEM\_PROMPT} in \texttt{runner.py}) establishes the LLM's role and output constraints. It instructs the model to:
-
-% \begin{enumerate}
-%     \item Examine the code for the specific vulnerability pattern described.
-%     \item Compare the code against retrieved past findings --- do they share the same root cause, similar constructs, or related attack vectors?
-%     \item Check whether protections are already in place (modifiers, require checks, safe libraries) that prevent the vulnerability.
-%     \item Be cautious about false positives --- only classify as \texttt{VULNERABLE} with concrete evidence.
-%     \item If no retrieved findings are relevant, base the verdict solely on code analysis and state this clearly.
-% \end{enumerate}
-
-% The required output format is a JSON object: \texttt{\{"verdict": "VULNERABLE"|"SAFE", "confidence": "HIGH"|"MEDIUM"|"LOW", "reasoning": "..."\}}.
-
-% \subsection{User Prompt}
-% \label{subsec:user-prompt}
-
-% The user prompt (\texttt{REASONING\_USER\_PROMPT}) assembles four sections:
-
-% \begin{enumerate}
-%     \item \textbf{Solidity Code Under Review} --- the code snippet in a fenced code block.
-%     \item \textbf{Potential Vulnerability} --- the natural-language issue description.
-%     \item \textbf{Vulnerability Category} --- the label (e.g., ``Reentrancy'') or ``Not assigned''.
-%     \item \textbf{Similar Past Audit Findings} --- the structured context from the top-$k$ retrieved findings, assembled by \texttt{\_build\_rich\_context}. Each finding is formatted with a markdown header containing title, label, and impact, followed by the finding content, with findings separated by horizontal rules.
-% \end{enumerate}
-
-
-\section{Chapter Summary}
-\label{sec:methodology-summary}
+\bigskip
 
 This chapter presented the design of a RAG-augmented smart contract auditing methodology driven by three goals: groundedness, token efficiency, and audit usefulness. The system constructs a knowledge base from historical audit findings sourced from Solodit, embeds them along two modalities (text and code), and stores the resulting vectors in PostgreSQL with pgvector. At analysis time, a dense vector retrieval pipeline surfaces the most relevant historical findings, with an optional cross-encoder re-ranking stage to improve precision. The retrieval capability is integrated into Wake-AI's auditing workflow through the Model Context Protocol, using a proactive retrieval strategy that queries the knowledge base after each function analysis---even before a vulnerability is suspected.
-
-The following chapter describes the evaluation framework designed to measure the effectiveness of this methodology across retrieval quality, generation quality, and end-to-end vulnerability detection.
-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -1791,7 +1756,7 @@ Table~\ref{tab:golden-retrieval-results} shows that the retrieval pipeline perfo
 \midrule
 \textbf{Mode} & \textbf{Accuracy} & \textbf{Faithful.} & \textbf{Reasoning} & \textbf{Ctx.\ Util.} & \textbf{Ans.\ Corr.} \\
 \midrule
-LLM-only (no RAG) & 0.275 & 0.641 & 0.762 & ---   & 0.273 \\
+LLM-only & 0.275 & 0.641 & 0.762 & ---   & 0.273 \\
 RAG-augmented      & 0.250 & 0.821 & 0.795 & 0.799 & 0.236 \\
 \bottomrule
 \end{tabular}
