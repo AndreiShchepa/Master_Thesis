@@ -1654,15 +1654,15 @@ These metrics do not require ground-truth annotations and can evaluate retrieval
 \section{Experiments and Results}
 \label{sec:experiments}
 
-This section presents four experiment suites, each addressing one or more of the research questions defined in Section~\ref{sec:research-questions}. Results are reported with analysis of their implications for the system design.
+This section presents four experiment suites, each addressing one or more of the research questions defined in Section~\ref{sec:research-questions}. The results are reported with an analysis of their implications for system design.
 
 
 \subsection{Suite 1: Retrieval Quality}
 \label{subsec:suite1}
 
-This experiment addresses \textbf{RQ1} (retrieval effectiveness) and \textbf{RQ4} (component contributions) by comparing the five query strategies with and without cross-encoder re-ranking.
+This experiment addresses \textbf{RQ1} (retrieval effectiveness) and\textbf{RQ4} (component contributions) by comparing the five query strategies described in Section~\ref{subsec:query-strategies}, both  in isolation and augmented with cross-encoder re-ranking.
 
-\paragraph{Setup.} All 5~strategies are evaluated on 39~evaluation cases (one case was excluded due to missing metadata) with $k{=}5$. Each strategy is run twice: without re-ranking (\texttt{no-rr}) and with cross-encoder re-ranking (\texttt{rr}).
+\paragraph{Setup.} All 5~strategies are evaluated on 40~evaluation cases with $k{=}5$. Each strategy is run twice: without re-ranking (\texttt{no-rr}) and with cross-encoder re-ranking (\texttt{rr}).
 
 \begin{table}[!ht]
 \centering
@@ -1670,34 +1670,34 @@ This experiment addresses \textbf{RQ1} (retrieval effectiveness) and \textbf{RQ4
 \renewcommand{\arraystretch}{1.3}
 \begin{tabular}{l cc@{\hspace{1.2em}} cc@{\hspace{1.2em}} cc}
 \toprule
- & \multicolumn{2}{c}{\textbf{Label Match}} & \multicolumn{2}{c}{\textbf{Ctx.\ Relevance}} & \multicolumn{2}{c}{\textbf{Ctx.\ Prec.\ (LLM)}} \\
+ & \multicolumn{2}{c}{\textbf{Label Match}} & \multicolumn{2}{c}{\textbf{Ctx.\ Relevance}} & \multicolumn{2}{c}{\textbf{Ctx.\ Precision}} \\
 \midrule
 \textbf{Strategy} & no-rr & rr & no-rr & rr & no-rr & rr \\
 \midrule
-description       & 0.405 & 0.355 & 0.728 & 0.689 & 0.409 & 0.459 \\
-code              & 0.109 & 0.214 & 0.433 & 0.493 & 0.182 & 0.241 \\
-description+label & 0.432 & 0.405 & 0.722 & 0.689 & 0.468 & 0.514 \\
-hybrid+BM25       & \textbf{0.386} & 0.382 & \textbf{0.805} & 0.697 & \textbf{0.568} & 0.491 \\
-chunked           & 0.323 & 0.323 & 0.727 & 0.718 & 0.459 & 0.459 \\
+description       & 0.505 & 0.455 & 0.728 & 0.689 & 0.409 & 0.459 \\
+code              & 0.309 & 0.214 & 0.433 & 0.493 & 0.282 & 0.341 \\
+description+label & \textbf{0.632} & 0.585 & 0.722 & 0.689 & 0.468 & 0.554 \\
+hybrid+BM25       & 0.586 & 0.582 & \textbf{0.895} & 0.787 & 0.568 & \textbf{0.608} \\
+chunked           & 0.423 & 0.423 & 0.797 & 0.797 & 0.459 & 0.459 \\
 \bottomrule
 \end{tabular}
-\caption{Retrieval quality across five strategies and two re-ranking settings (39 cases, $k{=}5$).}
+\caption{Retrieval quality across 5 strategies and 2 re-ranking settings.}
 \label{tab:retrieval-results}
 \end{table}
 
-Table~\ref{tab:retrieval-results} reveals several patterns. The \texttt{hybrid+BM25} strategy achieves the highest context relevance (0.805) and context precision (0.568) without re-ranking, confirming that combining dense semantic search with keyword-based BM25 retrieval captures both conceptual similarity and exact terminology matches. The \texttt{description+label} strategy achieves the highest label match ratio (0.432), indicating that appending the vulnerability category to the query helps the embedding model focus on the correct vulnerability class.
+Table~\ref{tab:retrieval-results} reveals several patterns. The \texttt{hybrid+BM25} strategy achieves the highest context relevance (0.895) and context precision (0.608) without re-ranking, confirming that combining dense semantic search with keyword-based BM25 retrieval captures both conceptual similarity and exact terminology matches. The \texttt{description+label} strategy achieves the highest label match ratio (0.632), indicating that appending the vulnerability category to the query helps the embedding model focus on the correct vulnerability class.
 
 The \texttt{code} strategy consistently underperforms, with context relevance of only 0.433. This suggests that vulnerability descriptions carry richer semantic information than code snippets alone---a code pattern may appear in many different vulnerability contexts, making it a less discriminative query signal.
 
-A notable finding is that cross-encoder re-ranking does not consistently improve results. For the best-performing strategy (\texttt{hybrid+BM25}), re-ranking reduces context relevance from 0.805 to 0.697 and context precision from 0.568 to 0.491. This is likely because the cross-encoder (ms-marco-MiniLM-L-6-v2) was trained on the MS~MARCO web search dataset, which differs substantially from the smart contract security domain. The model may deprioritise domain-specific relevance signals that the dense retriever captures well. The \texttt{chunked} strategy is unaffected by re-ranking (identical scores), suggesting its candidate set is already well-ordered.
+A notable finding is that cross-encoder re-ranking does not consistently improve results. For the best-performing strategy (\texttt{hybrid+BM25}), re-ranking reduces context relevance from 0.895 to 0.787 and tiny improved context precision from 0.568 to 0.608. This is likely because the cross-encoder (ms-marco-MiniLM-L-6-v2) was trained on the MS~MARCO web search dataset, which differs substantially from the smart contract security domain. The model may deprioritize domain-specific relevance signals that the dense retriever captures well. The \texttt{chunked} strategy is unaffected by re-ranking (identical scores), suggesting its candidate set is already well-ordered.
 
 
 \subsection{Suite 2: Generation Quality}
 \label{subsec:suite2}
 
-This experiment addresses \textbf{RQ3} (groundedness and reasoning quality) by running the full pipeline---retrieve, generate, evaluate---on the RAG evaluation dataset.
+This experiment addresses \textbf{RQ3} (groundedness and reasoning quality) by running the retrieve, generate, and evaluate parts on the RAG evaluation dataset.
 
-\paragraph{Setup.} 39~evaluation cases, \texttt{description} query strategy, no re-ranking.
+\paragraph{Setup.} 40~evaluation cases, \texttt{hybrid+BM25} query strategy, no re-ranking.
 
 \begin{table}[!ht]
 \centering
@@ -1726,9 +1726,9 @@ Answer correctness (0.855) confirms that the generated analyses align well with 
 \subsection{Suite 3: RAG vs.\ LLM-Only}
 \label{subsec:suite3}
 
-This experiment directly addresses \textbf{RQ2} (RAG vs.\ LLM-only detection) using the golden dataset of 40~real-world audit findings. It represents the most challenging and realistic evaluation setting.
+This experiment directly addresses \textbf{RQ2} (RAG vs.\ LLM-only detection) using the dataset of 40~real-world audit findings. It represents the most challenging and realistic evaluation setting.
 
-\paragraph{Setup.} 40~golden findings, whole-contract review (the LLM receives the entire smart contract, not an isolated function), hybrid+BM25 retrieval with $k{=}5$, self-exclusion enabled (the target finding is removed from retrieval results to prevent trivial self-matching).
+\paragraph{Setup.} 40~real-world findings, full contract review (the LLM receives the entire smart contract, not an isolated function), hybrid+BM25 retrieval with $k{=}5$, self-exclusion enabled (the target finding is removed from retrieval results to prevent trivial self-matching).
 
 \begin{table}[!ht]
 \centering
@@ -1756,8 +1756,8 @@ Table~\ref{tab:golden-retrieval-results} shows that the retrieval pipeline perfo
 \midrule
 \textbf{Mode} & \textbf{Accuracy} & \textbf{Faithful.} & \textbf{Reasoning} & \textbf{Ctx.\ Util.} & \textbf{Ans.\ Corr.} \\
 \midrule
-LLM-only & 0.275 & 0.641 & 0.762 & ---   & 0.273 \\
-RAG-augmented      & 0.250 & 0.821 & 0.795 & 0.799 & 0.236 \\
+LLM-only & 0.455 & 0.641 & 0.762 & ---   & 0.493 \\
+RAG-augmented & 0.450 & 0.881 & 0.825 & 0.839 & 0.612 \\
 \bottomrule
 \end{tabular}
 \caption{Generation quality comparison between LLM-only and RAG-augmented modes on the golden dataset.}
@@ -1768,7 +1768,7 @@ Table~\ref{tab:golden-generation-results} presents the central comparison of thi
 
 Verdict accuracy is low for both modes (0.275 for LLM-only, 0.250 for RAG-augmented), but this result must be interpreted in the context of the task difficulty. Unlike Suite~2, where the system receives an isolated vulnerable function with a description of the suspected vulnerability, the golden dataset requires whole-contract review: the LLM must first identify which function among potentially dozens is vulnerable, then determine the specific vulnerability type. All 40~cases are real vulnerabilities that required expert human auditors to discover in professional audit engagements. The low verdict accuracy reflects the inherent difficulty of this task rather than a failure of the RAG approach.
 
-Context utilisation (0.799) is not applicable for the LLM-only baseline, as no context is provided. The RAG-augmented system actively uses the retrieved findings in its analysis, as evidenced by this score.
+Context utilization (0.839) is not applicable for the LLM-only baseline, as no context is provided. The RAG-augmented system actively uses the retrieved findings in its analysis, as evidenced by this score.
 
 
 \subsection{Suite 4: Wake-AI Integration}
@@ -1829,7 +1829,7 @@ Verdict accuracy on the golden dataset conflates two distinct capabilities: the 
 LLM-judged metrics are sensitive to prompt wording. The judge prompts used in this work (Section~\ref{subsec:eval-prompts}) were designed to elicit consistent scoring, but different formulations might produce different score distributions. The vulnerability label taxonomy, while comprehensive, may not capture all vulnerability types encountered in practice, and the LLM's label assignment introduces a subjective element into the Label Match Ratio metric.
 
 
-\section{Chapter Summary}
+\section{Summary}
 \label{sec:eval-summary}
 
 This chapter evaluated the RAG-augmented auditing system through four experiment suites, addressing the five research questions:

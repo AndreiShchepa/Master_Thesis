@@ -1,13 +1,42 @@
 \chapter{Obsah příloh}
 % Contents of the attachment
 
-	\dirtree{%
-		.1 /.
-		.2 readme.txt\DTcomment{stručný popis obsahu média}.
-		.2 exe\DTcomment{adresář se spustitelnou formou implementace}.
-		.2 src.
-		.3 impl\DTcomment{zdrojové kódy implementace}.
-		.3 thesis\DTcomment{zdrojová forma práce ve formátu \LaTeX{}}.
-		.2 text\DTcomment{text práce}.
-		.3 thesis.pdf\DTcomment{text práce ve formátu PDF}.
-	}
+    \dirtree{%
+        .1 /.
+        .2 README.md\DTcomment{brief description of the medium contents}.
+        .2 src\DTcomment{source code of the implementation}.
+        .3 alembic/\DTcomment{database migration scripts (Alembic)}.
+        % .3 data/\DTcomment{evaluation datasets and golden findings}.
+        % .3 scripts/\DTcomment{helper scripts (seeding, full evaluation)}.
+        .3 sql/\DTcomment{auxiliary SQL queries}.
+        .3 tests/\DTcomment{automated tests (pytest)}.
+        .3 rag\_eval/.
+        .4 cli.py\DTcomment{Click CLI entry point}.
+        .4 config.py\DTcomment{settings, embedding profiles, labels}.
+        .4 datasets/\DTcomment{data ingestion, embedding, preprocessing}.
+        .4 db/\DTcomment{SQLAlchemy models and repository layer}.
+        .4 experiments/\DTcomment{experiment tracking}.
+        .4 generation/\DTcomment{LLM-as-judge classification and evaluation}.
+        .4 llm/\DTcomment{LLM provider abstraction}.
+        .4 pipeline/\DTcomment{end-to-end evaluation pipeline runner}.
+        % .4 reporting/\DTcomment{result export utilities}.
+        .4 retrieval/\DTcomment{search service, vector store, reranking}.
+        .3 pyproject.toml\DTcomment{project metadata and dependencies}.
+        .3 alembic.ini\DTcomment{Alembic configuration}.
+        .3 Makefile\DTcomment{common development commands}.
+        .3 .env.example\DTcomment{environment variable template}.
+        .2 thesis.
+        .3 src/\DTcomment{\LaTeX{} source files of the thesis}.
+        .3 thesis.pdf\DTcomment{compiled thesis in PDF format}.
+    }
+
+ %    	\dirtree{%
+	% 	.1 /.
+	% 	.2 readme.txt\DTcomment{stručný popis obsahu média}.
+	% 	.2 exe\DTcomment{adresář se spustitelnou formou implementace}.
+	% 	.2 src.
+	% 	.3 impl\DTcomment{zdrojové kódy implementace}.
+	% 	.3 thesis\DTcomment{zdrojová forma práce ve formátu \LaTeX{}}.
+	% 	.2 text\DTcomment{text práce}.
+	% 	.3 thesis.pdf\DTcomment{text práce ve formátu PDF}.
+	% }
