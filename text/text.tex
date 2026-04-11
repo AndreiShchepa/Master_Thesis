@@ -64,7 +64,7 @@ Once the block structure is established, the network must agree on which block t
 \subsubsection*{Proof of Work}
 Proof-of-Work (PoW) is the oldest and most widely adopted consensus mechanism in blockchain networks, first introduced by Nakamoto as the backbone of Bitcoin. The fundamental principle of PoW is straightforward: nodes in a peer-to-peer network, commonly referred to as \emph{miners}, compete to solve a computationally intensive cryptographic puzzle. This puzzle requires finding a nonce value $x$ such that the hash of the block header $y = f(x)$ satisfies a predefined difficulty target --- typically that the resulting hash begins with a certain number of leading zeros. The first miner to find a valid solution broadcasts it to the network, and upon verification by other nodes, the new block is appended to the chain. The successful miner is rewarded with newly minted cryptocurrency, incentivizing continued participation \cite{nakamoto2008, sabry2023}.
 
-\begin{figure}[!h]
+\begin{figure}[!ht]
     \centering
     \includegraphics[width=0.9\linewidth]{images/PoW.jpg}
     \caption{Proof of Work mechanism flow. Adapted from~\cite{pow_ledger}.}
@@ -152,7 +152,7 @@ A common drawback of Solidity development is that subtle semantic errors can pro
 
 \newpage
 
-\begin{listing}[!h]
+\begin{listing}[!ht]
 \begin{minted}[fontsize=\small,breaklines]{solidity}
 contract Counter {
     uint256 public value;
@@ -179,7 +179,7 @@ Smart contract vulnerabilities can be broadly classified into three categories b
 
 \begin{itemize}
     \item \textbf{Solidity-related} flaws arising from the design and semantics of the Solidity programming language itself;
-    \item \textbf{EVM-related} issues rooted in the behavior and constraints of the Ethereum Virtual Machine;
+    \item \textbf{EVM-related} issues arising from the behavior and limitations of the Ethereum Virtual Machine;
     \item \textbf{Ethereum blockchain design-related} vulnerabilities that exploit properties of the underlying blockchain protocol, such as transaction ordering or block-level mechanics.
 \end{itemize}
 
@@ -189,7 +189,7 @@ The rest of section illustrates the most popular attack patterns and minimal cod
 
 This type of attack occurs when a contract makes an external call before it has finished updating its own state. The callee, which may be a contract under attacker control, can re-enter the caller inside the same transaction and observe or manipulate the intermediate, stale state. The classic pattern involves a \texttt{withdraw()} function that transfers Ether before reducing the caller's recorded balance.
 
-\begin{listing}[!h]
+\begin{listing}[!ht]
 \begin{minted}[fontsize=\small,breaklines]{solidity}
 contract VulnerableVault {
     mapping(address => uint256) public balances;
@@ -250,7 +250,7 @@ contract Attacker {
 
 Denial of service (DoS) in Ethereum manifests itself as making a critical operation consistently revert or prohibitively expensive. One prevalent pattern involves iterating over an unbounded array to distribute funds or update state; an attacker who controls one entry in that array can cause the iteration to fail by forcing a revert and blocking all other participants.
 
-\begin{listing}[!h]
+\begin{listing}[!ht]
 \begin{minted}[fontsize=\small,breaklines]{solidity}
 contract Distributor {
     address[] public recipients;
@@ -278,7 +278,7 @@ The standard mitigation is a \emph{pull-payment} (withdrawal) pattern: instead o
 
 Ethereum transactions are broadcast to a public mempool before they are included in a block. Block producers can observe pending transactions and exploit their ordering advantage. This enables \emph{front-running}: submitting a competing transaction with a higher gas price so that it is mined before the victim's, thereby profiting from the price impact the victim's transaction would have caused. Daian et al. formalized this phenomenon as the Miner Extractable Value (MEV). It is the total profit available from reordering, inserting, or censoring transactions within a block~\cite{daian2020flash}.
 
-\begin{figure}[!h]
+\begin{figure}[!ht]
     \centering
     \includegraphics[width=0.8\linewidth]{images/front-running.jpg}
     \caption{Mempool-based front-running. Adapted from~\cite{phemex2023frontrunning}.}
@@ -311,7 +311,7 @@ The rest of section decomposes the standard pipeline through which static analyz
 
 The abstract syntax tree (AST) is the first structured representation that an analyzer builds from raw source code. It is a hierarchical tree whose nodes correspond to syntactic constructs, while abstracting semantically irrelevant details such as whitespace, comments, and parentheses~\cite{aho2006compilers}. The Solidity compiler itself produces a JSON-formatted AST that downstream tools can consume directly.
 
-\begin{figure}[!h]
+\begin{figure}[!ht]
     \centering
     \includegraphics[width=6cm, height=7cm]{images/ast.pdf}
     \caption{Abstract Syntax Tree example.}
@@ -345,7 +345,7 @@ Where control flow analysis maps the structure of possible executions, data flow
 
 Data flow analysis in Solidity faces a domain-specific complication: \textit{storage aliasing}. Solidity maps state variables to 256-bit storage slots according to packing rules that depend on type size and declaration order, while dynamic structures like mappings and arrays compute their slot addresses via hashing. Therefore, two syntactically distinct references may alias to the same physical slot, creating data flow paths that a naive analyzer will miss. Handling this correctly requires modeling Solidity's storage layout and, in sophisticated tools, incorporating alias analysis. As an illustration, consider the following vulnerable \texttt{withdraw()} function, which performs an external call before updating the caller's balance --- a classic reentrancy pattern:
 
-\begin{listing}[!h]
+\begin{listing}[!ht]
 \begin{minted}[fontsize=\small,breaklines]{solidity}
 function withdraw(uint _amount) public {
   if(balances[msg.sender] >= _amount) {
@@ -361,7 +361,7 @@ function withdraw(uint _amount) public {
 \label{lst:withdraw-reentrancy}
 \end{listing}
 
-\begin{figure}[!h]
+\begin{figure}[!ht]
     \centering
     \includegraphics[width=13cm, height=6cm]{images/cfg_ddg.pdf}
     \caption{Comparison between Control Flow and Data Dependency graphs.}
@@ -414,7 +414,7 @@ Formal verification employs mathematical techniques to prove that programs satis
 
 However, formal verification faces significant practical challenges. The techniques are computationally expensive, often requiring substantial manual effort to specify properties and guide the verification process. Scalability limitations restrict application to smaller codebases or require abstraction that may introduce imprecision. Additionally, verification establishes conformance to a specification, but the specification itself may be incomplete or incorrect, leaving gaps in security coverage. As Tolmach~et~al. observed in their comprehensive survey, the vast majority of deployed smart contracts lack any kind of formal specification whatsoever, which presents a fundamental barrier to the widespread adoption of these techniques~\cite{tolmach2021survey}.
 
-\begin{figure}[!h]
+\begin{figure}[!ht]
     \centering
     \includegraphics[width=11cm, height=8cm]{images/fv_strategies_tradeoff.pdf}
     \caption{Trade-off between automation and expressiveness across the three principal formal verification strategies.}
@@ -438,7 +438,7 @@ When applied to EVM bytecode, symbolic execution must additionally model the blo
 
 Consider a function with the assertion that the result of an increment should always exceed the input:
 
-\begin{listing}[!h]
+\begin{listing}[!ht]
 \begin{minted}[fontsize=\small,breaklines]{solidity}
 function increment(uint256 a) public pure returns (uint256) {
     uint256 b = a + 1;
@@ -573,7 +573,7 @@ Recurrent Neural Networks (RNNs) offered the first neural solution to variable-l
 
 where $f$ is a nonlinearity such as $\tanh$ or ReLU\footnote{\url{https://en.wikipedia.org/wiki/Rectified_linear_unit}}, and $\mathbf{W}_h$, $\mathbf{W}_x$ are learned weight matrices. The conditional distribution for the next token is then read from $\mathbf{h}_t$ \cite{Goodfellow-et-al-2016}.
 
-\begin{figure}[!h]
+\begin{figure}[!ht]
     \centering
     \includegraphics[width=10cm, height=8cm]{images/RNN.pdf}
     \caption{Recurrent Neural Network architecture.}
@@ -631,7 +631,7 @@ These embedding vectors are also the representations that positional encoding (S
 \subsection{Architecture Overview}
 \label{subsec:transformer-arch}
 
-\begin{figure}[!h]
+\begin{figure}[!ht]
     \centering
     \includegraphics[width=0.6\linewidth]{images/transformer.png}
     \caption{The original encoder--decoder transformer architecture. Adapted from~\cite{vaswani2023attentionneed}.}
@@ -658,8 +658,10 @@ Self-attention is the core operation that gives the transformers their represent
     \mathbf{V} = \mathbf{X}\mathbf{W}^V,
     \label{eq:qkv}
 \end{equation}
- 
-where $\mathbf{X} \in \mathbb{R}^{T \times d_{\text{model}}}$ is the matrix of token representations and $\mathbf{W}^Q, \mathbf{W}^K \in \mathbb{R}^{d_{\text{model}} \times d_k}$, $\mathbf{W}^V \in \mathbb{R}^{d_{\text{model}} \times d_v}$ are the projection matrices. The attention output is then computed as:
+
+where $\mathbf{X} \in \mathbb{R}^{T \times d_{\text{model}}}$ is the matrix of token representations,
+$\mathbf{W}^Q, \mathbf{W}^K \in \mathbb{R}^{d_{\text{model}} \times d_k}$,
+and $\mathbf{W}^V \in \mathbb{R}^{d_{\text{model}} \times d_v}$ are the projection matrices. The attention output is then computed as:
  
 \begin{equation}
     \text{Attention}(\mathbf{Q}, \mathbf{K}, \mathbf{V})
@@ -686,7 +688,7 @@ Rather than computing a single attention function, transformers run $h$ independ
     \label{eq:head-i}
 \end{equation}
  
-The motivation for multiple heads is that a single attention function can capture only one type of relationship at a time. By running several heads in parallel, the model can attend to different aspects of the input simultaneously. Empirical probing studies confirm that different heads do indeed specialize --- some track syntactic dependencies, others capture coreference or semantic similarity---even without explicit supervision~\cite{clark2019does, vig2019analyzing}. The output projection~$\mathbf{W}^O$ then combines these diverse perspectives into a single representation for each token.
+The motivation for multiple heads is that a single attention function can capture only one type of relationship at a time. By running several heads in parallel, the model can attend to different aspects of the input simultaneously. Empirical probing studies confirm that different heads do indeed specialize --- some track syntactic dependencies, others capture coreference or semantic similarity --- even without explicit supervision. The output projection~$\mathbf{W}^O$ then combines these diverse perspectives into a single representation for each token~\cite{clark2019doesbertlookat}.
 
 \subsection{Positional Encoding}
 \label{subsec:pos-enc}
@@ -701,16 +703,16 @@ The original transformer used fixed sinusoidal functions to encode position~\cit
     \label{eq:sinusoidal-pe}
 \end{equation}
  
-This design has an elegant property: the positional encoding of any fixed offset $k$ can be expressed as a linear function of the encoding at position $\text{pos}$, which in principle allows the model to learn to attend to relative positions. However, sinusoidal encodings are fixed and cannot adapt to the data.
+This design has an elegant property: the positional encoding of any fixed offset $k$ can be expressed as a linear function of the encoding at position $\text{pos}$, which in principle allows the model to learn to attend to relative positions. However, sinusoidal encodings are fixed and can not adapt to the data.
 
-\begin{figure}[!h]
+\begin{figure}[!ht]
     \centering
     \includegraphics[width=0.9\linewidth]{images/pos_encode_example.png}
     \caption{TODO. Adapted from~\cite{mehreen2024positional}.}
     \label{fig:pe_example}
 \end{figure}
  
-More recent models have moved to \emph{relative} positional encoding schemes. Rotary Position Embedding (RoPE) encodes position by rotating query and key vectors in the complex plane, so that the dot product between a query at position $m$ and a key at position $n$ depends only on their relative distance $m - n$~\cite{su2024roformer}. RoPE has become the dominant choice in modern decoder-only LLMs, including LLaMA~\cite{touvron2023llama} and its derivatives, because it combines the benefits of relative encoding with straightforward integration into the standard attention mechanism.
+More recent models have moved to \emph{relative} positional encoding schemes. Rotary Position Embedding (RoPE) encodes position by rotating query and key vectors in the complex plane, so that the dot product between a query at position $m$ and a key at position $n$ depends only on their relative distance $m - n$~\cite{SU2024127063}. RoPE has become the dominant choice in modern decoder-only LLMs, including LLaMA~\cite{touvron2023llamaopen} and its derivatives, because it combines the benefits of relative encoding with straightforward integration into the standard attention mechanism.
 
 % ============================================================
 \section{Model Training}
@@ -747,7 +749,7 @@ Full fine-tuning updates every parameter in the model, which for billion-paramet
 
 where $\mathbf{B} \in \mathbb{R}^{d \times r}$ and $\mathbf{A} \in \mathbb{R}^{r \times k}$ are small trainable matrices with rank $r \ll \min(d, k)$. Only $\mathbf{A}$ and $\mathbf{B}$ are updated during training; the original weights $\mathbf{W}_0$ remain frozen. For a typical transformer layer with $d = k = 4096$ and $r = 16$, this reduces the number of trainable parameters from $\sim$16.8~million to $\sim$131~thousand per matrix---a reduction of over 99\%. QLoRA~\cite{xu2023qalora} extends this further by storing the frozen $\mathbf{W}_0$ in 4-bit precision, making it possible to fine-tune models with tens of billions of parameters on a single consumer GPU.
 
-\begin{figure}[!h]
+\begin{figure}[!ht]
     \centering
     \includegraphics[width=0.7\linewidth]{images/lora.pdf}
     \caption{LoRA injects a trainable low-rank path 
@@ -771,24 +773,24 @@ Reinforcement Learning from Human Feedback (RLHF) addresses this gap by optimizi
     \item \textbf{Iteration.} The process repeats: new outputs are collected, annotators provide fresh rankings, and both the reward model and the policy are updated.
 \end{enumerate}
  
-\begin{figure}[!h]
+\begin{figure}[!ht]
     \centering
     \includegraphics[width=9cm, height=6cm]{images/rlhf.pdf}
     \caption{Reinforcement Learning from Human Feedback pipeline.}
     \label{fig:rlhf_diagram}
 \end{figure}
  
-Figure~\ref{fig:rlhf_diagram} illustrates this pipeline. While effective, RLHF is expensive: it requires training and maintaining a separate reward model, collecting large volumes of human preference data, and managing the instability of RL training. These costs have motivated the development of simpler alignment methods such as Direct Preference Optimisation (DPO), which reformulates the RLHF objective to directly optimise on preference pairs without an explicit reward model~\cite{rafailov2023direct}.
+Figure~\ref{fig:rlhf_diagram} illustrates this pipeline. While effective, RLHF is expensive: it requires training and maintaining a separate reward model, collecting large volumes of human preference data, and managing the instability of RL training. These costs have motivated the development of simpler alignment methods such as Direct Preference Optimization (DPO), which reformulates the RLHF objective to directly optimize on preference pairs without an explicit reward model~\cite{rafailov2024}.
 
 
 \section{Prompting}
 \label{sec:prompting}
 
-While pre-training and fine-tuning adjust model parameters, \emph{prompting} shapes model behavior at inference time through instructions, context, and examples---without changing any weights. The discovery that including a few input--output examples in the prompt (\emph{few-shot prompting}) can elicit task-specific behavior from large decoder-only models without any fine-tuning opened the door to a set of techniques collectively known as \emph{prompt engineering} that exploit the model's in-context learning capabilities~\cite{brown2020languagemodelsfewshotlearners}.
+While pre-training and fine-tuning adjust model parameters, \emph{prompting} shapes model behavior at inference time through instructions, context, and examples without changing any weights. The discovery that including a few input--output examples in the prompt (\emph{few-shot prompting}) can elicit task-specific behavior from large decoder-only models without any fine-tuning opened the door to a set of techniques collectively known as \emph{prompt engineering} that exploit the model's in-context learning capabilities~\cite{brown2020languagemodelsfewshotlearners}.
  
 \textbf{Task decomposition} breaks a complex problem into smaller sub-tasks, each with narrower scope and clearer success criteria. Rather than asking a model to solve a difficult problem in one step, the prompt guides it through a sequence of manageable steps whose outputs compose into a final answer. This reduces the cognitive burden on any single inference call and makes it easier to verify intermediate results.
  
-\textbf{Chain-of-thought (CoT)} prompting is a specific form of task decomposition in which the model is encouraged to produce intermediate reasoning steps before arriving at a final answer. By including examples that show step-by-step reasoning, the prompt elicits similar behaviour from the model, which has been shown to improve performance on arithmetic, commonsense reasoning, and other multi-step tasks~\cite{wei2023chain}.
+\textbf{Chain-of-thought (CoT)} prompting is a specific form of task decomposition in which the model is encouraged to produce intermediate reasoning steps before arriving at a final answer. By including examples that show step-by-step reasoning, the prompt elicits similar behavior from the model, which has been shown to improve performance on arithmetic, commonsense reasoning, and other multi-step tasks~\cite{wei2023chain}.
  
 \textbf{Few-shot learning} calibrates what ``good'' output looks like by providing concrete examples in the prompt. The model uses these examples to infer the desired format, style, level of detail, and reasoning strategy, then applies these inferred patterns to the actual query. Few-shot prompting is particularly effective when combined with retrieval: instead of relying on fixed examples, relevant demonstrations can be retrieved dynamically from a knowledge base, tailoring the prompt to each specific input.
  
@@ -808,7 +810,7 @@ The application of LLMs to smart contract security has evolved rapidly since 202
 
 % The simplest approach feeds smart contract source code directly into a general-purpose LLM with appropriate instructions. Chen et al.~\cite{chen2024chatgpt} conducted a systematic evaluation of GPT-3.5 and GPT-4 on the SmartBugs-Curated benchmark and found high recall but poor precision, with roughly 4 out of 5 flagged issues being false positives (GPT-4 achieved 88.2\% recall but only 22.6\% precision).  Perhaps more concerning, 42\% of contracts showed unstable detection outcomes across repeated runs, highlighting the non-deterministic nature of LLM-based analysis.
 
-More structured prompt-based approaches improve on this baseline. \textbf{LLM-SmartAudit}~\cite{wei2024smartaudit} deployed multi-agent conversational frameworks with role specialization across 6,454 contracts from Code4rena\footnote{\url{https://code4rena.com/}} competitions.  The multi-agent design mirrors how human audit teams operate, with different agents responsible for different vulnerability categories.
+More structured prompt-based approaches improve on this baseline. LLM-SmartAudit~\cite{wei2024smartaudit} deployed multi-agent conversational frameworks with role specialization across 6{,}454 contracts from Code4rena\footnote{\url{https://code4rena.com/}} competitions.  The multi-agent design mirrors how human audit teams operate, with different agents responsible for different vulnerability categories.
 
 These results collectively establish that general-purpose LLMs can identify security issues in smart contracts but lack the precision needed for production use without additional grounding mechanisms.
 
@@ -839,7 +841,7 @@ Retrieval-Augmented Generation (RAG) addresses a fundamental limitation of LLMs:
 
 % The most comprehensive framework is \textbf{LLM-BSCVM}~\cite{llmbscvm2025}, which implements a full vulnerability management lifecycle using a ``Decompose-Retrieve-Generate'' pipeline with multi-agent collaboration and LoRA-fine-tuned CodeLlama-13B, achieving 91\% accuracy with a 5.1\% false positive rate.
 
-Although not specifically targeting smart contracts, ReVul-CoT~\cite{chen2025revulcot} demonstrates the effectiveness of the RAG+CoT paradigm for the general assessment of the severity of software vulnerabilities. Using retrieval from NVD and CWE databases combined with structured chain-of-thought reasoning, it achieved 87.50\% accuracy and 83.75\% Macro-F1 on 12,070 vulnerability records --- improvements exceeding 10 percentage points over all baselines. This architecture provides a transferable blueprint for the assessment of the severity of smart contracts.
+Although not specifically targeting smart contracts, ReVul-CoT~\cite{chen2025revulcot} demonstrates the effectiveness of the RAG+CoT paradigm for general software vulnerability severity assessment. Using retrieval from NVD and CWE databases combined with structured chain-of-thought reasoning, it achieved 87.50\% accuracy and 83.75\% Macro-F1 on 12{,}070 vulnerability records --- improvements exceeding 10 percentage points over all baselines. This architecture provides a transferable blueprint for smart contract severity assessment.
 
 
 \section{Challenges and Limitations}
@@ -865,13 +867,14 @@ Even with context windows reaching hundreds of thousands of tokens, real smart c
  
 \subsection*{Security}
  
-When LLM agents can call external tools---compilers, static analysers, blockchain RPCs---additional safety concerns arise. Prompt injection attacks embedded in retrieved documents or source code comments could manipulate the agent's behaviour, causing it to suppress genuine findings or fabricate false ones. Unrestricted tool access could enable unintended actions such as deploying contracts or initiating transactions. These risks require careful sandboxing of tool execution, input sanitisation of retrieved content, and human-in-the-loop confirmation for any actions with on-chain consequences.
+When LLM agents can call external tools --- compilers, static analyzers, blockchain RPCs --- additional safety concerns arise. Prompt injection attacks embedded in retrieved documents or source code comments could manipulate the agent's behavior, causing it to suppress genuine findings or fabricate false ones. Unrestricted tool access could enable unintended actions such as deploying contracts or initiating transactions. These risks require careful sandboxing of tool execution, input sanitization of retrieved content, and human-in-the-loop confirmation for any actions with on-chain consequences.
  
 \bigskip
  
-This chapter traced the mathematical foundations of sequence modelling through the transformer architecture and its modern extensions, covering the training paradigms that turn raw architectures into capable systems and the prompting techniques that steer them at inference time. The survey of LLM applications to smart contract auditing revealed a clear pattern: prompting alone achieves high recall but suffers from poor precision and instability; fine-tuning substantially improves domain-specific performance; and retrieval-augmented approaches offer the most promising path toward reliable, production-grade analysis by grounding model outputs in verified external knowledge.
- 
-The next chapter examines how these ideas come together in practice. The Wake framework combines static analysis infrastructure---the kind surveyed in Chapter~\ref{ch:analysis}---with the LLM-based techniques discussed here, providing an integrated platform for smart contract security that leverages the strengths of both approaches while mitigating their individual limitations.
+This chapter traced the mathematical foundations of sequence modeling through the transformer architecture and its modern extensions, covering the training paradigms that turn raw architectures into capable systems and the prompting techniques that steer them at inference time. The survey of LLM applications to smart contract auditing revealed a clear pattern: prompting alone achieves high recall but suffers from poor precision and instability; fine-tuning substantially improves domain-specific performance; and retrieval-augmented approaches offer the most promising path toward reliable, production-grade analysis by grounding model outputs in verified external knowledge.
+
+ [TODO]
+% The next chapter examines how these ideas come together in practice. The Wake framework combines static analysis infrastructure --- the kind surveyed in Chapter~\ref{ch:analysis} --- with the LLM-based techniques discussed here, providing an integrated platform for smart contract security that leverages the strengths of both approaches while mitigating their individual limitations.
 
 
 \chapter{The Wake Framework}
@@ -1057,7 +1060,7 @@ that both preceding phases identified as critical.
 \section{Wake-AI}
 \label{sec:wake-ai}
 
-With fast developing of tehcnologies, growing LLM capabilities and often their usage in practice, as we were able notice in Chapter \ref{ch:llm}, LLMs are integrated into Wake as special separate tool aimed to comprehensive AI audit of smart contracts. [TODO add a few sentences]
+With fast developing of technologies, growing LLM capabilities and often their usage in practice, as we were able notice in Chapter \ref{ch:llm}, LLMs are integrated into Wake as special separate tool aimed to comprehensive AI audit of smart contracts. [TODO add a few sentences]
 
 \subsection{Architecture}
 \label{subsec:wake-ai-architecture}
