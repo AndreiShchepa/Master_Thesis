@@ -14,6 +14,7 @@ The thesis is organized as follows. Chapter~1 introduces Ethereum, its execution
 
 \chapter*{Objectives}
 \label{ch:objetives}
+
 This thesis fulfills all the objectives of its proposed assignment, as summarized below:
 
 \begin{itemize}
@@ -23,16 +24,15 @@ This thesis fulfills all the objectives of its proposed assignment, as summarize
     \item Discuss the obtained results, limitations, and potential improvements of LLM-based auditing systems.
 \end{itemize}
 
-
 \chapter{Ethereum}
 \label{ch:ethereum}
-This chapter introduces the foundations needed to understand Ethereum and its components, as this work is closely related to that platform. It first outlines the general principles of blockchain, then specializes in the Ethereum execution model through the Ethereum Virtual Machine (EVM) and the Solidity programming language. Finally, it summarizes common smart contract vulnerabilities that appear repeatedly in practical audits.
 
+This chapter introduces the foundations needed to understand Ethereum and its components, as this work is closely related to that platform. It first outlines the general principles of blockchain, then specializes in the Ethereum execution model through the Ethereum Virtual Machine (EVM) and the Solidity programming language. Finally, it summarizes common smart contract vulnerabilities that appear repeatedly in practical audits.
 
 \section{Overview}
 \label{sec:overview}
-Ethereum, launched in 2015, marked a significant evolution in blockchain technology. First proposed by Vitalik Buterin in a 2013 white paper, Ethereum extends the ledger-centric model to a full application platform that supports smart contracts and decentralized applications (dApps) \cite{Buterin2013}. Rather than simply recording value transfers, it enables general-purpose programmable logic through the EVM while preserving the core properties of transparency, decentralization, and immutability \cite{wood2014yellow}. In effect, Ethereum transformed the blockchain as a generalized state-transition machine, broadening its applicability well beyond simple currency use cases.
 
+Ethereum, launched in 2015, marked a significant evolution in blockchain technology. First proposed by Vitalik Buterin in a 2013 white paper, Ethereum extends the ledger-centric model to a full application platform that supports smart contracts and decentralized applications (dApps) \cite{Buterin2013}. Rather than simply recording value transfers, it enables general-purpose programmable logic through the EVM while preserving the core properties of transparency, decentralization, and immutability \cite{wood2014yellow}. In effect, Ethereum transformed the blockchain as a generalized state-transition machine, broadening its applicability well beyond simple currency use cases.
 
 \subsection{Blockchain}
 \label{subsec:blockchain}
@@ -51,14 +51,13 @@ As illustrated in Figure~\ref{fig:block_eth}, a blockchain block links to its pr
 A \emph{transaction} is the fundamental unit of state change in a blockchain: a cryptographically signed instruction issued by a participant that records the transfer of value or data between addresses. Every user in the network possesses a key pair: a private key, which must be kept confidential, and a corresponding public key that serves as the user's verifiable identity. When a user wishes to issue a transaction, the process follows two phases. In the signing phase, the sender encrypts the transaction data with their private key, producing a digital signature that is broadcast alongside the original payload. In the verification phase, any recipient or node can validate the signature using the sender's public key, confirming both the authenticity of the sender and that the data has not been tampered with in transit. The algorithm most widely adopted for this purpose in blockchain systems is the Elliptic Curve Digital Signature Algorithm (ECDSA)\,\footnote{\url{https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm}}. Each signed transaction is broadcast to the network, validated by the nodes, and permanently written in a block, after which it becomes immutable.
 
 \subsubsection*{Merkle Tree}
-
 The lower portion of Figure~\ref{fig:block_eth} expands the block's transaction set into a \textit{Merkle tree}: a binary tree in which each leaf holds the cryptographic hash of an individual transaction and each internal node holds the hash of its two children's concatenation. Leaf hashes are combined pairwise and re-hashed level by level until a single Merkle root remains. The integrity guaranties of this construction rest on three properties of the underlying hash function: \emph{preimage resistance}, which makes it computationally infeasible to recover an input from its digest; \emph{second-preimage resistance}, which prevents an attacker from substituting a different transaction that produces the same leaf hash; and \emph{collision resistance}, which ensures that no two distinct inputs can be found sharing a hash value. Because every internal node is derived from its children through such a function, any alteration of a transaction propagates deterministically upward, changing the root and invalidating the block header, making the root a binding cryptographic commitment to the entire transaction set \cite{merkle1987, nakamoto2008}.
 
 This design enables inclusion proofs of size $O(\log_2 n)$, where the amount of data blocks is denoted by $n$. To verify that a transaction belongs to a block, a verifier needs only the transaction itself, the header's Merkle root, and the minimal set of sibling hashes along the path from leaf to root. By contrast, a naive linear hash chain would force the verifier to re-hash every element sequentially, resulting in $O(n)$ verification cost. This logarithmic efficiency allows lightweight validation without downloading entire blocks, saving bandwidth and storage. Furthermore, the previous-hash pointer in each header secures global block ordering. Any retroactive modification breaks the chain link to all subsequent blocks, making tampering immediately detectable by any honest node in the network \cite{merkle_tree}.
 
-
 \subsection{Consensus mechanisms}
 \label{subsec:consensus}
+
 Once the block structure is established, the network must agree on which block to append next. This process is governed by the consensus mechanism, the design of which depends on the blockchain trust model. Across different deployment models, two dominant consensus families have emerged.
 
 \subsubsection*{Proof of Work}
@@ -91,10 +90,13 @@ With a solid understanding of how blocks are structured and how consensus mechan
 
 \section{Ethereum Virtual Machine}
 \label{sec:evm}
+
 The Ethereum Virtual Machine (EVM) is a deterministic state machine that executes the bytecode of the smart contract identically on all nodes. However, it is not Turing complete in the classical sense: execution is strictly resource-bounded by gas, so every instruction has a metered gas cost, and execution halts once the supplied gas is exhausted. 
 This gas-bounded execution guaranties termination and prevents non-halting or deliberately expensive programs from stalling the network; accordingly, the EVM is often described as \textit{quasi–Turing complete} (computationally universal only under a finite gas budget)~\cite{wood2014yellow, antonopoulos2018mastering}.
 
 \subsection{Gas}
+\label{subsec:gas}
+
 Gas is the unit of account for the computational effort in Ethereum. Each EVM opcode has an associated gas cost, and a transaction specifies an upper bound (gas limit) on how much gas may be consumed during its execution.
 
 Gas serves three core purposes: 
@@ -108,8 +110,8 @@ Since \textit{EIP-1559}\,\footnote{\url{https://eips.ethereum.org/EIPS/eip-1559}
 Users submit \texttt{maxFeePerGas} and \texttt{maxPriorityFeePerGas}; the effective price paid per gas equals to \(\min(\texttt{maxFeePerGas}, \text{base fee} + \texttt{maxPriorityFeePerGas})\). 
 Blocks have an elastic gas target and the base fee increases or decreases depending on recent block gas usage, stabilizing the fee market while preserving incentives.
 
-
 \subsection{Architecture}
+\label{subsec:architecture}
 
 \begin{figure}[!htbp]
     \centering
@@ -125,6 +127,7 @@ Blocks have an elastic gas target and the base fee increases or decreases depend
 \end{itemize}
 
 \subsection{Memory}
+\label{subsec:memory}
 
 \begin{itemize}
     \item \textbf{Stack} --- low-level memory structure that operates on a last-in, first-out (LIFO) principle. It stores small local variables and value types that are required for immediate execution. The stack is limited to 1024 elements, each 256 bits wide, and is accessible only through EVM opcodes or inline assembly. Careful management is essential, as exceeding its capacity causes the execution of the contract to fail \cite{evm_storage}.
@@ -134,11 +137,15 @@ Blocks have an elastic gas target and the base fee increases or decreases depend
 \end{itemize}
 
 \section{Smart Contracts}
+\label{sec:smart-contracts}
+
 Building on the blockchain foundation introduced in Section~\ref{sec:overview}, Ethereum extends the ledger model with \emph{Smart Contracts}: programs stored on-chain and executed by all nodes under the same consensus rules. In practice, this means that the execution of the contract is deterministic and publicly verifiable: anyone can inspect the code, replay transactions, and validate the resulting state changes.
 
 A contract is deployed through a transaction, receives its own on-chain address, and can then be called by externally owned accounts or by other contracts. This execution model reduces reliance on intermediaries and enables composable decentralized applications, where protocols interact as reusable building blocks.
 
 \subsection{Solidity}
+\label{subsec:solidity}
+
 Solidity is Ethereum’s dominant high-level, statically typed, contract-oriented language, compiled into EVM bytecode. Several language concepts are especially important from a security perspective:
 
 \begin{itemize}
@@ -169,6 +176,7 @@ contract Counter {
 Even this trivial piece of code captures the core model, where a transaction triggers EVM execution, the state is updated, and the transition becomes part of the verifiable blockchain history.
 
 \section{Security}
+\label{sec:security}
 
 In Ethereum, security is not an add-on layer, but a property that must be deliberately engineered into every line of contract code. The EVM's execution model is transparent, deterministic, and adversarially accessible by design: any deployed contract can be inspected, called, and interacted with by anyone on the network. Unlike traditional software, deployed smart contracts are typically immutable, meaning that a discovered vulnerability cannot simply be patched with a software update. The financial stakes compound this risk: contracts routinely hold millions of dollars in assets, making them high-value targets that attract sophisticated adversaries. The following sections provide a structured treatment of some vulnerabilities.
 
@@ -186,7 +194,6 @@ Smart contract vulnerabilities can be broadly classified into three categories b
 The rest of section illustrates the most popular attack patterns and minimal code examples. All vulnerable code snippets are provided strictly for educational purposes and must not be used in production.
 
 \subsubsection*{Reentrancy attack}
-
 This type of attack occurs when a contract makes an external call before it has finished updating its own state. The callee, which may be a contract under attacker control, can re-enter the caller inside the same transaction and observe or manipulate the intermediate, stale state. The classic pattern involves a \texttt{withdraw()} function that transfers Ether before reducing the caller's recorded balance.
 
 \begin{listing}[!ht]
@@ -247,7 +254,6 @@ contract Attacker {
 \end{listing}
 
 \subsubsection*{Denial of Service}
-
 Denial of service (DoS) in Ethereum manifests itself as making a critical operation consistently revert or prohibitively expensive. One prevalent pattern involves iterating over an unbounded array to distribute funds or update state; an attacker who controls one entry in that array can cause the iteration to fail by forcing a revert and blocking all other participants.
 
 \begin{listing}[!ht]
@@ -275,7 +281,6 @@ The standard mitigation is a \emph{pull-payment} (withdrawal) pattern: instead o
 
 
 \subsubsection*{Front-running}
-
 Ethereum transactions are broadcast to a public mempool before they are included in a block. Block producers can observe pending transactions and exploit their ordering advantage. This enables \emph{front-running}: submitting a competing transaction with a higher gas price so that it is mined before the victim's, thereby profiting from the price impact the victim's transaction would have caused. Daian et al. formalized this phenomenon as the Miner Extractable Value (MEV). It is the total profit available from reordering, inserting, or censoring transactions within a block~\cite{daian2020flash}.
 
 \begin{figure}[!ht]
@@ -379,7 +384,6 @@ This perspective sacrifices soundness in exchange for precision, since every beh
 
 For smart contracts, dynamic analysis is especially valuable because it can exercise the stateful nature of contracts: real vulnerability triggers often depend on specific sequences of transactions that leave the contract in an exploitable state, something that is difficult to reason about purely from source code.
 
-% ──────────────────────────────────────────────────────────────
 \subsection{Fuzz Testing}
 \label{subsec:fuzz-testing}
 
@@ -395,10 +399,7 @@ Adapting fuzzing to smart contracts introduces a challenge not present in tradit
     \item \textbf{Invariant-based}: addresses this gap by letting the developer specify custom properties that should hold across all reachable states. The fuzzer then searches for input sequences that violate them. This idea originates from frameworks like QuickCheck for Haskell, which generates random function arguments and checks user-defined predicates, and has since been adapted to many domains~\cite{claessen2000quickcheck}. In Solidity, an invariant might assert that a token's total supply remains constant after any sequence of transfers; if the fuzzer discovers a call sequence that violates such a property, it reports the minimal triggering sequence as a counterexample.
 \end{itemize}
 
-% ──────────────────────────────────────────────────────────────
 \subsubsection* {Limitations}
-\label{subsubsec:fuzzing-limitations}
-
 Regardless of the search strategy, the effectiveness of a fuzzing campaign is heavily influenced by the set of seed inputs from which the fuzzer generates new candidates. Techniques such as corpus distillation, which removes redundant seeds that do not contribute new coverage, and corpus scheduling, which prioritizes seeds likely to lead to novel discoveries, can substantially improve throughput.
 
 Despite its practical effectiveness, fuzzing provides no completeness guaranty: if the fuzzer does not find a bug, this does not prove that the program is correct. Bugs that require very specific, unlikely input sequences or that depend on environmental conditions, which the fuzzer does not model, may be missed entirely. Coverage metrics offer some confidence that a large portion of the code has been used, but coverage is a necessary rather than a sufficient condition for bug detection.
@@ -476,7 +477,7 @@ Theorem proving represents the most powerful and most demanding approach to form
 However, the cost is substantial. Proofs require significant human expertise to construct, often demanding person-months of effort for non-trivial systems. The development process requires not just programming skill, but mathematical sophistication and deep familiarity with the proof assistant's logic and tactic language. For most development contexts, where time-to-market pressure is intense and code is frequently updated, full theorem proving of the entire codebase remains impractical.
 
 \section{Comparative Analysis}
-\label{subsec:summary}
+\label{sec:comparative-analysis}
 
 This chapter has surveyed the foundational techniques for program analysis. Static analysis, operating on representations from abstract syntax trees to inter-procedural data flow, provides scalable vulnerability detection with soundness guaranties but may produce false positives. Dynamic analysis, through transaction tracing and fuzz testing, observes actual execution behaviors with precision but cannot guaranty the absence of vulnerabilities. Formal verification offers mathematical certainty, but at a significant computational and human cost.
 
@@ -517,6 +518,7 @@ Despite the sophistication of these techniques, significant challenges remain. T
 \bigskip
 
 These limitations point toward the need for approaches that can bridge the gap between natural-language intent and formal specification, that can generalize from known vulnerability patterns to detect novel ones, and that can reason about the higher-level semantics of contract interactions rather than just their syntactic structure. Recent advances in Large Language Models offer a promising complementary direction. The following chapter examines these models, their architecture, and their emerging role in smart contract security.
+
 
 \chapter{Large Language Models}
 \label{ch:llm}
@@ -579,16 +581,12 @@ Figure~\ref{fig:rnn_diagram} illustrates the three main layers of an RNN and the
 In principle, the hidden state can carry information from arbitrarily far back. In practice, however, the repeated multiplication of weight matrices during backpropagation causes gradients to either shrink exponentially toward zero or grow without bound --- the \textit{vanishing} and \textit{exploding gradient} problems. Bengio et al. analyzed this phenomenon formally, showing that the influence of an input at the time step $\tau$ on the hidden state at a later time step $t$ decays exponentially with distance $t - \tau$. The consequence is that standard RNNs struggle to learn dependencies that span more than roughly 10--20 time steps, even though many meaningful patterns in language and other sequential data require much longer memory~\cite{279181}.
 
 \subsubsection*{Long Short-Term Memory}
-
 To address this problem, Long Short-Term Memory (LSTM) networks were specifically designed~\cite{hochreiter1997long}. They introduce a dedicated \textit{cell state} that runs through the entire sequence like a conveyor belt, regulated by three learned gates: a \textit{forget gate} that decides what information to discard, an \textit{input gate} that controls what new information to store, and an \textit{output gate} that determines what part of the cell state to expose as the hidden state. By learning to open and close these gates, LSTMs can preserve information over hundreds of time steps.
 
 Despite this advance, a fundamental bottleneck remained: the processing is strictly sequential. The token $t$ cannot be computed until the token $t{-}1$ has been processed. This sequential dependency has two consequences. First, it makes training on large corpora prohibitively slow, since parallelism across positions within a sequence is impossible. Second, information about an element early in the sequence must survive passage through every intermediate hidden state before it can influence the processing of a distant element, even if the two are directly related. Both limitations motivated the search for an architecture that could process all positions simultaneously while maintaining the ability to model long-range dependencies.
 
-
-% ============================================================
 \section{Transformers}
 \label{sec:transformers}
-% ============================================================
 
 The transformer, introduced by Vaswani~et~al. in 2017, addressed both limitations of recurrent models in a single architectural innovation. It replaced the sequential hidden-state chain with a mechanism that lets every token attend directly to every other token --- \textit{self-attention}. The result is a model that can be trained in parallel across all positions and that provides short, direct gradient paths between any pair of tokens regardless of their distance in the sequence~\cite{vaswani2023attentionneed}.
 
@@ -641,7 +639,6 @@ At the bottom of both stacks, the input and output tokens pass through their res
 
 In practice, most modern LLMs use only half of this design. Encoder-only architectures discard the decoder and use the encoder's contextual representations directly for tasks like classification and retrieval. Decoder-only architectures discard the encoder and generate text purely autoregressively. This is the variant used by the majority of today's frontier models. The remainder of this section examines the mechanisms that make all three variants work: self-attention and positional encoding.
 
-
 \subsection{Self-Attention Mechanism}
 \label{subsec:self-attention}
 
@@ -668,9 +665,7 @@ The matrix $\mathbf{Q}\mathbf{K}^{\!\top} \in \mathbb{R}^{T \times T}$ contains 
  
 An intuitive reading: the query at position~$t$ asks ``what do I need to know?'', the keys at all other positions advertise ``here is what I contain'', and the resulting attention weights decide how much each position contributes to the updated representation at~$t$. This mechanism allows the model to relate any two positions in a sequence with a single computational step, regardless of their distance.
 
-
 \subsubsection*{Multi-Head Attention}
-
 Rather than computing a single attention function, transformers run $h$ independent attention heads in parallel, each with its own set of projection matrices, and concatenate the results:
  
 \begin{equation}
@@ -725,7 +720,6 @@ Pre-training exposes the model to massive text corpora using self-supervised obj
 
 The simplicity of these objectives belies the enormous computational cost. State-of-the-art models are trained on corpora containing trillions of tokens, using thousands of GPUs running continuously for weeks or months. These costs mean that pre-training a frontier model from scratch is feasible only for a handful of well-resourced organizations. For most practitioners and researchers, the practical path is to start from an existing pre-trained model and adapt it through fine-tuning.
 
-
 \subsection{Fine-tuning}
 \label{subsec:finetuning}
 
@@ -734,7 +728,6 @@ Fine-tuning continues training a pre-trained model on a smaller, task-specific d
 However, fine-tuning on a narrow dataset carries risks. \emph{Catastrophic forgetting} occurs when the model loses general capabilities acquired during pre-training --- for instance, a model fine-tuned exclusively on Solidity code might degrade in its ability to explain concepts in natural language. \emph{Overfitting} is a related concern: with a small, homogeneous training set, the model may memorize specific examples rather than learning generalizable patterns.
 
 \subsubsection*{Parameter-Efficient Fine-Tuning}
-
 Full fine-tuning updates every parameter in the model, which for billion-parameter architectures demands substantial GPU memory and amplifies the risk of catastrophic forgetting. Low-Rank Adaptation (LoRA)~\cite{hu2021lora} offers an efficient alternative by exploiting the observation that weight updates during fine-tuning tend to occupy a low-dimensional subspace. Instead of directly modifying a weight matrix $\mathbf{W}_0 \in \mathbb{R}^{d \times k}$, LoRA freezes it and injects a trainable low-rank decomposition:
 
 \begin{equation}
@@ -759,7 +752,6 @@ Figure~\ref{fig:lora} illustrates this architecture. The input $\mathbf{x}$ is p
 
 These parameter-efficient methods make it practical to adapt large models to domain-specific tasks such as smart contract analysis without the cost of full fine-tuning. However, even a well-adapted model can produce outputs that are technically correct but poorly structured, verbose, or misaligned with what a user actually needs. Addressing this gap requires optimizing for human preferences rather than task accuracy alone.
 
- 
 \subsection{Reinforcement Learning from Human Feedback}
 \label{subsec:rlvr}
 
@@ -780,7 +772,7 @@ Reinforcement Learning from Human Feedback (RLHF) optimizes the model's outputs 
     \label{fig:rlhf_diagram}
 \end{figure}
 
-Figure~\ref{fig:rlhf_diagram} illustrates this feedback loop. The LLM generates outputs from input data, a human evaluator provides preference feedback, and the reward model learns to approximate these preferences. The reward signal is then used to update the LLM, closing the loop. While effective, RLHF is expensive: it requires training and maintaining a separate reward model, collecting large volumes of human preference data, and managing the instability inherent in reinforcement learning. These costs have motivated simpler alignment methods such as Direct Preference Optimization (DPO), which reformulates the RLHF objective to optimize directly on preference pairs without an explicit reward model~\cite{rafailov2024}.
+Figure~\ref{fig:rlhf_diagram} illustrates this feedback loop. The LLM generates outputs from input data, a human evaluator provides preference feedback, and the reward model learns to approximate these preferences. The reward signal is then used to update the LLM, closing the loop. Although effective, RLHF is expensive: it requires training and maintaining a separate reward model, collecting large volumes of human preference data, and managing the instability inherent in reinforcement learning. These costs have motivated simpler alignment methods such as Direct Preference Optimization (DPO), which reformulates the RLHF objective to optimize directly on preference pairs without an explicit reward model~\cite{rafailov2024}.
 
 Pre-training, fine-tuning, and alignment all modify the model's parameters. However, a complementary approach exists that shapes the model's behavior at inference time without changing any weights.
 
@@ -797,14 +789,10 @@ While pre-training and fine-tuning adjust model parameters, \emph{prompting} sha
  
 Together, these prompting techniques allow practitioners to adapt a single general-purpose model to a wide range of tasks at inference time, complementing the more permanent adaptations achieved through fine-tuning.
 
-
-% ============================================================
 \section{LLMs in Smart Contract Security}
 \label{sec:llm-auditing}
-% ============================================================
 
 The application of LLMs to smart contract security has evolved rapidly since 2023, with approaches spanning four broad categories: prompt-only agentic pipelines, fine-tuned detection models, RAG-augmented frameworks, and hybrid systems that combine multiple strategies.  Each category represents a different trade-off between accessibility, precision, and the amount of domain-specific engineering required.
-
 
 \subsection{Prompt-Only Agentic Pipelines}
 \label{subsec:prompt-only}
@@ -814,7 +802,6 @@ The application of LLMs to smart contract security has evolved rapidly since 202
 More structured prompt-based approaches improve on this baseline. LLM-SmartAudit~\cite{wei2024smartaudit} deployed multi-agent conversational frameworks with role specialization across 6{,}454 contracts from Code4rena\footnote{\url{https://code4rena.com/}} competitions.  The multi-agent design mirrors how human audit teams operate, with different agents responsible for different vulnerability categories.
 
 These results collectively establish that general-purpose LLMs can identify security issues in smart contracts but lack the precision needed for production use without additional grounding mechanisms.
-
 
 \subsection{Fine-Tuned Models}
 \label{subsec:fine-tuned}
@@ -828,7 +815,6 @@ Fine-tuning domain-specific models on labeled vulnerability datasets produces su
 % Bu et al.~\cite{bu2025dapp} fine-tuned Llama3-8B on 4,998 real DApp contracts with full-parameter fine-tuning and random oversampling, reaching F1~=~0.83 and precision~0.97 for price manipulation vulnerabilities---up from F1~=~0.20 without fine-tuning.
 
 \textbf{LLMBugScanner}~\cite{yuan2025large} takes an ensemble approach, combining multiple LoRA-fine-tuned models from the OpenCode leaderboard through weighted voting.  This reduces the impact of individual model weaknesses, but introduces complexity in deployment.
-
 
 \subsection{RAG-Augmented Detection Frameworks}
 \label{subsec:rag-augmented}
@@ -844,16 +830,13 @@ Retrieval-Augmented Generation (RAG) addresses a fundamental limitation of LLMs:
 
 Although not specifically targeting smart contracts, ReVul-CoT~\cite{chen2025revulcot} demonstrates the effectiveness of the RAG+CoT paradigm for general software vulnerability severity assessment. Using retrieval from NVD and CWE databases combined with structured chain-of-thought reasoning, it achieved 87.50\% accuracy and 83.75\% Macro-F1 on 12{,}070 vulnerability records --- improvements exceeding 10 percentage points over all baselines. This architecture provides a transferable blueprint for smart contract severity assessment.
 
-
 \section{Challenges and Limitations}
 \label{sec:llm-challenges}
-% ============================================================
 
 Despite rapid progress, LLM-based smart contract auditing faces fundamental challenges that constrain its reliability in production settings.
  
  
 \subsection*{Hallucinations}
- 
 LLMs can produce plausible-sounding but factually incorrect outputs ---~\emph{hallucination}. In code generation, this manifests as references to non-existent libraries, fabricated API calls, and invented vulnerability reports. Spracklen et al.~\cite{spracklen2025} tested 16~LLMs generating 576,000~code samples and found that 19.7\% of the 2.23~million referenced packages were hallucinated, creating a direct supply-chain attack vector.
 
 % Pearce et al.~\cite{pearce2022asleep} found that approximately 40\% of GitHub Copilot's code completions contained vulnerabilities, while Perry et al.~\cite{perry2023users} demonstrated that users with AI coding assistant access wrote significantly less secure code while being more confident in its correctness---a dangerous combination of automation bias and misplaced trust.
@@ -862,12 +845,10 @@ LLMs can produce plausible-sounding but factually incorrect outputs ---~\emph{ha
  
  
 \subsection*{Context Window Limitations}
- 
 Even with context windows reaching hundreds of thousands of tokens, real smart contract systems can exceed what is reasonable to include in a single prompt. Imported libraries, interface definitions, deployment configurations, and cross-contract dependencies all consume the token budget. Moreover, models have a fixed training cutoff: new vulnerability classes and evolving best practices emerge continuously but are absent from the model's parametric knowledge. RAG partially addresses both issues by retrieving up-to-date, task-relevant information at inference time and by focusing the prompt on high-signal content~\cite{lewis2021}.
  
  
 \subsection*{Security}
- 
 When LLM agents can call external tools --- compilers, static analyzers, blockchain RPCs --- additional safety concerns arise. Prompt injection attacks embedded in retrieved documents or source code comments could manipulate the agent's behavior, causing it to suppress genuine findings or fabricate false ones. Unrestricted tool access could enable unintended actions such as deploying contracts or initiating transactions. These risks require careful sandboxing of tool execution, input sanitization of retrieved content, and human-in-the-loop confirmation for any actions with on-chain consequences.
  
 \bigskip
