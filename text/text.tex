@@ -92,7 +92,7 @@ With a solid understanding of how blocks are structured and how consensus mechan
 \section{Ethereum Virtual Machine}
 \label{sec:evm}
 The Ethereum Virtual Machine (EVM) is a deterministic state machine that executes the bytecode of the smart contract identically on all nodes. However, it is not Turing complete in the classical sense: execution is strictly resource-bounded by gas, so every instruction has a metered gas cost, and execution halts once the supplied gas is exhausted. 
-This gas-bounded execution guaranties termination and prevents non-halting or deliberately expensive programs from stalling the network; accordingly, the EVM is often described as \textit{quasi–Turing complete} (computationally universal only under a finite gas budget)~\cite{antonopoulos2018mastering, wood2014yellow}.
+This gas-bounded execution guaranties termination and prevents non-halting or deliberately expensive programs from stalling the network; accordingly, the EVM is often described as \textit{quasi–Turing complete} (computationally universal only under a finite gas budget)~\cite{wood2014yellow, antonopoulos2018mastering}.
 
 \subsection{Gas}
 Gas is the unit of account for the computational effort in Ethereum. Each EVM opcode has an associated gas cost, and a transaction specifies an upper bound (gas limit) on how much gas may be consumed during its execution.
@@ -341,8 +341,6 @@ At the inter-procedural level, the call graph extends this view by capturing the
 \subsection{Data Flow Analysis}
 \label{subsec:data-flow}
 
-Where control flow analysis maps the structure of possible executions, data flow analysis tracks how values propagate through that structure. 
-
 Data flow analysis in Solidity faces a domain-specific complication: \textit{storage aliasing}. Solidity maps state variables to 256-bit storage slots according to packing rules that depend on type size and declaration order, while dynamic structures like mappings and arrays compute their slot addresses via hashing. Therefore, two syntactically distinct references may alias to the same physical slot, creating data flow paths that a naive analyzer will miss. Handling this correctly requires modeling Solidity's storage layout and, in sophisticated tools, incorporating alias analysis. As an illustration, consider the following vulnerable \texttt{withdraw()} function, which performs an external call before updating the caller's balance --- a classic reentrancy pattern:
 
 \begin{listing}[!ht]
@@ -370,7 +368,7 @@ function withdraw(uint _amount) public {
 
 Figure~\ref{fig:cfg_ddg_diagram} shows both graphs derived from Listing~\ref{lst:withdraw-reentrancy}. In the CFG, the external call and the balance update appear on separate branches that both follow the guard condition, making the ordering between them explicit. The DDG reveals that \texttt{balances[msg.sender]} is read (in the guard) and written (after the call), highlighting a potential reentrancy vulnerability.
 
-Despite its strengths, static analysis is inherently limited to reasoning about what a program \textit{might} do, not what it \textit{actually} does when executed against concrete input. False positives accumulate as approximations compound across layers of analysis, and a recent large-scale evaluation of eight static application security testing tools for Solidity found that even the best-performing tools struggle to balance recall and precision, with business-logic vulnerabilities and protocol-layer flaws largely eluding automated detection~\cite{li2024sast}. Furthermore, static analysis cannot capture behaviors that emerge only at runtime, such as interactions between multiple deployed contracts, oracle responses, or mempool-dependent transaction ordering.
+Despite its strengths, static analysis is inherently limited to reasoning about what a program might do, not what it actually does when executed against concrete input. False positives accumulate as approximations compound across layers of analysis, and a recent large-scale evaluation of eight static application security testing tools for Solidity found that even the best-performing tools struggle to balance recall and precision, with business-logic vulnerabilities and protocol-layer flaws largely eluding automated detection~\cite{li2024sast}. Furthermore, static analysis cannot capture behaviors that emerge only at runtime, such as interactions between multiple deployed contracts, oracle responses, or mempool-dependent transaction ordering.
 
 These gaps motivate the complementary use of \textit{dynamic analysis}, which tests programs by executing them against concrete or symbolically generated inputs.
 
@@ -379,7 +377,7 @@ These gaps motivate the complementary use of \textit{dynamic analysis}, which te
 
 This perspective sacrifices soundness in exchange for precision, since every behavior it reports genuinely occurred rather than being a conservative approximation. In practice, the two approaches catch different classes of bugs, which is why strong security workflows typically combine both.
 
-For smart contracts, dynamic analysis is especially valuable because it can exercise the \emph{stateful} nature of contracts: real vulnerability triggers often depend on specific sequences of transactions that leave the contract in an exploitable state, something that is difficult to reason about purely from source code.
+For smart contracts, dynamic analysis is especially valuable because it can exercise the stateful nature of contracts: real vulnerability triggers often depend on specific sequences of transactions that leave the contract in an exploitable state, something that is difficult to reason about purely from source code.
 
 % ──────────────────────────────────────────────────────────────
 \subsection{Fuzz Testing}
@@ -461,9 +459,8 @@ The solver determines that this is satisfiable when $a = 2^{256} - 1$: adding~1 
 \subsection{Model Checking}
 \label{subsec:model-checking}
 
-Model checking is another technique that exhaustively explores the state space of a system to determine whether it satisfies a given property, typically expressed in temporal logic. Unlike symbolic execution, which reasons about individual execution paths, model checking reasons about the entire transition system of a program, making it well-suited for verifying properties that span multiple invocations or depend on the ordering of events.
+Model checking is another technique that exhaustively explores the state space of a system to determine whether it satisfies a given property, typically expressed in temporal logic. Unlike symbolic execution, which reasons about individual execution paths, model checking reasons about the entire transition system of a program, making it well-suited for verifying properties that span multiple invocations or depend on the ordering of events. Two principal algorithmic strategies underlie modern model checkers:
 
-Two principal algorithmic strategies underlie modern model checkers:
 \begin{itemize}
     \item \textbf{Bounded Model Checking} (BMC) unrolls the transition relation up to a finite depth $k$ and encodes the resulting computation as a satisfiability problem: if a property violation exists within $k$ steps, the solver finds it; otherwise, the property holds up to that bound;
     \item \textbf{Constrained Horn Clauses} (CHC) take a different approach, constructing \emph{function summaries} --- logical abstractions that capture a function's input-output relationship without inlining its body.
@@ -519,15 +516,12 @@ Despite the sophistication of these techniques, significant challenges remain. T
 
 \bigskip
 
-These limitations point toward the need for approaches that can bridge the gap between natural-language intent and formal specification, that can generalize from known vulnerability patterns to detect novel ones, and that can reason about the higher-level semantics of contract interactions rather than just their syntactic structure. Recent advances in Large Language Models (LLMs) offer a promising complementary direction. The following chapter examines these models, their architecture, and their emerging role in smart contract security.
+These limitations point toward the need for approaches that can bridge the gap between natural-language intent and formal specification, that can generalize from known vulnerability patterns to detect novel ones, and that can reason about the higher-level semantics of contract interactions rather than just their syntactic structure. Recent advances in Large Language Models offer a promising complementary direction. The following chapter examines these models, their architecture, and their emerging role in smart contract security.
 
 \chapter{Large Language Models}
 \label{ch:llm}
 
-The previous chapters examined techniques for analyzing smart contract code through structural and mathematical lenses. Each technique operates on the syntactic and semantic properties of the code itself, and each has characteristic blind spots. This chapter turns to a fundamentally different class of approaches built on Large Language Models (LLMs), deep neural networks that learn to predict and generate text by training on massive corpora and, in doing so, acquire rich internal representations of syntax, semantics, and multi-step reasoning.
- 
-The chapter traces the ideas behind these models from first principles. It begins with the mathematical foundations of sequence probability and the limitations of early neural approaches. Then it introduces the transformer architecture and the mechanisms that make it work, followed by a discussion of how transformers are trained, aligned, and guided through prompting. Finally, it examines how these capabilities have been brought to bear on the specific problem of smart contract security auditing.
-
+The chapter traces the ideas behind language models from first principles. It begins with the mathematical foundations of sequence probability and the limitations of early neural approaches. Then it introduces the transformer architecture and the mechanisms that make it work, followed by a discussion of how transformers are trained, aligned, and guided through prompting. Finally, it examines how these capabilities have been brought to bear on the specific problem of smart contract security auditing.
 
 \section{Sequence Probabilities}
 \label{sec:seq-prob}
@@ -536,7 +530,7 @@ Let $\mathbf{x} = (x_1, x_2, \dots, x_T)$ be a sequence of tokens --- these coul
 
 \begin{equation}
     P(\mathbf{x}) \;=\; \prod_{t=1}^{T} 
-    P\!\bigl(x_t \mid x_1, \dots, x_{t-1}\bigr).
+    P\,\bigl(x_t \mid x_1, \dots, x_{t-1}\bigr).
     \label{eq:chain-rule}
 \end{equation}
 
@@ -557,7 +551,7 @@ where $\theta$ denotes the model's parameters. A related and more interpretable 
     \label{eq:perplexity}
 \end{equation}
 
-Perplexity can be read as the effective number of tokens the model is choosing between at each step: a model with perplexity 20 is, on average, as uncertain as if it were picking uniformly from 20 equally likely options. The lower perplexity indicates a better model.
+Perplexity can be interpreted as the effective number of tokens the model is choosing between at each step. Lower perplexity indicates a better model, as it reflects less uncertainty in the predictions.
 
 To move beyond the fixed-window limitation of $n$-gram models, the field turned to neural networks that could, in principle, condition on the entire preceding sequence~\cite{hindle2012naturalness}.
 
@@ -567,7 +561,7 @@ To move beyond the fixed-window limitation of $n$-gram models, the field turned 
 Recurrent Neural Networks (RNNs) offered the first neural solution to variable-length conditioning. At each time step $t$, an RNN updates a hidden state that summarizes the entire prefix:
 
 \begin{equation}
-    \mathbf{h}_t = f\!\bigl(\mathbf{W}_h \mathbf{h}_{t-1} + \mathbf{W}_x \mathbf{x}_t + \mathbf{b}\bigr),
+    \mathbf{h}_t = f\,\bigl(\mathbf{W}_h \mathbf{h}_{t-1} + \mathbf{W}_x \mathbf{x}_t + \mathbf{b}\bigr),
     \label{eq:rnn}
 \end{equation}
 
@@ -601,7 +595,7 @@ The transformer, introduced by Vaswani~et~al. in 2017, addressed both limitation
 \subsection{Tokenization}
 \label{subsec:tokenization}
  
-Before any computation can occur, the model must convert the raw text into a sequence of discrete tokens from a fixed vocabulary. Modern LLMs use \emph{subword tokenization}, most commonly Byte-Pair Encoding (BPE)\footnote{\url{https://en.wikipedia.org/wiki/Byte-pair_encoding}}, which was adapted for neural machine translation by Sennrich~et~al.~\cite{sennrich2016bpe}. BPE starts with a vocabulary of individual characters and iteratively merges the most frequent adjacent pair into a single token, repeating until a target vocabulary size is reached. The result is a vocabulary of variable-length subword units: common words like ``the'' remain single tokens, while rare or compound words are split into recognizable pieces.
+Before any computation can occur, the model must convert the raw text into a sequence of discrete tokens from a fixed vocabulary. Modern LLMs use \emph{subword tokenization}, most commonly Byte-Pair Encoding (BPE)\footnote{\url{https://en.wikipedia.org/wiki/Byte-pair_encoding}}, which was adapted for neural machine translation.~\cite{sennrich2016bpe}. BPE starts with a vocabulary of individual characters and iteratively merges the most frequent adjacent pair into a single token, repeating until a target vocabulary size is reached. The result is a vocabulary of variable-length subword units: common words like ``the'' remain single tokens, while rare or compound words are split into recognizable pieces.
  
 For source code, tokenization has particular implications. Subword tokenizers trained predominantly on natural language corpora develop merge rules optimized for English words and common punctuation, not for programming language syntax. As a result, identifiers, hexadecimal  addresses, and numeric constants in Solidity are often split into fragments that carry little individual meaning, consuming context window budget without conveying proportional semantic information. This mismatch motivates training tokenizers on mixed code-and-text corpora, as is done by several code-specialized models.
  
@@ -617,16 +611,17 @@ An embedding maps each token index to a fixed-dimensional dense vector in a cont
 \begin{figure}[!ht]
     \centering
     \includegraphics[width=9cm, height=7cm]{images/word_embeddings_analogy.pdf}
-    \caption{TODO.}
+    \caption{Word embedding analogy: $\text{king} - \text{man} + \text{woman} \approx \text{queen}$.}
     \label{fig:word_embeddings}
 \end{figure}
 
+Figure~\ref{fig:word_embeddings} was produced using pre-trained GloVe embeddings~\cite{2014glove} projected to two dimensions via Principal Component Analysis (PCA)\footnote{\url{https://en.wikipedia.org/wiki/Principal_component_analysis}}.
+
 In a transformer, the initial embedding is only the starting point. As the token's vector passes through successive attention layers, it is progressively enriched with contextual information from the surrounding sequence. The output of the final layer is a \emph{contextual embedding} that represents not just the token in isolation, but the token in the context of everything around it. This is a critical distinction: the word ``bank'' receives different final-layer representations in ``river bank'' and ``bank account'', even though it starts from the same row in the embedding table.
 
-This contextual embedding mechanism is what makes pre-trained transformers so versatile. A model like BERT~\cite{devlin2019bert} can be used as a general-purpose feature extractor: feed in a passage of text, extract the final-layer embeddings, and use them for downstream tasks: classification, similarity search, clustering. Code-specialized variants such as CodeBERT~\cite{feng2020codebert} apply the same principle to source code. [TODO change and improve]
+This contextual embedding mechanism is what makes pre-trained transformers so versatile. A model like BERT~\cite{devlin2019bert} can be used as a general-purpose feature extractor: feed in a passage of text, extract the final-layer embeddings, and use them for downstream tasks: classification, similarity search, clustering. 
 
-These embedding vectors are also the representations that positional encoding (Section~\ref{subsec:pos-enc}) is added before the first attention layer, and they are the vectors on which the self-attention mechanism (Section~\ref{subsec:self-attention}) operates. With this foundation in place, we now turn to the overall transformer architecture and the attention mechanism at its core.
-
+These embedding vectors are also the representations to which the positional encoding (Section~\ref{subsec:pos-enc}) is added before the first attention layer, and are the vectors on which the self-attention mechanism (Section~\ref{subsec:self-attention}) operates. With this foundation in place, we now turn to the overall transformer architecture and the attention mechanism at its core.
 
 \subsection{Architecture Overview}
 \label{subsec:transformer-arch}
@@ -688,58 +683,59 @@ Rather than computing a single attention function, transformers run $h$ independ
     \label{eq:head-i}
 \end{equation}
  
-The motivation for multiple heads is that a single attention function can capture only one type of relationship at a time. By running several heads in parallel, the model can attend to different aspects of the input simultaneously. Empirical probing studies confirm that different heads do indeed specialize --- some track syntactic dependencies, others capture coreference or semantic similarity --- even without explicit supervision. The output projection~$\mathbf{W}^O$ then combines these diverse perspectives into a single representation for each token~\cite{clark2019doesbertlookat}.
+The motivation for multiple heads is that a single attention function can capture only one type of relationship at a time. By running several heads in parallel, the model can attend to different aspects of the input simultaneously. Empirical probing studies confirm that different heads specialize in distinct linguistic functions, such as syntactic dependencies, coreference, or semantic similarity, without any explicit supervision. The output projection~$\mathbf{W}^O$ then combines these diverse perspectives into a single representation for each token~\cite{clark2019doesbertlookat}.
 
 \subsection{Positional Encoding}
 \label{subsec:pos-enc}
 
 Self-attention is \emph{permutation-equivariant}: if the input tokens are shuffled, the outputs are shuffled in exactly the same way, with no change in their values. Since token order carries critical semantic information, the model must be given explicit information about position. This is the role of \emph{positional encoding}, which is added to the token vectors before they enter the attention layers.
- 
+
+\begin{figure}[!ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{images/pos_encode_example.png}
+    \caption{Positional encoding matrix for a four-token sequence with $d = 4$. Adapted from~\cite{mehreen2024positional}.}
+    \label{fig:pe_example}
+\end{figure}
+
 The original transformer used fixed sinusoidal functions to encode position~\cite{vaswani2023attentionneed}. For each position $\text{pos}$ and each dimension $i$ of the representation:
- 
+
 \begin{equation}
     \text{PE}_{(\text{pos},\, 2i)} = \sin\!\left(\frac{\text{pos}}{10000^{2i/d_{\text{model}}}}\right), \qquad
     \text{PE}_{(\text{pos},\, 2i+1)} = \cos\!\left(\frac{\text{pos}}{10000^{2i/d_{\text{model}}}}\right).
     \label{eq:sinusoidal-pe}
 \end{equation}
- 
-This design has an elegant property: the positional encoding of any fixed offset $k$ can be expressed as a linear function of the encoding at position $\text{pos}$, which in principle allows the model to learn to attend to relative positions. However, sinusoidal encodings are fixed and can not adapt to the data.
 
-\begin{figure}[!ht]
-    \centering
-    \includegraphics[width=0.9\linewidth]{images/pos_encode_example.png}
-    \caption{TODO. Adapted from~\cite{mehreen2024positional}.}
-    \label{fig:pe_example}
-\end{figure}
- 
+Figure~\ref{fig:pe_example} illustrates this computation for the sequence ``I am a Robot'' with $d_{\text{model}} = 4$ and $n = 100$. Each row of the matrix corresponds to a token position, and each column alternates between sine and cosine functions at different frequencies. The resulting vectors are unique for each position and can be computed deterministically without any learned parameters.
+
+This design has an elegant property: the positional encoding of any fixed offset $k$ can be expressed as a linear function of the encoding at position $\text{pos}$, which in principle allows the model to learn to attend to relative positions. However, sinusoidal encodings are fixed and cannot be adapted to the data.
+
 More recent models have moved to \emph{relative} positional encoding schemes. Rotary Position Embedding (RoPE) encodes position by rotating query and key vectors in the complex plane, so that the dot product between a query at position $m$ and a key at position $n$ depends only on their relative distance $m - n$~\cite{SU2024127063}. RoPE has become the dominant choice in modern decoder-only LLMs, including LLaMA~\cite{touvron2023llamaopen} and its derivatives, because it combines the benefits of relative encoding with straightforward integration into the standard attention mechanism.
 
-% ============================================================
+With the covered architectural components of the transformer, the next section examines how to turn them into capable models through training.
+
 \section{Model Training}
 \label{sec:training}
-% ============================================================
 
-A transformer architecture on its own is simply a parameterized function; it becomes useful only through training. Building a capable LLM involves three broad stages, each operating at a different scale and serving a different purpose. \emph{Pre-training} exposes the model to vast quantities of text to learn general-purpose representations. \emph{Fine-tuning} adapts these representations to specific tasks or desired behaviors. \emph{Prompting} shapes the model's output at inference time through instructions and examples, without modifying any parameters. The following subsections describe each stage in turn.
-
+A transformer architecture on its own is simply a parameterized function — a computational graph with billions of weights initialized to random values. Turning it into a system that can understand and generate coherent text requires a carefully staged training process. Each stage operates at a different scale and serves a different purpose, progressively narrowing the model's behavior from general language competence to task-specific, human-aligned output.
 
 \subsection{Pre-training}
 \label{subsec:pretraining}
 
-Pre-training exposes the model to massive text corpora using self-supervised objectives that require no human labeling. For decoder-only models, the objective is \emph{next-token prediction} (causal language modeling): minimize the cross-entropy loss from equation~\eqref{eq:nll} over all positions and all documents in the corpus. For encoder-only models like BERT, the objective is \emph{masked language modeling}: randomly mask a fraction of tokens and train the model to recover them from bidirectional context.
+Pre-training exposes the model to massive text corpora using self-supervised objectives that require no human labeling. For decoder-only models, the objective is \emph{next-token prediction}: minimize the cross-entropy loss from Equation~\eqref{eq:nll} over all positions and all documents in the corpus. For encoder-only models like BERT, the objective is \emph{masked language modeling}: randomly mask a fraction of tokens and train the model to recover them from bidirectional context.
 
-The simplicity of these objectives belies the enormous computational cost. State-of-the-art models are trained on corpora containing trillions of tokens, using thousands of GPUs running continuously for weeks or months. These costs mean that pre-training a frontier dense model from scratch is feasible only for a handful of well-resourced organizations. For most practitioners and researchers, the practical path remains to start from an existing pre-trained model and adapt it through fine-tuning.
+The simplicity of these objectives belies the enormous computational cost. State-of-the-art models are trained on corpora containing trillions of tokens, using thousands of GPUs running continuously for weeks or months. These costs mean that pre-training a frontier model from scratch is feasible only for a handful of well-resourced organizations. For most practitioners and researchers, the practical path is to start from an existing pre-trained model and adapt it through fine-tuning.
 
 
 \subsection{Fine-tuning}
 \label{subsec:finetuning}
 
-Fine-tuning adapts a pre-trained model to specific downstream tasks by continuing training on a smaller, curated dataset. The most common modern approach is Supervised Fine-tuning (SFT) on instruction--response pairs, which teaches the model to follow user intent reliably. By exposing the model to examples of the desired input--output behavior, SFT can bias it toward structured output, improve adherence to constraints, and sharpen performance on domain-specific tasks.
+Fine-tuning continues training a pre-trained model on a smaller, task-specific dataset. The most common modern approach is Supervised Fine-tuning (SFT) on instruction--response pairs, which teaches the model to follow user intent reliably. SFT can bias the model toward structured output formats, improve adherence to domain constraints, and sharpen performance on specialized tasks such as code analysis or vulnerability detection.
 
-Fine-tuning carries risks. Training on a narrow dataset can cause forgetting, where the model loses general capabilities acquired during pre-training. For example, a model fine-tuned exclusively on Solidity code might lose its ability to explain concepts in natural language. Overfitting is a related concern: a model fine-tuned on a small, homogeneous dataset may perform well on similar examples but generalize poorly to novel inputs.
+However, fine-tuning on a narrow dataset carries risks. \emph{Catastrophic forgetting} occurs when the model loses general capabilities acquired during pre-training --- for instance, a model fine-tuned exclusively on Solidity code might degrade in its ability to explain concepts in natural language. \emph{Overfitting} is a related concern: with a small, homogeneous training set, the model may memorize specific examples rather than learning generalizable patterns.
 
 \subsubsection*{Parameter-Efficient Fine-Tuning}
 
-Full fine-tuning updates every parameter in the model, which for billion-parameter architectures requires substantial GPU memory and risks catastrophic forgetting. Low-Rank Adaptation (LoRA)~\cite{hu2021lora} offers an elegant alternative. Instead of updating a weight matrix $\mathbf{W}_0 \in \mathbb{R}^{d \times k}$ directly, LoRA freezes it and adds a low-rank decomposition:
+Full fine-tuning updates every parameter in the model, which for billion-parameter architectures demands substantial GPU memory and amplifies the risk of catastrophic forgetting. Low-Rank Adaptation (LoRA)~\cite{hu2021lora} offers an efficient alternative by exploiting the observation that weight updates during fine-tuning tend to occupy a low-dimensional subspace. Instead of directly modifying a weight matrix $\mathbf{W}_0 \in \mathbb{R}^{d \times k}$, LoRA freezes it and injects a trainable low-rank decomposition:
 
 \begin{equation}
     \mathbf{W} = \mathbf{W}_0 + \Delta\mathbf{W} 
@@ -747,7 +743,7 @@ Full fine-tuning updates every parameter in the model, which for billion-paramet
     \label{eq:lora}
 \end{equation}
 
-where $\mathbf{B} \in \mathbb{R}^{d \times r}$ and $\mathbf{A} \in \mathbb{R}^{r \times k}$ are small trainable matrices with rank $r \ll \min(d, k)$. Only $\mathbf{A}$ and $\mathbf{B}$ are updated during training; the original weights $\mathbf{W}_0$ remain frozen. For a typical transformer layer with $d = k = 4096$ and $r = 16$, this reduces the number of trainable parameters from $\sim$16.8~million to $\sim$131~thousand per matrix---a reduction of over 99\%. QLoRA~\cite{xu2023qalora} extends this further by storing the frozen $\mathbf{W}_0$ in 4-bit precision, making it possible to fine-tune models with tens of billions of parameters on a single consumer GPU.
+where $\mathbf{B} \in \mathbb{R}^{d \times r}$ and $\mathbf{A} \in \mathbb{R}^{r \times k}$ are small trainable matrices with rank $r \ll \min(d, k)$. Only $\mathbf{A}$ and $\mathbf{B}$ are updated during training; the original weights $\mathbf{W}_0$ remain frozen. For a typical transformer layer with $d = k = 4096$ and $r = 16$, this reduces the number of trainable parameters from $\sim$16.8~million to $\sim$131~thousand per matrix --- a reduction of over 99\%.
 
 \begin{figure}[!ht]
     \centering
@@ -759,29 +755,34 @@ where $\mathbf{B} \in \mathbb{R}^{d \times r}$ and $\mathbf{A} \in \mathbb{R}^{r
     \label{fig:lora}
 \end{figure}
 
-These parameter-efficient methods make it practical to adapt large models to domain-specific tasks such as smart contract analysis. However, even a well-fine-tuned model may produce outputs that are technically correct but poorly structured, overly verbose, or misaligned with what a user actually needs. The next challenge is shaping the model's output.
+Figure~\ref{fig:lora} illustrates this architecture. The input $\mathbf{x}$ is passed through both the frozen pre-trained path $\mathbf{W}_0 \mathbf{x}$ and the low-rank path $\mathbf{B}\mathbf{A}\mathbf{x}$, and the two outputs are summed. At inference time, low-rank matrices can be merged into $\mathbf{W}_0$ without additional latency. QLoRA~\cite{xu2023qalora} extends this further by storing $\mathbf{W}_0$ in 4-bit precision, making it possible to fine-tune models with tens of billions of parameters on a single consumer GPU.
+
+These parameter-efficient methods make it practical to adapt large models to domain-specific tasks such as smart contract analysis without the cost of full fine-tuning. However, even a well-adapted model can produce outputs that are technically correct but poorly structured, verbose, or misaligned with what a user actually needs. Addressing this gap requires optimizing for human preferences rather than task accuracy alone.
+
  
 \subsection{Reinforcement Learning from Human Feedback}
 \label{subsec:rlvr}
 
-Reinforcement Learning from Human Feedback (RLHF) addresses this gap by optimizing the model's output to match human judgments of quality~\cite{ouyang2022training}. The process involves three stages:
+Reinforcement Learning from Human Feedback (RLHF) optimizes the model's outputs to match human judgments of quality~\cite{ouyang2022training}. The process involves three stages:
+
 \begin{enumerate}
-    \item \textbf{Reward model training.} Human annotators rank multiple model outputs for the same prompt. A separate reward model is trained on these preference pairs to predict which outputs humans would prefer.
+    \item \textbf{Reward model training.} Human annotators compare multiple model outputs for the same prompt and rank them by quality. A separate reward model is trained on these preference pairs to predict which outputs humans would prefer.
  
-    \item \textbf{Policy optimisation.} The language model is treated as a reinforcement learning agent whose ``action'' at each step is the next token. Using Proximal Policy Optimisation (PPO), the model is fine-tuned to maximise the reward model's score while staying close to the SFT policy via a KL-divergence penalty, which prevents the model from drifting too far from coherent language~\cite{schulman2017proximal}.
+    \item \textbf{Policy optimization.} The language model is treated as a reinforcement learning policy whose action at each step is selecting the next token. Using Proximal Policy Optimization (PPO)~\cite{schulman2017proximal}, the model is updated to maximize the reward model's score while a KL-divergence penalty keeps it close to the original SFT policy, preventing the model from drifting into degenerate outputs that exploit the reward model.
  
-    \item \textbf{Iteration.} The process repeats: new outputs are collected, annotators provide fresh rankings, and both the reward model and the policy are updated.
+    \item \textbf{Iteration.} The process repeats: new outputs are sampled from the updated policy, annotators provide fresh rankings, and both the reward model and the policy are refined.
 \end{enumerate}
- 
+
 \begin{figure}[!ht]
     \centering
     \includegraphics[width=9cm, height=6cm]{images/rlhf.pdf}
     \caption{Reinforcement Learning from Human Feedback pipeline.}
     \label{fig:rlhf_diagram}
 \end{figure}
- 
-Figure~\ref{fig:rlhf_diagram} illustrates this pipeline. While effective, RLHF is expensive: it requires training and maintaining a separate reward model, collecting large volumes of human preference data, and managing the instability of RL training. These costs have motivated the development of simpler alignment methods such as Direct Preference Optimization (DPO), which reformulates the RLHF objective to directly optimize on preference pairs without an explicit reward model~\cite{rafailov2024}.
 
+Figure~\ref{fig:rlhf_diagram} illustrates this feedback loop. The LLM generates outputs from input data, a human evaluator provides preference feedback, and the reward model learns to approximate these preferences. The reward signal is then used to update the LLM, closing the loop. While effective, RLHF is expensive: it requires training and maintaining a separate reward model, collecting large volumes of human preference data, and managing the instability inherent in reinforcement learning. These costs have motivated simpler alignment methods such as Direct Preference Optimization (DPO), which reformulates the RLHF objective to optimize directly on preference pairs without an explicit reward model~\cite{rafailov2024}.
+
+Pre-training, fine-tuning, and alignment all modify the model's parameters. However, a complementary approach exists that shapes the model's behavior at inference time without changing any weights.
 
 \section{Prompting}
 \label{sec:prompting}
