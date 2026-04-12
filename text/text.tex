@@ -884,10 +884,49 @@ Wake is an open-source Python-based development, testing and security analysis f
     \item \textbf{Deployment and Interaction}: Support for mainnet interactions and contract deployments, enabling seamless transition from testing to production.
 \end{itemize}
 
-Wake has been actively used by Ackee Blockchain Security in professional smart contract audits, where it has helped discover numerous high and critical severity vulnerabilities in protocols such as IPOR Protocol, PWN Protocol, Brahma Console, and Lido Community Staking Module.
+This framework has been actively used by Ackee Blockchain Security in professional smart contract audits, where it has helped discover numerous high and critical severity vulnerabilities in protocols such as IPOR Protocol, PWN Protocol, Brahma Console, and Lido Community Staking Module.
+
+Wake is not the only framework available for Solidity security analysis. Table~\ref{tab:framework-comparison} compares it with the two most widely adopted alternatives: Slither~\cite{feist2019slither}, a static analysis framework, and Foundry~\cite{foundry}, a testing and development toolkit.
+
+\begin{table}[ht]
+\centering
+\renewcommand{\arraystretch}{1.4}
+\resizebox{0.7\textwidth}{!}{%
+\begin{tabular}{|l|c|c|c|}
+\hline
+\textbf{Capability} & \textbf{Wake} & \textbf{Slither} & \textbf{Foundry} \\
+\hline
+Implementation language       & Python  & Python  & Rust / Solidity \\
+\hline
+Static analysis detectors     & Yes     & Yes     & No \\
+\hline
+Custom detector API           & Yes     & Yes     & No \\
+\hline
+Intermediate representation   & Yes     & Yes     & No \\
+\hline
+Control flow graph            & Yes     & Yes     & No \\
+\hline
+Data dependency graph         & Yes     & Yes     & No \\
+\hline
+Testing framework             & Yes     & No      & Yes \\
+\hline
+Fuzz testing                  & Yes     & No      & Yes \\
+\hline
+LSP / IDE integration         & Yes     & No      & No \\
+\hline
+Deployment support            & Yes     & No      & Yes \\
+\hline
+\end{tabular}}
+\caption{Comparison of security and development frameworks.}
+\label{tab:framework-comparison}
+\end{table}
+
+Slither is the most established static analyzer for Solidity, shipping over 90 built-in detectors and a mature intermediate representation (SlithIR) with taint tracking capabilities. However, it is exclusively a static analysis tool --- it provides neither a testing framework nor a fuzzer. Foundry occupies the opposite niche: it provides a fast Solidity-native testing and fuzzing environment but offers no tools for code analysis. Wake bridges both worlds, and its ability to do so rests on a rich internal model of the analyzed contracts. 
 
 \section{Internal Model}
 \label{sec:wake-internal-model}
+
+At the core of Wake's analysis capabilities is a set of structured representations derived from the Solidity compiler output, that are built directly on the code analysis techniques discussed in Chapter~\ref{ch:code-analysis}.
 
 Wake constructs a rich internal representation of Solidity smart contracts that serves as the foundation for all analysis capabilities. The representations described below build directly on the program analysis techniques discussed in Chapter~\ref{ch:code-analysis}.
 
@@ -1146,21 +1185,21 @@ Table~\ref{tab:label-dist} shows the distribution of vulnerability labels across
 \subsection{Database Schema}
 \label{subsec:db-schema}
 
-Storing and querying vector embeddings at scale requires infrastructure that supports an efficient approximate nearest-neighbor (ANN) search. Purpose-built vector databases such as Pinecone~\cite{pinecone2024}, Weaviate~\cite{weaviate2024}, and Milvus~\cite{wang2021milvus} are designed specifically for this task: they offer managed indexing, automatic sharding, and optimized distance computations out of the box. However, these systems operate as standalone services, adding operational complexity for this thesis.
+Storing and querying vector embeddings at scale requires infrastructure that supports an efficient approximate nearest-neighbor (ANN) search. Purpose-built vector databases such as Pinecone\footnote{\url{https://www.pinecone.io/}} or Milvus\footnote{\url{https://milvus.io/}} are designed specifically for this task: they offer managed indexing, automatic sharding, and optimized distance computations out of the box. However, these systems operate as standalone services, adding operational complexity for this thesis.
 
-An alternative approach is to extend a general-purpose relational database with vector capabilities. The \textit{pgvector} extension~\cite{pgvector2023} adds native vector column types and distance operators to PostgreSQL, enabling the storage of embedding indexes, and similarity search within the same transactional database that already holds structured metadata. For this project, the key advantage is co-location: a single query can filter by relational attributes (e.g., embedding model, content mode, vulnerability label) and rank by vector similarity in one pass, without cross-service joins.
+An alternative approach is to extend a general-purpose relational database with vector capabilities. The \textit{pgvector} extension~\cite{pgvector2024} adds native vector column types and distance operators to PostgreSQL, enabling the storage of embedding indexes, and similarity search within the same transactional database that already holds structured metadata. For this project, the key advantage is co-location: a single query can filter by relational attributes (e.g., embedding model, content mode, vulnerability label) and rank by vector similarity in one pass, without cross-service joins.
 
-% \begin{figure}[!ht]
-%     \centering
-%     \includegraphics[width=\textwidth]{images/erd.pdf}
-%     \caption{Entity-relationship diagram of the database schema. The left group stores the knowledge base (findings, embeddings, chunks); the right group supports the evaluation pipeline (experiments, cases, results).}
-%     \label{fig:erd}
-% \end{figure}
+\begin{figure}[!ht]
+    \centering
+    \includegraphics[width=\textwidth]{images/erd.pdf}
+    \caption{Entity-relationship diagram of the database schema.}
+    \label{fig:erd}
+\end{figure}
 
 The schema, illustrated in the entity-relationship diagram in Figure~\ref{fig:erd}, comprises six tables organized into two logical groups. The \emph{knowledge base} group consists of three tables: \texttt{findings} stores the core entries with their metadata, preprocessed content, and code blocks; \texttt{finding\_embeddings} stores vector embeddings linked to findings via a foreign key, supporting multiple embedding models and content modes (text or code) through dedicated columns; and \texttt{finding\_chunks} stores token-level chunks of findings for the chunked retrieval strategy. The \emph{evaluation} group contains: \texttt{evaluation\_cases}, which holds structured test inputs with ground-truth labels and reference answers; \texttt{experiments}, which records each evaluation run together with a frozen configuration snapshot and git commit hash for reproducibility; and \texttt{evaluation\_results}, which links individual metric scores back to their experiment and case.
 
 \paragraph{HNSW indexes.}
-The exact nearest-neighbor search over vectors requires computing the distance to every row in the table --- a linear scan that becomes prohibitively slow as the dataset grows. The approximate nearest-neighbor indexes trade a small amount of recall for dramatically lower query latency. Among the available ANN algorithms, Hierarchical Navigable Small World (HNSW) graphs~\cite{malkov2020hnsw} offer a strong balance between recall, speed, and incremental insertability. HNSW constructs a multi-layer graph in which each layer is a navigable small-world network: the top layers contain few, widely connected nodes for coarse navigation, while the bottom layer connects all nodes for fine-grained search. A query traverses the graph greedily from the top layer downward, narrowing the candidate set at each level.
+The exact nearest-neighbor search over vectors requires computing the distance to every row in the table --- a linear scan that becomes prohibitively slow as the dataset grows. The approximate nearest-neighbor indexes trade a small amount of recall for dramatically lower query latency. Among the available ANN algorithms, Hierarchical Navigable Small World (HNSW) graphs~\cite{malkov2018} offer a strong balance between recall, speed, and incremental insertability. HNSW constructs a multi-layer graph in which each layer is a navigable small-world network: the top layers contain few, widely connected nodes for coarse navigation, while the bottom layer connects all nodes for fine-grained search. A query traverses the graph greedily from the top layer downward, narrowing the candidate set at each level.
 
 \paragraph{Search functions.}
 Four PostgreSQL functions encapsulate the similarity search logic. The text and code search functions each accept a query vector, a result count~$k$, a similarity threshold, and an optional label filter. The similarity is computed as $1 - d_{\cos}$ using pgvector's \texttt{<=>} operator. The functions join the embedding and finding tables, filter by model and mode, apply the threshold, and return ranked results with full finding metadata. Encapsulating this logic in database functions keeps the search semantics version-controlled alongside the schema and avoids duplicating filtering logic across application code.
@@ -1221,7 +1260,7 @@ The specific re-ranker models and their comparative performance are evaluated in
 \section{Model Context Protocol Integration}
 \label{sec:mcp-integration}
 
-The Model Context Protocol (MCP)~\cite{anthropic2024mcp} is an open standard for connecting AI models with external tools and data sources. It defines a structured interface through which an LLM-based agent can discover available tools, invoke them with typed inputs, and receive structured outputs. Wake-AI already uses MCP to expose its static analysis capabilities (IR queries, CFG traversal, detector invocation) to the LLM agent.
+The Model Context Protocol (MCP) is an open standard for connecting AI models with external tools and data sources. It defines a structured interface through which an LLM-based agent can discover available tools, invoke them with typed inputs, and receive structured outputs. Wake-AI already uses MCP to expose its static analysis capabilities (IR queries, CFG traversal, detector invocation) to the LLM agent.
 
 \subsection{RAG Tools}
 \label{subsec:mcp-wake}
@@ -1412,11 +1451,11 @@ Five retrieval strategies are evaluated, each varying the query construction, em
 \label{tab:query-strategies}
 \end{table}
 
-Table~\ref{tab:query-strategies} summarises the five strategies. The first three use the dense vector search pipeline directly, varying only the query input. The remaining two introduce additional retrieval mechanisms:
+Table~\ref{tab:query-strategies} summarizes the five strategies. The first three use the dense vector search pipeline directly, varying only the query input. The remaining two introduce additional retrieval mechanisms:
 
-\paragraph{Hybrid BM25.} This strategy combines dense vector retrieval with BM25 keyword search~\cite{robertson2009bm25}. BM25 compensates for a known weakness of dense retrieval: semantic embedding models may miss findings that use the exact Solidity identifier mentioned in the query. For example, a query about \texttt{transferFrom} reentrancy should retrieve findings mentioning \texttt{transferFrom} by name, even if their embeddings emphasise different semantic aspects.
+\paragraph{Hybrid BM25.} This strategy combines dense vector retrieval with BM25 keyword search. BM25 compensates for a known weakness of dense retrieval: semantic embedding models may miss findings that use the exact Solidity identifier mentioned in the query. For example, a query about \texttt{transferFrom} reentrancy should retrieve findings mentioning \texttt{transferFrom} by name, even if their embeddings emphasise different semantic aspects.
 
-The BM25 index is built over all finding summaries using the BM25Okapi variant. Tokenisation preserves domain-specific identifiers (\texttt{delegatecall}, \texttt{msg.sender}, \texttt{ERC20}) by splitting on non-alphanumeric characters and retaining multi-character tokens. The two ranked lists (dense and BM25) are merged using Reciprocal Rank Fusion (RRF)~\cite{cormack2009rrf}:
+The BM25 index is built over all finding summaries using the BM25Okapi variant. Tokenisation preserves domain-specific identifiers (\texttt{delegatecall}, \texttt{msg.sender}, \texttt{ERC20}) by splitting on non-alphanumeric characters and retaining multi-character tokens. The two ranked lists (dense and BM25) are merged using Reciprocal Rank Fusion (RRF):
 
 \begin{equation}
     \text{RRF}(d) = \sum_{i=1}^{L} \frac{1}{k_{\text{rrf}} + r_i(d)},
