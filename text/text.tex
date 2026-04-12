@@ -161,6 +161,9 @@ A common drawback of Solidity development is that subtle semantic errors can pro
 
 \begin{listing}[!ht]
 \begin{minted}[fontsize=\small,breaklines]{solidity}
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
 contract Counter {
     uint256 public value;
     
@@ -173,7 +176,7 @@ contract Counter {
 \label{lst:counter-stateful}
 \end{listing}
 
-Even this trivial piece of code captures the core model, where a transaction triggers EVM execution, the state is updated, and the transition becomes part of the verifiable blockchain history.
+The first line is an SPDX license identifier --- a machine-readable comment that declares the contract's open-source license. Since Solidity 0.6.8, the compiler emits a warning if this comment is missing, encouraging developers to make licensing explicit at the source level. The \texttt{pragma solidity \^{}0.8.0} directive constrains which compiler versions may compile the contract. Even this trivial piece of code captures the core model: a transaction triggers EVM execution, the state is updated, and the transition becomes part of the verifiable blockchain history.
 
 \section{Security}
 \label{sec:security}
@@ -779,84 +782,82 @@ Pre-training, fine-tuning, and alignment all modify the model's parameters. Howe
 \section{Prompting}
 \label{sec:prompting}
 
-While pre-training and fine-tuning adjust model parameters, \emph{prompting} shapes model behavior at inference time through instructions, context, and examples without changing any weights. The discovery that including a few input--output examples in the prompt (\emph{few-shot prompting}) can elicit task-specific behavior from large decoder-only models without any fine-tuning opened the door to a set of techniques collectively known as \emph{prompt engineering} that exploit the model's in-context learning capabilities~\cite{brown2020languagemodelsfewshotlearners}.
+While pre-training and fine-tuning adjust model parameters, prompting shapes model behavior at inference time through instructions, context, and examples without changing any weights. The discovery that including a few input--output examples in the prompt (\emph{few-shot prompting}) can elicit task-specific behavior from large decoder-only models without any fine-tuning opened the door to a set of techniques collectively known as prompt engineering that exploit the model's in-context learning capabilities~\cite{brown2020languagemodelsfewshotlearners}.
  
-\textbf{Task decomposition} breaks a complex problem into smaller sub-tasks, each with narrower scope and clearer success criteria. Rather than asking a model to solve a difficult problem in one step, the prompt guides it through a sequence of manageable steps whose outputs compose into a final answer. This reduces the cognitive burden on any single inference call and makes it easier to verify intermediate results.
+\textbf{Task decomposition} breaks a complex problem into smaller sub-tasks, each with narrower scope and clearer success criteria. Rather than asking a model to solve a difficult problem in one step, the prompt guides it through a sequence of manageable steps, making it easier to verify intermediate results.
  
-\textbf{Chain-of-thought (CoT)} prompting is a specific form of task decomposition in which the model is encouraged to produce intermediate reasoning steps before arriving at a final answer. By including examples that show step-by-step reasoning, the prompt elicits similar behavior from the model, which has been shown to improve performance on arithmetic, commonsense reasoning, and other multi-step tasks~\cite{wei2023chain}.
+\textbf{Chain-of-thought (CoT)} prompting is a specific form of task decomposition in which the model is encouraged to produce intermediate reasoning steps before arriving at a final answer. By including examples, showing step-by-step reasoning, the prompt elicits similar behavior from the model, which has been shown to improve performance on arithmetic, commonsense reasoning, and other multi-step tasks~\cite{wei2023chain}.
  
 \textbf{Few-shot learning} calibrates what ``good'' output looks like by providing concrete examples in the prompt. The model uses these examples to infer the desired format, style, level of detail, and reasoning strategy, then applies these inferred patterns to the actual query. Few-shot prompting is particularly effective when combined with retrieval: instead of relying on fixed examples, relevant demonstrations can be retrieved dynamically from a knowledge base, tailoring the prompt to each specific input.
  
-Together, these prompting techniques allow practitioners to adapt a single general-purpose model to a wide range of tasks at inference time, complementing the more permanent adaptations achieved through fine-tuning.
+Together, these prompting techniques allow practitioners to adapt a single general-purpose model to a wide range of tasks at inference time, complementing the more permanent adaptations achieved through fine-tuning. The following section examines different approaches to applying LLMs to smart contract security.
 
 \section{LLMs in Smart Contract Security}
 \label{sec:llm-auditing}
 
-The application of LLMs to smart contract security has evolved rapidly since 2023, with approaches spanning four broad categories: prompt-only agentic pipelines, fine-tuned detection models, RAG-augmented frameworks, and hybrid systems that combine multiple strategies.  Each category represents a different trade-off between accessibility, precision, and the amount of domain-specific engineering required.
+The application of LLMs to smart contract security has evolved rapidly since 2023, drawing on all the techniques discussed above. Before surveying specific approaches, two architectural patterns that recur throughout the literature deserve a brief introduction.
 
-\subsection{Prompt-Only Agentic Pipelines}
+\paragraph{Agentic workflows.}
+A standalone LLM produces a single response to a single prompt. An agentic system wraps the LLM in a loop: the model reasons about a task, selects and calls external tools, observes the results, and decides whether to continue or return a final answer. When multiple such agents are composed, the result is a multi-agent pipeline that mirrors how human audit teams operate, with different specialists responsible for different vulnerability classes or analysis stages.
+
+\paragraph{Retrieval-Augmented Generation.}
+An LLM's parametric knowledge is frozen at training time: it cannot know about vulnerabilities disclosed after its data cutoff or documentation published since. Retrieval-Augmented Generation (RAG)~\cite{lewis2021retrieval} addresses this by introducing a retrieval step before generation. Given a query, the system searches an external knowledge base and injects the most relevant documents into the prompt. The model then generates its response grounded in this retrieved context, rather than relying on memory alone, which reduces hallucination and enables analysis of information the model was never trained on.
+
+With these two patterns established, the existing work can be organized into three categories based on the primary technique employed.
+
+\subsection{Agentic Pipelines}
 \label{subsec:prompt-only}
 
-% The simplest approach feeds smart contract source code directly into a general-purpose LLM with appropriate instructions. Chen et al.~\cite{chen2024chatgpt} conducted a systematic evaluation of GPT-3.5 and GPT-4 on the SmartBugs-Curated benchmark and found high recall but poor precision, with roughly 4 out of 5 flagged issues being false positives (GPT-4 achieved 88.2\% recall but only 22.6\% precision).  Perhaps more concerning, 42\% of contracts showed unstable detection outcomes across repeated runs, highlighting the non-deterministic nature of LLM-based analysis.
+LLM-SmartAudit~\cite{wei2024smartaudit} is a representative example of the multi-agent approach to smart contract auditing. The framework is built on two core principles: role specialization, where each agent focuses on a specific aspect of the audit (contract analysis, vulnerability identification, report generation), and action execution, where agents collaborate through structured assistant--user conversations to iteratively refine their assessments. The system employs a \emph{buffer-of-thought} mechanism --- a dynamic record of insights accumulated throughout the audit process. It allows agents to build on prior reasoning rather than starting each analysis step from scratch.
 
-More structured prompt-based approaches improve on this baseline. LLM-SmartAudit~\cite{wei2024smartaudit} deployed multi-agent conversational frameworks with role specialization across 6{,}454 contracts from Code4rena\footnote{\url{https://code4rena.com/}} competitions.  The multi-agent design mirrors how human audit teams operate, with different agents responsible for different vulnerability categories.
+The authors evaluated LLM-SmartAudit on two datasets: a labeled benchmark of 110 annotated contracts covering ten vulnerability types, and a real-world dataset of 102 projects comprising 6{,}454 contracts. In its buffer-reasoning mode, LLM-SmartAudit outperformed traditional tools like \textit{Mythril}\footnote{\url{https://github.com/ConsenSysDiligence/mythril}}, achieving a recall of 74\%. In particular, the system identified 11 vulnerabilities that were not detected in the original audit reports.
 
-These results collectively establish that general-purpose LLMs can identify security issues in smart contracts but lack the precision needed for production use without additional grounding mechanisms.
+However, the multi-agent approach inherits the fundamental limitation of prompt-based systems: the model's reasoning is constrained by its pre-trained knowledge and the information available in the prompt. Complex logic vulnerabilities that require understanding of protocol-wide invariants or cross-contract interactions remain difficult to detect without additional grounding mechanisms.
 
 \subsection{Fine-Tuned Models}
 \label{subsec:fine-tuned}
 
-Fine-tuning domain-specific models on labeled vulnerability datasets produces substantially stronger results than prompting alone.
+Fine-tuning domain-specific models on labeled vulnerability datasets produces substantially stronger results than prompting alone, because the model's weights are directly adapted to recognize patterns in smart contract code.
 
-% \textbf{iAudit}~\cite{ma2025iaudit} introduced a two-stage fine-tuning pipeline: a Detector model for binary vulnerability classification and a Reasoner model for generating human-readable explanations.  These are complemented by Ranker and Critic LLM agents that iteratively debate and refine the outputs, outperforming baselines including CodeBERT, GraphCodeBERT, CodeT5, and UniXcoder.
+LLMBugScanner~\cite{yuan2025large} addresses a key limitation of single-model fine-tuning: no individual model excels at detecting all vulnerability types equally. The system combines multiple LoRA-fine-tuned models. Each of them is specialized through different base architectures and training data into an ensemble that aggregates their predictions through weighted voting.
 
-% \textbf{Smart-LLaMA-DPO}~\cite{yu2025smartllama} applies three-stage training to LLaMA-3.1-8B: continual pre-training on smart contract code, supervised fine-tuning, then Direct Preference Optimisation using paired quality explanations.  The result surpasses GPT-4o (accuracy 58.91\%) and iAudit (accuracy 64.42\%) with improvements of +10.43\% in F1 and +7.87\% in accuracy over the previous state of the art.
+The weighted voting mechanism is critical: rather than treating all models equally, LLMBugScanner learns confidence weights that reflect each model's reliability on different vulnerability categories. This means that the ensemble can route trust to the most competent model for each specific detection task. The approach demonstrated improved detection accuracy over individual fine-tuned models, confirming that diversity among detectors is as valuable as the quality of any single detector.
 
-% Bu et al.~\cite{bu2025dapp} fine-tuned Llama3-8B on 4,998 real DApp contracts with full-parameter fine-tuning and random oversampling, reaching F1~=~0.83 and precision~0.97 for price manipulation vulnerabilities---up from F1~=~0.20 without fine-tuning.
+The trade-off is deployment complexity. Maintaining, synchronizing, and running inference across multiple fine-tuned adapters requires careful engineering, and the ensemble's latency scales linearly with the number of constituent models. For production deployment, this creates a tension between detection quality and operational simplicity that single-model approaches do not face.
 
-\textbf{LLMBugScanner}~\cite{yuan2025large} takes an ensemble approach, combining multiple LoRA-fine-tuned models from the OpenCode leaderboard through weighted voting.  This reduces the impact of individual model weaknesses, but introduces complexity in deployment.
-
-\subsection{RAG-Augmented Detection Frameworks}
+\subsection{RAG-Augmented Frameworks}
 \label{subsec:rag-augmented}
 
-Retrieval-Augmented Generation (RAG) addresses a fundamental limitation of LLMs: they cannot ``know'' about vulnerability patterns not present in their training data, and their fixed context windows may be insufficient for analyzing entire protocols.  By retrieving relevant external knowledge at inference time, RAG frameworks augment the model's capabilities without retraining.
+ParaVul~\cite{huang2025paravul} represents the most architecturally sophisticated approach in this category. Its key design decision is to run fine-tuning and retrieval \emph{in parallel} rather than sequentially. One branch uses a SLoRA-fine-tuned LLaMA-13B as a pattern-matching detector that has learned vulnerability signatures from labeled training data. The other branch uses a hybrid RAG detector that combines two complementary retrieval strategies: dense embedding retrieval, which captures semantic similarity, and BM25 (Best Matching) lexical matching, which catches exact keyword and identifier matches that embedding models sometimes miss. The outputs of both branches are fused through a meta-learning gated verification module --- how much to trust the fine-tuned detector versus the retrieval-augmented detector.
 
-\textbf{ParaVul}~\cite{huang2025paravul} represents the most architecturally sophisticated approach.  It runs a SLoRA-fine-tuned LLaMA-13B detector and a hybrid RAG detector (combining dense embedding retrieval with BM25 lexical matching) in parallel, fusing their outputs through a meta-learning gated verification module.  The system achieves F1 scores of 0.9398 (single-label) and 0.9330 (multi-label), outperforming both standalone fine-tuning and standalone retrieval.  A final stage generates vulnerability reports using chain-of-thought prompts fed to a cloud-based LLM.
-
-% \textbf{SmartLLM}~\cite{smartllm2025} combines RAG with fine-tuned LLaMA~3.1, integrating ERC documentation for domain context.  It achieves 100\% recall with 62.5\% precision (F1~=~76.9\%), demonstrating how retrieval of standard documentation can reduce false negatives.
-
-
-% The most comprehensive framework is \textbf{LLM-BSCVM}~\cite{llmbscvm2025}, which implements a full vulnerability management lifecycle using a ``Decompose-Retrieve-Generate'' pipeline with multi-agent collaboration and LoRA-fine-tuned CodeLlama-13B, achieving 91\% accuracy with a 5.1\% false positive rate.
-
-Although not specifically targeting smart contracts, ReVul-CoT~\cite{chen2025revulcot} demonstrates the effectiveness of the RAG+CoT paradigm for general software vulnerability severity assessment. Using retrieval from NVD and CWE databases combined with structured chain-of-thought reasoning, it achieved 87.50\% accuracy and 83.75\% Macro-F1 on 12{,}070 vulnerability records --- improvements exceeding 10 percentage points over all baselines. This architecture provides a transferable blueprint for smart contract severity assessment.
+This parallel design achieved F1 scores of 0.9398 (single-label) and 0.9330 (multi-label), outperforming both standalone fine-tuning and standalone retrieval. The result demonstrates that the two approaches are complementary rather than redundant. The final stage generates human-readable vulnerability reports by feeding chain-of-thought prompts to a cloud-based LLM, grounded in the detection results from both branches.
 
 \section{Challenges and Limitations}
 \label{sec:llm-challenges}
 
-Despite rapid progress, LLM-based smart contract auditing faces fundamental challenges that constrain its reliability in production settings.
- 
- 
-\subsection*{Hallucinations}
-LLMs can produce plausible-sounding but factually incorrect outputs ---~\emph{hallucination}. In code generation, this manifests as references to non-existent libraries, fabricated API calls, and invented vulnerability reports. Spracklen et al.~\cite{spracklen2025} tested 16~LLMs generating 576,000~code samples and found that 19.7\% of the 2.23~million referenced packages were hallucinated, creating a direct supply-chain attack vector.
+The results surveyed above are promising, but several fundamental challenges constrain the reliability of LLM-based auditing in production settings.
 
-% Pearce et al.~\cite{pearce2022asleep} found that approximately 40\% of GitHub Copilot's code completions contained vulnerabilities, while Perry et al.~\cite{perry2023users} demonstrated that users with AI coding assistant access wrote significantly less secure code while being more confident in its correctness---a dangerous combination of automation bias and misplaced trust.
- 
-% In the smart contract domain specifically, Chen et al.~\cite{chen2024chatgpt} identified several hallucination patterns: the model assumes protective code exists when it does not (``Protected Mechanism Bias''), assumes developers followed best practices (``Development Intent Bias''), and misinterprets Solidity-specific constructs like \texttt{msg.value}. The primary mitigation is to require \emph{grounded evidence} for every finding---each reported vulnerability should reference specific code locations, static analysis outputs, or retrieved documentation rather than relying on the model's unsupported assertions.
- 
- 
-\subsection*{Context Window Limitations}
-Even with context windows reaching hundreds of thousands of tokens, real smart contract systems can exceed what is reasonable to include in a single prompt. Imported libraries, interface definitions, deployment configurations, and cross-contract dependencies all consume the token budget. Moreover, models have a fixed training cutoff: new vulnerability classes and evolving best practices emerge continuously but are absent from the model's parametric knowledge. RAG partially addresses both issues by retrieving up-to-date, task-relevant information at inference time and by focusing the prompt on high-signal content~\cite{lewis2021}.
- 
- 
-\subsection*{Security}
-When LLM agents can call external tools --- compilers, static analyzers, blockchain RPCs --- additional safety concerns arise. Prompt injection attacks embedded in retrieved documents or source code comments could manipulate the agent's behavior, causing it to suppress genuine findings or fabricate false ones. Unrestricted tool access could enable unintended actions such as deploying contracts or initiating transactions. These risks require careful sandboxing of tool execution, input sanitization of retrieved content, and human-in-the-loop confirmation for any actions with on-chain consequences.
- 
+\subsubsection*{Hallucination}
+LLMs can generate plausible-sounding but factually incorrect outputs --- \emph{hallucination}. In code-related tasks, this manifests as references to non-existent libraries, fabricated API calls, and invented vulnerability reports. Spracklen et al.~\cite{spracklen2025} tested 16 LLMs generating 576{,}000 code samples and found that 19.7\% of the 2.23 million referenced packages were hallucinated. They did not exist in any package registry. This is not merely an inconvenience: an attacker could register a package under a hallucinated name and wait for developers or automated pipelines to install it, creating a direct supply-chain attack vector.
+
+In the smart contract domain, hallucination takes domain-specific forms. Models may assume that protective mechanisms (access control checks, reentrancy guards) exist in the code when they do not, dismiss vulnerabilities by inferring that developers followed best practices, or misinterpret the semantics of Solidity-specific constructs. Each of these patterns can produce false negatives --- real vulnerabilities that the model overlooks based on incorrect assumptions about the code.
+
+The most effective mitigation observed across the surveyed systems is \emph{grounding}: requiring every finding to reference specific code locations, static analysis output, or retrieved documentation rather than relying on the model's unsupported assertions.
+
+\subsubsection*{Context Window Limitations}
+Even with context windows reaching hundreds of thousands of tokens, real smart contract systems can exceed what is reasonable to include in a single prompt. Imported libraries, interface definitions, inherited contracts, and cross-contract dependencies consume the token budget.
+
+A separate but related issue is the training cutoff: new vulnerability classes and evolving Solidity language features emerge continuously but are absent from the model's parametric knowledge. RAG partially addresses both issues by retrieving up-to-date, task-relevant information at inference time and by focusing the prompt on the most relevant content rather than the entire codebase.
+
+\subsubsection*{Security}
+When LLM agents can call external tools, additional safety concerns arise. Prompt injection attacks embedded in source code comments or retrieved documents could manipulate the agent's behavior, causing it to suppress genuine findings or fabricate false ones. Unrestricted tool access could enable unintended actions such as deploying contracts or initiating transactions. These risks require careful sandboxing of tool execution, input sanitization of retrieved content, and human-in-the-loop confirmation for any actions with on-chain consequences.
+
 \bigskip
- 
-This chapter traced the mathematical foundations of sequence modeling through the transformer architecture and its modern extensions, covering the training paradigms that turn raw architectures into capable systems and the prompting techniques that steer them at inference time. The survey of LLM applications to smart contract auditing revealed a clear pattern: prompting alone achieves high recall but suffers from poor precision and instability; fine-tuning substantially improves domain-specific performance; and retrieval-augmented approaches offer the most promising path toward reliable, production-grade analysis by grounding model outputs in verified external knowledge.
 
- [TODO]
-% The next chapter examines how these ideas come together in practice. The Wake framework combines static analysis infrastructure --- the kind surveyed in Chapter~\ref{ch:analysis} --- with the LLM-based techniques discussed here, providing an integrated platform for smart contract security that leverages the strengths of both approaches while mitigating their individual limitations.
+This chapter traced the progression from basic sequence modeling through transformer architecture and its training paradigms to the application of LLMs in smart contract security. The central tension that emerges is between capability and reliability. LLMs can reason about the intent of the developer, interpret natural-language specifications, and recognize vulnerability patterns that no rule-based detector would capture --- capabilities that traditional program analysis fundamentally lacks. Yet these same models hallucinate, behave non-deterministically across runs, and cannot guarantee that a security-critical property holds. No existing system resolves this tension in isolation. This observation motivates the architecture proposed in this 
+thesis.
+
+The next chapter introduces the Wake framework --- a static analysis platform for Solidity that provides the infrastructure for integrating LLM-based reasoning with traditional program analysis. 
 
 
 \chapter{The Wake Framework}
@@ -943,8 +944,6 @@ Wake has been used to discover critical vulnerabilities through fuzzing in produ
 
 
 \subsubsection*{Printers}
-\label{subsubsec:wake-printers}
-
 Wake includes special printers that support development and audit workflows:
 
 \begin{itemize}
@@ -954,89 +953,35 @@ Wake includes special printers that support development and audit workflows:
     \item Contract summaries and function signature extraction.
 \end{itemize}
 
-\section {Audit Methodology}
-somne intro how wake help with audit and it is unchangeble tool in this process
+\begin{listing}[!ht]
+\begin{minted}[fontsize=\small,breaklines]{solidity}
+contract Vault {
+    bool public locked;
+    bytes32 private password;
 
-Smart contract auditing has evolved into a specialized discipline that combines elements of traditional software security review with domain-specific knowledge about blockchain systems and economic attack vectors. Unlike conventional software where bugs might cause crashes or data corruption, smart contract vulnerabilities can lead directly to financial losses, often measured in millions of dollars TODO(\cite{some_link/footnote}).
+    constructor(bytes32 _password) {
+        locked = true;
+        password = _password;
+    }
 
-Auditors begin by establishing what the system is supposed to do and identifying potential threat vectors, then systematically examine the implementation through a combination of manual review and automated tools. While human expertise remains central to catching subtle logic bugs and business logic flaws, automation has become increasingly important for handling the scale and complexity of modern DeFi protocols \cite{perez2021smart}. 
+    function unlock(bytes32 _password) public {
+        if (password == _password) {
+            locked = false;
+        }
+    }
+}
+\end{minted}
+\caption{Taken from Ethernaut.}
+\label{lst:vault-08}
+\end{listing}
 
-\subsubsection*{System Overview}
+\begin{figure}[!ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{images/print_storage.jpg}
+    \caption{TODO.}
+    \label{fig:printer}
+\end{figure}
 
-Before any code is examined, the auditor establishes the scope of the 
-engagement: which contracts are in scope, what external protocols they 
-depend on, and what the system is designed to do. This typically produces 
-a high-level map of contract interactions, entry points, and asset flows. 
-Understanding the intended behavior is a prerequisite for high-qualitative and precise audit.
-
-\subsubsection*{Trust Model}
-
-The trust model defines which actors are assumed honest and which may be 
-adversarial. In DeFi protocols this typically means treating all external 
-users as potentially malicious while extending limited trust to governance 
-multi-sigs or privileged roles. Alongside actor assumptions, the auditor 
-documents state invariants that later serve as explicit targets for both manual verification and property-based fuzzing.
-
-\subsubsection*{Manual Code Review}
-
-Manual review remains indispensable because many vulnerabilities are not 
-pattern matches, but failures of business logic that require understanding 
-the intent of the programmer. A typical review proceeds in three phases:
-
-\begin{itemize}
-    \item \textbf{Architectural analysis} - how contracts interact, what 
-    external systems they depend on, and where trust boundaries lie.
-    \item \textbf{Execution path tracing} - walking through critical user 
-    interactions like deposits, withdrawals, liquidations and other, for purpose of looking for missing checks or incorrect ordering 
-    of operations.
-    \item \textbf{Edge case analysis} - boundary values, timing issues, and error handling paths that could leave the system in an inconsistent state.
-\end{itemize}
-
-Human factor is an inherent limitation, that can play a crusial role of the scope is huge. Чтобы обшегчить задачу аудитора, некоторые уязвимости можно предположительно проанализироват ьс помозью интруументов wake, так как они обеспечиваются ситсематичнсоть. 
-
-\subsubsection*{Tool-Based Static Analysis}
-
-Static analysis tools examine code without executing it, flagging known 
-vulnerability patterns across the entire codebase in seconds. Wake framework provides more than 50 static detectors for these purposes.
-
-\subsubsection*{Local Deployment and Testing}
-
-Testing smart contracts in realistic conditions requires deploying them 
-to a local blockchain environment where behavior can be observed without 
-risking real funds. Unit tests verify individual functions in isolation, 
-while integration tests exercise complete workflows such as deposit, 
-borrow, and liquidation sequences. A particularly powerful technique is 
-fork testing: the local chain copies mainnet state at a specific block, 
-allowing the contract under audit to interact with real deployed 
-protocols---actual DEXes, oracles, and tokens---without requiring manual 
-mocks. This also enables forensic reproduction of historical exploits by 
-forking just before a known attack and replaying the attack transaction.
-
-The limitation of any test suite is that coverage depends entirely on 
-which scenarios the test author anticipated. Attackers deliberately seek 
-the scenarios that were not anticipated, which motivates the use of 
-automated input generation through fuzzing.
-
-\subsubsection*{Fuzz Testing}
-
-Fuzzing automatically generates large numbers of inputs to explore 
-program behavior beyond what manually written tests cover. 
-Property-based fuzzers such as Echidna and Foundry's fuzzer go further: 
-the auditor specifies invariants that must hold under all conditions, and 
-the fuzzer attempts to find any sequence of transactions that violates 
-them. Stateful fuzzing maintains contract state across a sequence of 
-calls, which is essential for catching vulnerabilities that only emerge 
-through specific multi-step interactions---a class of bug that neither 
-static analysis nor unit tests reliably detect.
-
-The practical limitation is that the fuzzing is probabilistic rather than 
-exhaustive. A bug requiring a highly specific state setup may never be 
-triggered within a feasible run budget, and writing effective invariant 
-specifications requires the same domain expertise as manual review. In 
-practice, fuzzing therefore complements rather than replaces the earlier 
-phases: static analysis provides broad fast coverage, manual review 
-applies contextual reasoning, and fuzzing stress-tests the invariants 
-that both preceding phases identified as critical.
 
 
 \section{Wake-AI}
