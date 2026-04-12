@@ -810,14 +810,14 @@ With these two patterns established, the existing work can be organized into thr
 
 LLM-SmartAudit~\cite{wei2024smartaudit} is a representative example of the multi-agent approach to smart contract auditing. The framework is built on two core principles: role specialization, where each agent focuses on a specific aspect of the audit (contract analysis, vulnerability identification, report generation), and action execution, where agents collaborate through structured assistant--user conversations to iteratively refine their assessments. The system employs a \emph{buffer-of-thought} mechanism --- a dynamic record of insights accumulated throughout the audit process. It allows agents to build on prior reasoning rather than starting each analysis step from scratch.
 
-The authors evaluated LLM-SmartAudit on two datasets: a labeled benchmark of 110 annotated contracts covering ten vulnerability types, and a real-world dataset of 102 projects comprising 6{,}454 contracts. In its buffer-reasoning mode, LLM-SmartAudit outperformed traditional tools like \textit{Mythril}\footnote{\url{https://github.com/ConsenSysDiligence/mythril}}, achieving a recall of 74\%. In particular, the system identified 11 vulnerabilities that were not detected in the original audit reports.
+The authors evaluated LLM-SmartAudit on two datasets: a labeled benchmark of 110 annotated contracts covering 10 vulnerability types, and a real-world dataset of 6{,}454 contracts. In its buffer-reasoning mode, this agent outperformed traditional tools such as Mythril\footnote{\url{https://github.com/ConsenSysDiligence/mythril}}, achieving a recall of 74\%. The system also identified 11 vulnerabilities not detected in the original audit reports.
 
 However, the multi-agent approach inherits the fundamental limitation of prompt-based systems: the model's reasoning is constrained by its pre-trained knowledge and the information available in the prompt. Complex logic vulnerabilities that require understanding of protocol-wide invariants or cross-contract interactions remain difficult to detect without additional grounding mechanisms.
 
 \subsection{Fine-Tuned Models}
 \label{subsec:fine-tuned}
 
-Fine-tuning domain-specific models on labeled vulnerability datasets produces substantially stronger results than prompting alone, because the model's weights are directly adapted to recognize patterns in smart contract code.
+Fine-tuning domain-specific models on labeled vulnerability datasets produces substantially stronger results than prompting alone, as the model's weights are directly adapted to recognize patterns in smart contract code.
 
 LLMBugScanner~\cite{yuan2025large} addresses a key limitation of single-model fine-tuning: no individual model excels at detecting all vulnerability types equally. The system combines multiple LoRA-fine-tuned models. Each of them is specialized through different base architectures and training data into an ensemble that aggregates their predictions through weighted voting.
 
@@ -861,63 +861,52 @@ The next chapter introduces the Wake framework --- a static analysis platform fo
 
 
 \chapter{The Wake Framework}
-\label{chap:wake}
+\label{ch:wake}
 
-This chapter provides a fundamental overview of Wake framework. It focuses on its internal model and analysis workflow. After it, the separate module with AI integration is described with findings of limitations. [TODO]
-
-TODO SOMEWHRE COMPARE TO OTHERS IN TABLE BASED ON SOME METRICS
+This chapter introduces Wake, a framework that provides a suite of analysis tools built on a rich representation of smart contracts. The chapter walks through its internal model and the tools that enable systematic identification of vulnerabilities. Then it describes Wake-AI, which extends this infrastructure with LLM-based reasoning. The chapter concludes by identifying limitations of the current Wake-AI design, which motivates the improvement proposed in this thesis.
 
 \section{Overview}
 \label{sec:wake-overview}
 
-Wake is an open source Python-based development, testing, and security analysis framework specifically designed for Solidity smart contracts~\cite{wake-docs} [TODO how to correctly cite this docs]. Developed by Ackee Blockchain Security\footnote{\url{https://ackee.xyz/}}, Wake addresses the critical need for comprehensive tooling in the blockchain security ecosystem. The framework provides several core capabilities:
+Wake is an open-source Python-based development, testing and security analysis framework specifically designed for Solidity smart contracts~\cite{wake-docs}. Developed by Ackee Blockchain Security\footnote{\url{https://ackee.xyz/}}, Wake addresses the critical need for comprehensive tooling in the blockchain security ecosystem. The framework provides several core capabilities:
 
 \begin{itemize}
     \item \textbf{Testing Framework}: Built on top of \texttt{pytest}\footnote{\url{https://docs.pytest.org/en/stable/}}, Wake enables developers to write unit tests and integration tests for smart contracts using Python's familiar testing idioms.
 
-    \item \textbf{Property-Based Fuzzer}: Wake includes a sophisticated fuzzer supporting both property-based and manually-guided fuzzing strategies to discover edge cases and vulnerabilities through automated input generation.
+    \item \textbf{Property-Based Fuzzer}: Wake includes a fuzzer that supports both property-based and manually-guided fuzzing strategies to discover edge cases and vulnerabilities through automated input generation.
 
-    \item \textbf{Vulnerability Detectors}: The framework ships with built-in detectors for common vulnerability patterns such as reentrancy, integer overflows, and others. These detectors are designed with a low false-positive philosophy to minimize manual investigation overhead during audits.
+    \item \textbf{Vulnerability Detectors}: The framework ships with built-in detectors for common vulnerability patterns such as reentrancy, unsafe ERC-20 calls, and unused constructions. These detectors are designed with a low false-positive philosophy to minimize manual investigation overhead during audits.
 
-    \item \textbf{Printers}: Information extraction tools that generate structured outputs about contract properties, including control flow graphs, inheritance hierarchies, and data dependencies.
+    \item \textbf{Printers}: Information extraction tools that generate structured outputs about contract properties, including control flow graphs, inheritance hierarchies, storage layouts, and data dependencies.
 
     \item \textbf{Development Tools}: Wake integrates with modern development workflows through a Language Server Protocol (LSP) implementation and a Visual Studio Code extension \emph{Solidity (Wake)}\footnote{\url{https://marketplace.visualstudio.com/items?itemName=AckeeBlockchain.tools-for-solidity}}, providing real-time feedback on vulnerabilities and code quality.
 
     \item \textbf{Deployment and Interaction}: Support for mainnet interactions and contract deployments, enabling seamless transition from testing to production.
 \end{itemize}
 
-Wake has been actively used by Ackee Blockchain Security in professional smart contract audits, where it has helped to discover numerous high and critical severity vulnerabilities in protocols such as IPOR Protocol, PWN Protocol, Brahma Console, and Lido Community Staking Module.
-
+Wake has been actively used by Ackee Blockchain Security in professional smart contract audits, where it has helped discover numerous high and critical severity vulnerabilities in protocols such as IPOR Protocol, PWN Protocol, Brahma Console, and Lido Community Staking Module.
 
 \section{Internal Model}
 \label{sec:wake-internal-model}
 
-Wake constructs a rich internal representation of Solidity smart contracts that serves as the foundation for all analysis capabilities. Due to Wake build based on different code analysis techniques, all its components were described in Chapter \ref{ch:code-analysis}.
+Wake constructs a rich internal representation of Solidity smart contracts that serves as the foundation for all analysis capabilities. The representations described below build directly on the program analysis techniques discussed in Chapter~\ref{ch:code-analysis}.
 
 \subsubsection*{Intermediate Representation}
-\label{subsubsec:wake-ir}
-
-At the core of Wake's analysis capabilities lies a typed intermediate representation derived from the Solidity compiler's Abstract Syntax Tree. The IR provides a structured view of the source code, representing all language constructs. The IR preserves type information and cross-references between declarations and their usages, enabling precise semantic analysis. Each IR node maintains references to its parents and children, facilitating traversal in any direction.
+At the core of Wake's analysis capabilities lies a typed intermediate representation derived from the Solidity compiler's Abstract Syntax Tree. The IR provides a structured view of the source code, representing all language constructs while preserving type information and cross-references between declarations and their usages. This enables precise semantic analysis: each IR node maintains references to its parents and children, facilitating traversal in any direction.
 
 \subsubsection*{Control Flow Graph}
-\label{subsubsec:wake-cfg}
-
 Wake constructs CFGs for functions and modifiers, representing the possible execution paths through the code. It provides utility functions for reachability analysis, such as determining whether the start node is reachable from a given position (backward reachability), or whether the success/revert end nodes are reachable from a statement (forward reachability). These primitives are essential for detecting issues such as dead code or functions that always revert.
 
 \subsubsection*{Data Dependency Graph}
-\label{subsubsec:wake-ddg}
-
-The DDG is one of Wake's most sophisticated analysis structures, tracking how data flows through the contract. It automatically expands composite types (structs, arrays, mappings) to track data flow at the member/element level. For example, when a struct is assigned, the DDG creates edges not only for the struct itself but also for each of its members recursively.
+The DDG is one of Wake's most sophisticated analysis structures, tracking how data flows through the contract. It automatically expands composite types (structs, arrays, mappings) to track data flow at the member/element level.
 
 \section{Analysis Instruments}
 \label{sec:wake-analysis}
 
-Building upon the internal model, Wake provides a comprehensive infrastructure for implementing various analysis techniques.
+Building upon the internal model, Wake provides the infrastructure for implementing various analysis techniques.
 
 \subsubsection*{Detectors}
-\label{subsubsec:wake-detectors}
-
-Wake's static analysis framework enables the implementation of custom vulnerability detectors. It already covers patterns like reentrancy, unsafe ERC-20 call, unused constructions and many others\footnote{\url{https://ackee.xyz/wake/docs/latest/static-analysis/using-detectors/}}. Each detector is a Python class that:
+Wake's static analysis framework enables the implementation of custom vulnerability detectors. It already covers patterns like reentrancy, unsafe ERC-20 calls, unused constructions, and many others\footnote{\url{https://ackee.xyz/wake/docs/latest/static-analysis/using-detectors/}}. Each detector is a Python class that:
 
 \begin{enumerate}
     \item Receives access to the compiled IR and associated graphs (CFG, DDG).
@@ -926,13 +915,9 @@ Wake's static analysis framework enables the implementation of custom vulnerabil
 \end{enumerate}
 
 \subsubsection*{Fuzz Testing}
-\label{subsubsec:wake-fuzzing}
-
 Complementing static analysis, Wake provides robust support for dynamic testing and fuzzing:
 
 \begin{itemize}
-    \item \textbf{pytest Integration}: Tests are written as standard Python functions using pytest fixtures and assertions, lowering the barrier for developers familiar with Python testing.
-
     \item \textbf{Property-Based Fuzzing}: Wake's fuzzer generates diverse inputs to test invariants and properties, automatically exploring edge cases that manual testing might miss.
 
     \item \textbf{Stateful Fuzzing}: Support for fuzzing that maintains state across operations, essential for testing complex DeFi protocols with multi-step interactions.
@@ -940,18 +925,10 @@ Complementing static analysis, Wake provides robust support for dynamic testing 
     \item \textbf{Shrinking}: When the fuzzer finds a failing input, it attempts to minimize the input to the smallest case that still reproduces the failure, simplifying debugging.
 \end{itemize}
 
-Wake has been used to discover critical vulnerabilities through fuzzing in production protocols. The framework's test collection ``Awesome Wake Tests''~\cite{awesome-wake-tests} provides reference implementations demonstrating effective fuzzing strategies.
-
-
 \subsubsection*{Printers}
-Wake includes special printers that support development and audit workflows:
+Wake includes printers that support development and audit workflows by extracting structured information from the compiled IR: contract cross-reference graphs showing relationships between contracts, data dependency graph visualization using Graphviz\footnote{\url{https://graphviz.org/}}, contract size estimation for gas deployment optimization, and function signature extraction.
 
-\begin{itemize}
-    \item Contract cross-reference graphs showing relationships between contracts.
-    \item Data dependency graph visualization using Graphviz.
-    \item Contract size estimation for gas deployment optimization.
-    \item Contract summaries and function signature extraction.
-\end{itemize}
+To illustrate how printers expose information that is not immediately obvious from the source code, consider the following contract from Ethernaut\footnote{\url{https://ethernaut.openzeppelin.com/}} Level~8:
 
 \begin{listing}[!ht]
 \begin{minted}[fontsize=\small,breaklines]{solidity}
@@ -971,60 +948,64 @@ contract Vault {
     }
 }
 \end{minted}
-\caption{Taken from Ethernaut.}
+\caption{\texttt{Vault} contract that guards access with a \texttt{private} password.}
 \label{lst:vault-08}
 \end{listing}
 
 \begin{figure}[!ht]
     \centering
     \includegraphics[width=0.9\linewidth]{images/print_storage.jpg}
-    \caption{TODO.}
+    \caption{Output of \texttt{wake print storage-layout} for the \texttt{Vault} contract.}
     \label{fig:printer}
 \end{figure}
 
+The \texttt{password} variable is declared \texttt{private}, which prevents other contracts from reading it through the Solidity interface. However, \texttt{private} does not mean secret on a public blockchain --- all contract storage is readable by anyone who knows the storage slot. Wake's \texttt{storage-layout} printer makes this immediately visible.
 
+As shown in Figure~\ref{fig:printer}, the printer outputs the exact storage slot, offset, type, and owning contract for each state variable. An attacker who knows the contract's address can call \texttt{eth\_getStorageAt(address, 1)} to retrieve the password in plain text and unlock the vault. This example demonstrates the value of printers as an audit aid: they surface structural facts about the contract that a manual code review might overlook, particularly in larger contracts where the storage layout is not immediately obvious from the source.
 
 \section{Wake-AI}
 \label{sec:wake-ai}
 
-With fast developing of technologies, growing LLM capabilities and often their usage in practice, as we were able notice in Chapter \ref{ch:llm}, LLMs are integrated into Wake as special separate tool aimed to comprehensive AI audit of smart contracts. [TODO add a few sentences]
+\begin{tcolorbox}[colback=gray!10, colframe=gray!40, boxrule=0.5pt]
+While writing this thesis, Wake-AI is a part of wake-private, because it is in consistent development, so some details can not be disclosed here.
+\end{tcolorbox}
+
+As LLM capabilities have matured, their integration into development and security workflows has become increasingly practical. Building on the trends surveyed in Chapter~\ref{ch:llm}, Wake extends its static analysis infrastructure with an AI-powered auditing module called Wake-AI. This module orchestrates LLM-based reasoning through a structured, multi-stage workflow that leverages Wake's internal model to ground the AI's analysis in concrete program facts.
 
 \subsection{Architecture}
 \label{subsec:wake-ai-architecture}
 
-Wake-AI extends the Wake framework with artificial intelligence capabilities for automated security auditing. It implements a multi-stage workflow architecture where each stage performs a specific analysis task. The system orchestrates AI models through structured sessions:
+Wake-AI implements a multi-stage workflow where each stage performs a specific analysis task. The system orchestrates LLM interactions through structured sessions:
 
 \begin{itemize}
-    \item \textbf{Session Management}: Wake-AI supports multiple AI backends [TODO not BEs, it should be called correctly], including Claude and OpenAI Codex models. Sessions maintain conversation context and can be forked for parallel processing.
+    \item \textbf{Session Management}: Wake-AI supports multiple LLM providers, including Anthropic (Claude) and OpenAI (GPT) models. Sessions maintain conversation context across stages and can be forked for parallel processing of independent analysis tasks.
 
-    \item \textbf{Prompt-Based Reasoning and Validation}: [TODO describe correctly] important note, that it consists of different prompt-templates for each stage, that smart contract is going through such as discovery, triage, deduplication and other. Each issue is validated with high reasoning effort. 
+    \item \textbf{Multi-Stage Prompt Pipeline}: The audit proceeds through a sequence of stages, each driven by a dedicated prompt template.
 
-    \item \textbf{MCP Integration}: Wake exposes its analysis capabilities as Model Context Protocol (MCP) tools, allowing AI models to query the IR, retrieve function signatures, access CFG information, and invoke static analysis detectors during their reasoning process.
+    \item \textbf{MCP Integration}: Wake exposes its analysis capabilities as Model Context Protocol (MCP) tools, allowing the LLM to query them. This means that the model does not rely solely on the source code visible in its context window. It can actively request structural information from Wake's internal model.
 
-    \item \textbf{Working Directory}: Each audit maintains a structured working directory containing intermediate results, allowing workflow resumption and result inspection.
+    \item \textbf{Working Directory}: Each audit maintains a structured working directory containing intermediate results from every stage, allowing workflow resumption after interruption and manual inspection of the reasoning at any point.
 
-    \item \textbf{Progress Tracking}: The framework provides real-time progress updates and token usage tracking for cost management.
+    \item \textbf{Cost Tracking}: The framework provides real-time progress updates and token usage tracking, enabling cost management when using commercial LLM APIs.
 \end{itemize}
-
-[TODO reasonable and smeeth transition to limitations]
-
 
 \subsection{Limitations}
 \label{subsec:wake-ai-limitations}
 
-Despite its capabilities, Wake-AI faces several limitations [TODO add smth also ]:
+Despite the structured workflow and MCP-based grounding, Wake-AI inherits fundamental limitations from the underlying LLMs it relies on:
 
 \begin{itemize}
-    \item \textbf{Context Window Constraints}: LLMs have limited context windows, restricting the amount of code and analysis data that can be processed simultaneously. Large codebases may require chunking strategies that could miss cross-file vulnerabilities.
+    \item \textbf{Context Window Constraints}: LLMs have limited context windows, restricting the amount of code and analysis data that can be processed simultaneously. Large codebases may require chunking strategies that could miss cross-file vulnerabilities or protocol-wide invariants that span multiple contracts.
 
-    \item \textbf{Hallucination Risk}: AI models may generate plausible, but incorrect vulnerability reports. The triage phase mitigates this through evidence requirements, but some false positives may persist.
+    \item \textbf{Hallucination Risk}: AI models may generate plausible but incorrect vulnerability reports. The triage phase mitigates this through evidence requirements, but some false positives persist.
 
-    \item \textbf{Determinism}: AI model outputs are inherently non-deterministic, potentially producing different findings on repeated runs of the same codebase.
+    \item \textbf{Non-Determinism}: LLM outputs are inherently non-deterministic, potentially producing different findings on repeated runs of the same codebase. This complicates reproducibility and makes it difficult to track whether a vulnerability was introduced or resolved between code revisions.
 
-    \item \textbf{Knowledge Cutoff}: Models may lack awareness of recently discovered vulnerability patterns or new Solidity language features introduced after their training data cutoff.
+    \item \textbf{Knowledge Cutoff}: Models lack awareness of vulnerability patterns disclosed after their training data cutoff. A model trained before a novel exploit type was publicly documented cannot recognize instances of that pattern, regardless of how capable it is within its training distribution.
 \end{itemize}
 
-Some of these limitations merit attention and can be addressed through alternative approaches. Others, such as hallucination risk and non-determinism, cannot be fully resolved due to the inherent nature of LLMs. This thesis focuses on one of the most critical limitations: \emph{knowledge cutoff}. The following chapter presents a proposed solution designed to increase the detection of genuine security issues while reducing false positives. This is achieved by providing the LLM with similar historical issues, enabling it to make more informed judgments about vulnerabilities.
+Some of these limitations are intrinsic to the nature of LLMs and cannot be fully eliminated --- hallucination and non-determinism are properties of probabilistic sequence models that no architectural change can remove entirely. However, others can be meaningfully addressed. This thesis focuses on the \emph{knowledge cutoff} limitation: the inability of the model to reason about vulnerability patterns it has never seen during training. The following chapter presents a retrieval-augmented methodology designed to close this gap by providing the LLM with semantically similar historical vulnerability reports at inference time, enabling it to make more informed judgements about the code under analysis.
+
 
 \chapter{Proposed Methodology}
 \label{ch:methodology}
