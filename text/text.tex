@@ -1196,7 +1196,7 @@ An alternative approach is to extend a general-purpose relational database with 
     \label{fig:erd}
 \end{figure}
 
-The schema, illustrated in the entity-relationship diagram in Figure~\ref{fig:erd}, comprises six tables organized into two logical groups. The \emph{knowledge base} group consists of three tables: \texttt{findings} stores the core entries with their metadata, preprocessed content, and code blocks; \texttt{finding\_embeddings} stores vector embeddings linked to findings via a foreign key, supporting multiple embedding models and content modes (text or code) through dedicated columns; and \texttt{finding\_chunks} stores token-level chunks of findings for the chunked retrieval strategy. The \emph{evaluation} group contains: \texttt{evaluation\_cases}, which holds structured test inputs with ground-truth labels and reference answers; \texttt{experiments}, which records each evaluation run together with a frozen configuration snapshot and git commit hash for reproducibility; and \texttt{evaluation\_results}, which links individual metric scores back to their experiment and case.
+The schema, illustrated in the entity-relationship diagram in Figure~\ref{fig:erd}, comprises six tables organized into two logical groups. The \emph{knowledge base} group consists of three tables: \texttt{findings} stores the core entries with their metadata, preprocessed content, and code blocks; \texttt{finding\_embeddings} stores vector embeddings linked to findings via a foreign key, supporting multiple embedding models and content modes (text or code) through dedicated columns; and \texttt{finding\_chunks} stores token-level chunks of findings for the chunked retrieval strategy. The \emph{evaluation} group contains: \texttt{evaluation\_cases}, which holds structured test inputs with ground-truth labels and reference answers; \texttt{experiments}, which records each evaluation run together with a frozen configuration snapshot and git commit hash for reproducibility; and the last \texttt{evaluation\_results} table, which links individual metric scores back to their experiment and case.
 
 \paragraph{HNSW indexes.}
 The exact nearest-neighbor search over vectors requires computing the distance to every row in the table --- a linear scan that becomes prohibitively slow as the dataset grows. The approximate nearest-neighbor indexes trade a small amount of recall for dramatically lower query latency. Among the available ANN algorithms, Hierarchical Navigable Small World (HNSW) graphs~\cite{malkov2018} offer a strong balance between recall, speed, and incremental insertability. HNSW constructs a multi-layer graph in which each layer is a navigable small-world network: the top layers contain few, widely connected nodes for coarse navigation, while the bottom layer connects all nodes for fine-grained search. A query traverses the graph greedily from the top layer downward, narrowing the candidate set at each level.
@@ -1217,7 +1217,7 @@ The textual summary is embedded using \textbf{nomic-embed-text-v1.5}~\cite{nussb
 
 Code blocks are embedded using \textbf{CodeRankEmbed}~\cite{suresh2025rank}, a 768-dimensional model trained specifically for code search. It uses the prefix \texttt{"Represent this query for searching relevant code: "} for query embedding. Code embeddings enable retrieval where the query is a Solidity code snippet, directly matching structural code patterns across findings.
 
-This dual-modality approach allows the retrieval pipeline to match queries against both the semantic description and the actual code of historical findings. The choice between text and code retrieval or a combination of both. This evaluation of configurations is explored in the Chapter~\ref{ch:evaluation}.
+This dual-modality approach allows the retrieval pipeline to match queries against both the semantic description and the actual code of historical findings. The choice between text and code retrieval or a combination of both. This evaluation of configurations is explored in Chapter~\ref{ch:evaluation}.
 
 
 \section{Retrieval Pipeline}
@@ -1310,7 +1310,7 @@ This chapter presented the design of a RAG-augmented smart contract auditing met
 \chapter{Evaluation}
 \label{ch:evaluation}
 
-This chapter evaluates the RAG-augmented auditing system described in Chapter~\ref{ch:methodology}. It defines the research questions, describes the evaluation datasets, specifies the metrics for both retrieval and generation quality, presents the experimental setup, reports the results of four experiment suites, and discusses threats to validity.
+This chapter evaluates the RAG-augmented auditing system proposed in Chapter~\ref{ch:methodology}. It begins with the research questions that guide the evaluation, followed by a description of the datasets and metrics used to assess both retrieval and detection quality. Then presents the experimental setup, reports the results in four experiment suites, and concludes with a discussion of threats to validity.
 
 \begin{tcolorbox}[colback=gray!10, colframe=gray!40, boxrule=0.5pt]
 This thesis uses GPT-5.1 from OpenAI, accessed via a paid API. Because querying such models incurs non-trivial cost (\$1.25 per 1M input tokens, \$10 per 1M output tokens), the experimental setup was designed to balance thoroughness with cost efficiency.
@@ -1323,15 +1323,14 @@ This thesis uses GPT-5.1 from OpenAI, accessed via a paid API. Because querying 
 The evaluation is structured around five research questions:
 
 \begin{description}
-    \item[RQ1: Retrieval effectiveness.] How effectively does the retrieval pipeline surface relevant historical findings for a given vulnerability query? Five query strategies are compared---description-based, code-based, description with label, hybrid BM25, and chunked retrieval---each with and without cross-encoder re-ranking.
+    \item[RQ1: Retrieval effectiveness.] How effectively does the retrieval pipeline surface relevant historical findings for a given vulnerability query?
 
-    \item[RQ2: RAG vs.\ LLM-only detection.] Does augmenting the LLM with retrieved findings improve its ability to correctly classify vulnerabilities compared to using the LLM alone? This is measured by running the same set of real-world findings through both a RAG-augmented pipeline and an LLM-only baseline.
+    \item[RQ2: RAG vs.\ LLM-only detection.] Does augmenting the LLM with retrieved findings improve its ability to correctly classify vulnerabilities compared to using the LLM alone?
 
-    \item[RQ3: Groundedness and reasoning quality.] Are the LLM's explanations faithful to the retrieved evidence? This question evaluates whether RAG reduces hallucinated vulnerability reports by measuring faithfulness and context utilisation scores.
+    \item[RQ3: Groundedness and reasoning quality.] Are the LLM's explanations faithful to the retrieved evidence?
+    % This question evaluates whether RAG reduces hallucinated vulnerability reports by measuring faithfulness and context utilization scores.
 
-    \item[RQ4: Component contributions.] What is the individual contribution of each pipeline component---re-ranking, BM25 fusion, chunked retrieval? Ablation experiments isolate each component's effect on retrieval and generation quality.
-
-    \item[RQ5: Real-world applicability.] Can the system discover real vulnerabilities from full smart contracts in a realistic audit scenario? This is evaluated through whole-contract review on a curated dataset and through integration with the Wake static analyser.
+    \item[RQ4: Real-world applicability.] Can the system discover real vulnerabilities from full smart contracts in a realistic audit scenario?
 \end{description}
 
 
@@ -1348,22 +1347,22 @@ The knowledge base described in Section~\ref{sec:knowledge-base} contains 16{,}7
 \begin{itemize}
     \item \textbf{Text embeddings:} 16{,}780 vectors from preprocessed keyword-rich summaries (nomic-embed-text-v1.5, 768-dimensional).
     \item \textbf{Code embeddings:} 27{,}222 vectors from individual extracted code blocks (CodeRankEmbed, 768-dimensional).
-    \item \textbf{Chunk embeddings:} 152{,}869 vectors from overlapping 512-character windows over the raw finding content (nomic-embed-text-v1.5, 768-dimensional), with 128-character overlap producing approximately 9~chunks per finding.
+    \item \textbf{Chunk embeddings:} 152{,}869 vectors from 512-character overlapping windows over the raw finding content (nomic-embed-text-v1.5), with 128-character overlap producing approximately 9~chunks per finding.
 \end{itemize}
 
-The chunk embeddings provide a fine-grained alternative to summary-level embeddings: rather than matching against a single summary vector per finding, chunked retrieval matches against multiple overlapping windows of the original text, potentially capturing details lost during summarisation.
+The chunk embeddings provide a fine-grained alternative to summary-level embeddings: rather than matching against a single summary vector per finding, chunked retrieval matches against multiple overlapping windows of the original text, potentially capturing details lost during summarization.
 
 \subsection{RAG Evaluation Dataset}
 \label{subsec:eval-cases}
 
-No established benchmark exists for evaluating RAG-augmented smart contract vulnerability detection. To address this gap, 40~evaluation cases were manually constructed to cover a representative distribution of vulnerability types and difficulty levels. Each case consists of:
+There is no established benchmark for evaluating RAG-augmented smart contract vulnerability detection. To address this gap, 40~evaluation cases were manually constructed to cover a representative distribution of vulnerability types and difficulty levels. Each case consists of:
 
 \begin{itemize}
-    \item \textbf{Solidity code} --- a function-level code snippet that demonstrates (or does not exhibit) a specific vulnerability.
-    \item \textbf{Issue description} --- a natural-language description of the suspected vulnerability.
-    \item \textbf{Label} --- the vulnerability category from the predefined taxonomy.
-    \item \textbf{Expected verdict} --- ground-truth classification: \texttt{VULNERABLE} (28 cases) or \texttt{SAFE} (12 cases).
-    \item \textbf{Reference answer} --- an expert-written explanation for answer correctness evaluation.
+    \item \textbf{Solidity code} --- a function-level code snippet that demonstrates (or does not exhibit) a specific vulnerability;
+    \item \textbf{Issue description} --- a natural-language description of the suspected vulnerability;
+    \item \textbf{Label} --- the vulnerability category from the predefined taxonomy;
+    \item \textbf{Expected verdict} --- ground-truth classification: \texttt{VULNERABLE} (28 cases) or \texttt{SAFE} (12 cases);
+    \item \textbf{Reference answer} --- an expert-written explanation for answer correctness evaluation;
 \end{itemize}
 
 \begin{listing}[!ht]
@@ -1379,25 +1378,23 @@ No established benchmark exists for evaluating RAG-augmented smart contract vuln
         _mint(msg.sender, newTokenId);
     }",
   "issue_description": "The split function calls
-  _requireOwned(tokenId) to check the token
-  exists but never compares the returned owner to msg.sender. Any
-  caller can pass another
-  user's tokenId, split off a fraction of their locked value into a
-  new NFT minted to the
-  attacker, effectively stealing vested tokens.",
+    _requireOwned(tokenId) to check the token exists but never 
+    compares the returned owner to msg.sender. Any caller can pass 
+    another user's tokenId, split off a fraction of their locked 
+    value into a new NFT minted to the attacker, effectively 
+    stealing vested tokens.",
   "label": "Access control",
-  "expected_verdict": "vulnerable",
+  "expected_verdict": "VULNERABLE",
   "reference_answer": "Missing ownership check -- _requireOwned
-  verifies existence but the
-  function never validates msg.sender is the actual owner of tokenId."
+    verifies existence but the function never validates msg.sender 
+    is the actual owner of tokenId."
 }
 \end{minted}
 \caption{An evaluation case for an access control vulnerability in a token splitting function.}
 \label{lst:example_case}
 \end{listing}
 
-Listing~\ref{lst:example_case} shows a representative evaluation case. The cases range from straightforward single-function vulnerabilities to sophisticated multi-step attack patterns. The 12~safe cases were constructed as variants of vulnerable cases with the bug fixed (e.g., adding an ownership check to the function above), testing whether the system can distinguish patched from unpatched code.
-
+The list~\ref{lst:example_case} shows a representative evaluation case. The cases range from straightforward single-function vulnerabilities to sophisticated multi-step attack patterns. The 12~safe cases were constructed as variants of vulnerable cases with the bug fixed, testing whether the system can distinguish patched code from unpatched.
 
 \subsection{Golden Dataset}
 \label{subsec:golden-dataset}
@@ -1569,7 +1566,7 @@ This section presents four experiment suites, each addressing one or more of the
 \subsection{Suite 1: Retrieval Quality}
 \label{subsec:suite1}
 
-This experiment addresses \textbf{RQ1} (retrieval effectiveness) and\textbf{RQ4} (component contributions) by comparing the five query strategies described in Section~\ref{subsec:query-strategies}, both  in isolation and augmented with cross-encoder re-ranking.
+This experiment addresses \textbf{RQ1} (retrieval effectiveness) by comparing the five query strategies described in Section~\ref{subsec:query-strategies}, both  in isolation and augmented with cross-encoder re-ranking.
 
 \paragraph{Setup.} All 5~strategies are evaluated on 40~evaluation cases with $k{=}5$. Each strategy is run twice: without re-ranking (\texttt{no-rr}) and with cross-encoder re-ranking (\texttt{rr}).
 
@@ -1683,7 +1680,7 @@ Context utilization (0.839) is not applicable for the LLM-only baseline, as no c
 \subsection{Suite 4: Wake-AI Integration}
 \label{subsec:suite4}
 
-This experiment addresses \textbf{RQ5} (real-world applicability) by testing the complete system---Wake-AI with RAG integration---on previously unseen smart contracts from real protocol audits.
+This experiment addresses \textbf{RQ4} (real-world applicability) by testing the complete system---Wake-AI with RAG integration---on previously unseen smart contracts from real protocol audits.
 
 \paragraph{Setup.} Eight protocols are audited using the full Wake-AI pipeline. Each protocol is analysed twice: once with Wake-AI alone and once with the RAG knowledge base enabled via the MCP tool. The comparison counts the number of high-severity vulnerabilities correctly detected out of the known vulnerabilities documented in the original audit reports.
 
