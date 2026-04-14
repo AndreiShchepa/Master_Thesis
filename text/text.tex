@@ -1327,7 +1327,7 @@ The evaluation is structured around four research questions:
 
     \item[RQ2: RAG vs.\ LLM-only detection.] Does augmenting the LLM with retrieved findings improve its ability to correctly classify vulnerabilities compared to using the LLM alone?
 
-    \item[RQ3: Groundedness and reasoning quality.] Are the LLM's explanations faithful to the retrieved evidence?
+    \item[RQ3: Groundedness.] Are the LLM's explanations faithful to the retrieved evidence?
     % This question evaluates whether RAG reduces hallucinated vulnerability reports by measuring faithfulness and context utilization scores.
 
     \item[RQ4: Real-world applicability.] Can the system discover real vulnerabilities from full smart contracts in a realistic audit scenario?
@@ -1466,7 +1466,6 @@ The per-finding judge independently evaluates each retrieved finding for binary 
 \label{subsec:retrieval-metrics}
 
 \subsubsection*{Deterministic Metrics}
-
 When evaluation cases include ground-truth relevant finding identifiers, the following standard information retrieval metrics are computed:
 
 \begin{itemize}
@@ -1497,8 +1496,7 @@ When evaluation cases include ground-truth relevant finding identifiers, the fol
     \end{equation}
 \end{itemize}
 
-\subsubsection*{LLM-Judged Retrieval Metrics}
-
+\subsubsection*{LLM-Judged Metrics}
 These metrics do not require ground-truth annotations and can evaluate retrieval quality on any query:
 
 \begin{itemize}
@@ -1533,17 +1531,15 @@ These metrics do not require ground-truth annotations and can evaluate retrieval
     \item \textbf{Answer Correctness} (LLM-judged). Compares the generated analysis against a reference answer on three criteria: same verdict, same root cause identified, and technically accurate explanation. Available only when reference answers exist.
 \end{itemize}
 
-
 \section{Experiments and Results}
 \label{sec:experiments}
 
-This section presents four experiment suites, each addressing one or more of the research questions defined in Section~\ref{sec:research-questions}. The results are reported with an analysis of their implications for system design.
-
+This section presents four experiment suites, each addressing one of the research questions defined in Section~\ref{sec:research-questions}. The results are reported with an analysis of their implications for system design.
 
 \subsection{Suite 1: Retrieval Quality}
 \label{subsec:suite1}
 
-This experiment addresses \textbf{RQ1} (retrieval effectiveness) by comparing the five query strategies described in Section~\ref{subsec:query-strategies}, both  in isolation and augmented with cross-encoder re-ranking.
+This experiment addresses \textbf{RQ1} (retrieval effectiveness) by comparing the five query strategies described in Section~\ref{subsec:query-strategies}, both  in isolation and augmented with re-ranking.
 
 \paragraph{Setup.} All 5~strategies are evaluated on 40~evaluation cases with $k{=}5$. Each strategy is run twice: without re-ranking (\texttt{no-rr}) and with cross-encoder re-ranking (\texttt{rr}).
 
@@ -1551,7 +1547,8 @@ This experiment addresses \textbf{RQ1} (retrieval effectiveness) by comparing th
 \centering
 \small
 \renewcommand{\arraystretch}{1.3}
-\begin{tabular}{l cc@{\hspace{1.2em}} cc@{\hspace{1.2em}} cc}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{l cc@{\hspace{2em}} cc@{\hspace{2em}} cc}
 \toprule
  & \multicolumn{2}{c}{\textbf{Label Match}} & \multicolumn{2}{c}{\textbf{Ctx.\ Relevance}} & \multicolumn{2}{c}{\textbf{Ctx.\ Precision}} \\
 \midrule
@@ -1560,25 +1557,26 @@ This experiment addresses \textbf{RQ1} (retrieval effectiveness) by comparing th
 description       & 0.505 & 0.455 & 0.728 & 0.689 & 0.409 & 0.459 \\
 code              & 0.309 & 0.214 & 0.433 & 0.493 & 0.282 & 0.341 \\
 description+label & \textbf{0.632} & 0.585 & 0.722 & 0.689 & 0.468 & 0.554 \\
-hybrid+BM25       & 0.586 & 0.582 & \textbf{0.895} & 0.787 & 0.568 & \textbf{0.608} \\
+hybrid+BM25       & 0.586 & 0.582 & \textbf{0.895} & 0.787 & 0.588 & \textbf{0.608} \\
 chunked           & 0.423 & 0.423 & 0.797 & 0.797 & 0.459 & 0.459 \\
 \bottomrule
-\end{tabular}
-\caption{Retrieval quality across 5 strategies and 2 re-ranking settings.}
+\end{tabular}}
+\caption{Retrieval quality.}
 \label{tab:retrieval-results}
 \end{table}
 
-Table~\ref{tab:retrieval-results} reveals several patterns. The \texttt{hybrid+BM25} strategy achieves the highest context relevance (0.895) and context precision (0.608) without re-ranking, confirming that combining dense semantic search with keyword-based BM25 retrieval captures both conceptual similarity and exact terminology matches. The \texttt{description+label} strategy achieves the highest label match ratio (0.632), indicating that appending the vulnerability category to the query helps the embedding model focus on the correct vulnerability class.
+Table~\ref{tab:retrieval-results} reveals several patterns. The \texttt{hybrid+BM25} strategy achieves the highest context relevance (0.895) and context precision (0.608), confirming that combining dense semantic search with keyword-based BM25 retrieval captures both conceptual similarity and exact terminology matches. The \texttt{description+label} strategy achieves the highest label match ratio (0.632), indicating that appending the vulnerability category to the query helps the embedding model focus on the correct vulnerability class.
 
-The \texttt{code} strategy consistently underperforms, with context relevance of only 0.433. This suggests that vulnerability descriptions carry richer semantic information than code snippets alone---a code pattern may appear in many different vulnerability contexts, making it a less discriminative query signal.
+The \texttt{code} strategy consistently underperforms, with a context relevance of only 0.433. This suggests that vulnerability descriptions carry richer semantic information than code snippets alone.
 
-A notable finding is that cross-encoder re-ranking does not consistently improve results. For the best-performing strategy (\texttt{hybrid+BM25}), re-ranking reduces context relevance from 0.895 to 0.787 and tiny improved context precision from 0.568 to 0.608. This is likely because the cross-encoder (ms-marco-MiniLM-L-6-v2) was trained on the MS~MARCO web search dataset, which differs substantially from the smart contract security domain. The model may deprioritize domain-specific relevance signals that the dense retriever captures well. The \texttt{chunked} strategy is unaffected by re-ranking (identical scores), suggesting its candidate set is already well-ordered.
+A notable finding is that cross-encoder re-ranking does not consistently improve results. For the best-performing strategy (\texttt{hybrid+BM25}), re-ranking reduces context relevance from 0.895 to 0.787 and tiny improved context precision from 0.588 to 0.608. It is difficult to determine the certain reason, but the model may deprioritize domain-specific relevance signals that the dense retriever captures well.
 
+The \texttt{chunked} strategy is unaffected by re-ranking (identical scores), suggesting its candidate set is already well-ordered.
 
 \subsection{Suite 2: Generation Quality}
 \label{subsec:suite2}
 
-This experiment addresses \textbf{RQ3} (groundedness and reasoning quality) by running the retrieve, generate, and evaluate parts on the RAG evaluation dataset.
+This experiment addresses \textbf{RQ3} (groundedness) by running the retrieve, generate, and evaluate parts on the RAG evaluation dataset.
 
 \paragraph{Setup.} 40~evaluation cases, \texttt{hybrid+BM25} query strategy, no re-ranking.
 
@@ -1586,80 +1584,78 @@ This experiment addresses \textbf{RQ3} (groundedness and reasoning quality) by r
 \centering
 \small
 \renewcommand{\arraystretch}{1.3}
-\begin{tabular}{lccccc}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} ccccc}
 \toprule
- & \textbf{Verdict} & \multicolumn{4}{c}{\textbf{LLM-Judge Scores (avg)}} \\
+\textbf{Verdict} & \multicolumn{4}{c}{\textbf{LLM-Judge Scores (avg)}} \\
 \midrule
-\textbf{Experiment} & \textbf{Accuracy} & \textbf{Faithful.} & \textbf{Reasoning} & \textbf{Ctx.\ Util.} & \textbf{Ans.\ Corr.} \\
+\textbf{Accuracy} & \textbf{Faithful.} & \textbf{Reasoning} & \textbf{Ctx.\ Util.} & \textbf{Ans.\ Corr.} \\
 \midrule
-Full pipeline & 0.864 & 0.765 & 0.908 & 0.851 & 0.855 \\
+0.864 & 0.765 & 0.908 & 0.851 & 0.855 \\
 \bottomrule
-\end{tabular}
-\caption{End-to-end generation quality on 39 evaluation cases using the \texttt{description} strategy.}
+\end{tabular*}
+\caption{End-to-end generation quality.}
 \label{tab:pipeline-generation-results}
 \end{table}
 
-Table~\ref{tab:pipeline-generation-results} shows strong overall performance on the evaluation dataset. Reasoning quality is the highest-scoring metric (0.908), indicating that the LLM produces well-structured analyses with clear logical chains from evidence to verdict. Verdict accuracy reaches 0.864, meaning the system correctly classifies nearly 9~out of 10 cases when given the vulnerable function and issue description directly.
+Table~\ref{tab:pipeline-generation-results} shows a strong overall performance on the evaluation dataset. Reasoning quality is the highest-scoring metric (0.908), indicating that the LLM produces a well-structured analysis with clear logical chains from evidence to verdict. The verdict accuracy reaches 0.864, which means that the system correctly classifies nearly 9~out of 10 cases when given the vulnerable function and issue description directly.
 
-Context utilisation (0.851) demonstrates that the LLM actively references retrieved findings in its analysis rather than ignoring the provided context. Faithfulness is the lowest metric (0.765), indicating that approximately one quarter of the LLM's claims extend beyond what the retrieved evidence directly supports. This is expected behaviour for a reasoning model: the LLM draws inferences and applies general knowledge alongside the retrieved context, which is desirable for audit analysis but reduces the strict faithfulness score.
+The context utilization (0.851) demonstrates that the LLM actively refers to the retrieved findings in its analysis rather than ignoring the provided context. Faithfulness is the lowest metric (0.765), indicating that approximately one quarter of the LLM's claims extend beyond what the retrieved evidence directly supports. This is expected behavior for a reasoning model: the LLM draws inferences and applies general knowledge alongside the retrieved context, which is desirable for audit analysis, but reduces the strict faithfulness score.
 
-Answer correctness (0.855) confirms that the generated analyses align well with expert-written reference answers, identifying the same root causes and arriving at the same conclusions.
-
+The answer correctness (0.855) confirms that the generated analysis aligns well with the expert-written reference answers, identifying the same root causes and arriving at the same conclusions.
 
 \subsection{Suite 3: RAG vs.\ LLM-Only}
 \label{subsec:suite3}
 
 This experiment directly addresses \textbf{RQ2} (RAG vs.\ LLM-only detection) using the dataset of 40~real-world audit findings. It represents the most challenging and realistic evaluation setting.
 
-\paragraph{Setup.} 40~real-world findings, full contract review (the LLM receives the entire smart contract, not an isolated function), hybrid+BM25 retrieval with $k{=}5$, self-exclusion enabled (the target finding is removed from retrieval results to prevent trivial self-matching).
+\paragraph{Setup.} 40~real-world findings, full contract review, hybrid+BM25 retrieval with $k{=}5$.
 
 \begin{table}[!ht]
 \centering
 \small
-\begin{tabular}{lcccc}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} lcccc}
 \toprule
 \textbf{Metric} & \textbf{Hit Rate@5} & \textbf{MRR} & \textbf{NDCG@5} & \textbf{Label Hit Rate} \\
 \midrule
 hybrid+BM25 & 0.900 & 0.781 & 0.811 & 0.825 \\
 \bottomrule
-\end{tabular}
-\caption{Golden retrieval results using hybrid vector + BM25 search ($k{=}5$).}
+\end{tabular*}
+\caption{Benchmark retrieval results.}
 \label{tab:golden-retrieval-results}
 \end{table}
 
-Table~\ref{tab:golden-retrieval-results} shows that the retrieval pipeline performs strongly on the golden dataset. A Hit Rate@5 of 0.900 means the system retrieves a finding matching the target vulnerability in its top-5 results for 36~out of 40~cases. The MRR of 0.781 indicates the correct finding is typically ranked first or second. Label Hit Rate (0.825) confirms that retrieved findings share the correct vulnerability category in the majority of cases, providing the LLM with contextually appropriate historical precedents.
+Table~\ref{tab:golden-retrieval-results} shows that the retrieval pipeline performs well on the benchmark dataset. A Hit Rate@5 of 0.900 means that the system retrieves a finding matching the target vulnerability in its top-5 results for 36~out of 40~cases. The MRR of 0.781 indicates that the correct finding is typically ranked first or second. The label hit rate (0.825) confirms that the retrieved findings share the correct vulnerability category in the majority cases, providing the LLM with contextually appropriate historical precedents.
 
 \begin{table}[!ht]
 \centering
 \small
 \renewcommand{\arraystretch}{1.3}
-\begin{tabular}{lccccc}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} lcccc}
 \toprule
- & \textbf{Verdict} & \multicolumn{4}{c}{\textbf{LLM-Judge Scores (avg)}} \\
+\textbf{Verdict} & \multicolumn{3}{c}{\textbf{LLM-Judge Scores (avg)}} \\
 \midrule
-\textbf{Mode} & \textbf{Accuracy} & \textbf{Faithful.} & \textbf{Reasoning} & \textbf{Ctx.\ Util.} & \textbf{Ans.\ Corr.} \\
+\textbf{Mode} & \textbf{Accuracy} & \textbf{Faithful.} & \textbf{Reasoning} & \textbf{Ans.\ Corr.} \\
 \midrule
-LLM-only & 0.455 & 0.641 & 0.762 & ---   & 0.493 \\
-RAG-augmented & 0.450 & 0.881 & 0.825 & 0.839 & 0.612 \\
+LLM-only & 0.455 & 0.641 & 0.762   & 0.493 \\
+RAG-augmented & 0.450 & 0.881 & 0.825 & 0.612 \\
 \bottomrule
-\end{tabular}
-\caption{Generation quality comparison between LLM-only and RAG-augmented modes on the golden dataset.}
+\end{tabular*}
+\caption{Generation quality on the benchmark dataset excluding context utilization.}
 \label{tab:golden-generation-results}
 \end{table}
 
-Table~\ref{tab:golden-generation-results} presents the central comparison of this thesis. The most significant finding is that RAG improves faithfulness by 28~percentage points (0.641~$\to$~0.821). When provided with retrieved historical findings, the LLM makes substantially more grounded claims, anchoring its analysis in documented precedents rather than generating plausible but unsupported assertions. Reasoning quality is comparable between the two modes (0.762 vs.\ 0.795), indicating that the LLM produces well-structured analyses regardless of whether context is provided.
+Table~\ref{tab:golden-generation-results} presents the central comparison of this thesis. The most significant finding is that RAG improves faithfulness by 24 percentage points (0.641~$\to$~0.881). When provided with retrieved historical findings, the LLM anchors its analysis in documented precedents rather than generating plausible but unsupported assertions. Reasoning quality improves moderately (0.762 vs.\ 0.825), suggesting that the retrieved context helps the model structure its analysis more coherently. Answer correctness shows a meaningful gain (0.493~$\to$~0.612), indicating that more grounded reasoning translates into more accurate final judgements.
 
-Verdict accuracy is low for both modes (0.275 for LLM-only, 0.250 for RAG-augmented), but this result must be interpreted in the context of the task difficulty. Unlike Suite~2, where the system receives an isolated vulnerable function with a description of the suspected vulnerability, the golden dataset requires whole-contract review: the LLM must first identify which function among potentially dozens is vulnerable, then determine the specific vulnerability type. All 40~cases are real vulnerabilities that required expert human auditors to discover in professional audit engagements. The low verdict accuracy reflects the inherent difficulty of this task rather than a failure of the RAG approach.
+Accuracy is nearly identical between the two modes (0.455 vs.\ 0.450). This must be interpreted in the context of the difficulty of the task. Unlike Suite~2, where the system receives an isolated vulnerable function with a description of the suspected vulnerability, this suite requires whole-contract review: the LLM must first identify which function is vulnerable, then determine the specific vulnerability type. All 40~cases are real vulnerabilities that required expert human auditors to discover in professional engagements. 
 
-Context utilization (0.839) is not applicable for the LLM-only baseline, as no context is provided. The RAG-augmented system actively uses the retrieved findings in its analysis, as evidenced by this score.
-
+The comparable accuracy between modes suggests that RAG's contribution on this dataset lies not in finding more vulnerabilities, but in producing more faithful and better-reasoned analysis of the ones it does examine.
 
 \subsection{Suite 4: Wake-AI Integration}
 \label{subsec:suite4}
 
-This experiment addresses \textbf{RQ4} (real-world applicability) by testing the complete system---Wake-AI with RAG integration---on previously unseen smart contracts from real protocol audits.
+This experiment addresses \textbf{RQ4} (real-world applicability) by testing the complete system --- Wake-AI with RAG integration.
 
-\paragraph{Setup.} Eight protocols are audited using the full Wake-AI pipeline. Each protocol is analysed twice: once with Wake-AI alone and once with the RAG knowledge base enabled via the MCP tool. The comparison counts the number of high-severity vulnerabilities correctly detected out of the known vulnerabilities documented in the original audit reports.
+\paragraph{Setup.} Eight protocols are audited using the full Wake-AI pipeline. Each protocol is analyzed twice: once with Wake-AI alone and once with the RAG knowledge base enabled via the MCP tool. The comparison counts the number of high-severity vulnerabilities correctly detected out of the known vulnerabilities documented in the original audit reports.
 
 \begin{table}[!ht]
 \centering
@@ -1675,41 +1671,39 @@ dodo              & 2/5  & 2/5  \\
 lambo.win         & 2/4  & 2/4  \\
 munchables        & 4/5  & 4/5  \\
 phi               & 4/7  & 4/7  \\
-traitforge        & 2/6  & 3/6  \\
+traitforge        & 2/6  & 2/6  \\
 virtuals          & 4/6  & 4/6  \\
 \midrule
-\textbf{Total}    & \textbf{22/47} & \textbf{23/47} \\
+\textbf{Total}    & \textbf{22/47} & \textbf{22/47} \\
 \bottomrule
 \end{tabular}
-\caption{High-severity vulnerability detection across eight protocols with and without RAG augmentation.}
+\caption{High-severity vulnerability detection across eight protocols.}
 \label{tab:rag_wake_ai}
 \end{table}
 
-Table~\ref{tab:rag_wake_ai} shows that the RAG-augmented system detects one additional vulnerability compared to the baseline (23~vs.\ 22 out of 47), with the difference occurring in the traitforge protocol. However, this marginal improvement falls within the bounds of LLM non-determinism: even with temperature set to zero, large language models do not produce perfectly deterministic outputs across runs, and a single additional detection does not constitute statistically significant evidence of improvement.
+Table~\ref{tab:rag_wake_ai} shows that the RAG-augmented system detects the same number of high-severity vulnerabilities as the baseline: 22 out of 47 across all eight protocols. The results are identical per protocol, with no single case in which the RAG changed the detection outcome. 
 
-The results reveal that detection rates correlate with protocol complexity. Simple contracts (basin and blackhole, both 2/2) are fully covered by both configurations, while complex protocols with many interacting components (dodo: 2/5, traitforge: 3/6) remain challenging regardless of RAG augmentation. This suggests that the primary bottleneck for complex protocols is the LLM's ability to reason about multi-contract interactions, which retrieval alone cannot address.
-
-The value of the RAG integration in the Wake-AI context is better understood through the lens of the groundedness improvement demonstrated in Suite~3: when the system does identify a vulnerability, its analysis is more faithfully grounded in documented historical precedents. This qualitative improvement in reasoning transparency---even without a quantitative improvement in detection count---is valuable in a professional audit setting where the auditor needs to verify and build upon the system's output.
+This outcome is consistent with the findings from Suite~3. RAG does not change \emph{what} the system detects, rather it changes is \emph{how} the system reasons about its findings. In a professional audit setting, where an auditor must verify, interpret, and build upon the system's output, this improvement in reasoning quality is valuable even when the detection count remains unchanged.
 
 
-\section{Threats to Validity}
-\label{sec:threats}
+% \section{Threats to Validity}
+% \label{sec:threats}
 
-\subsection{Internal Validity}
+% \subsection{Internal Validity}
 
-Several factors may affect the reliability of the measured results. The LLM-as-judge approach, while shown to correlate with human judgement~\cite{zheng2023judging}, may exhibit systematic biases---for example, favouring verbose explanations or penalising unconventional but correct reasoning. Setting the temperature to zero does not guarantee deterministic outputs from large language models; repeated runs may yield slightly different scores, introducing measurement noise.
+% Several factors may affect the reliability of the measured results. The LLM-as-judge approach, while shown to correlate with human judgement~\cite{zheng2023judging}, may exhibit systematic biases---for example, favouring verbose explanations or penalising unconventional but correct reasoning. Setting the temperature to zero does not guarantee deterministic outputs from large language models; repeated runs may yield slightly different scores, introducing measurement noise.
 
-The hand-crafted evaluation dataset (40~cases) is small and may not represent the full distribution of smart contract vulnerabilities encountered in practice. The summary generation step uses the same LLM family (GPT-5.1) as the evaluation judge, which could introduce a circular bias where the judge favours summaries generated by a similar model.
+% The hand-crafted evaluation dataset (40~cases) is small and may not represent the full distribution of smart contract vulnerabilities encountered in practice. The summary generation step uses the same LLM family (GPT-5.1) as the evaluation judge, which could introduce a circular bias where the judge favours summaries generated by a similar model.
 
-\subsection{External Validity}
+% \subsection{External Validity}
 
-The generalisability of the results is constrained by several design choices. The knowledge base draws from a single source (Solodit); findings from other aggregators or private audit databases may have different characteristics. All experiments use a single LLM (GPT-5.1); results may differ with other models. The embedding model pair (nomic-embed-text-v1.5 and CodeRankEmbed) was selected based on availability and dimension compatibility---other embedding models may yield different retrieval quality. Finally, all evaluation is limited to Solidity smart contracts; other smart contract languages such as Vyper or Move are not tested.
+% The generalisability of the results is constrained by several design choices. The knowledge base draws from a single source (Solodit); findings from other aggregators or private audit databases may have different characteristics. All experiments use a single LLM (GPT-5.1); results may differ with other models. The embedding model pair (nomic-embed-text-v1.5 and CodeRankEmbed) was selected based on availability and dimension compatibility---other embedding models may yield different retrieval quality. Finally, all evaluation is limited to Solidity smart contracts; other smart contract languages such as Vyper or Move are not tested.
 
-\subsection{Construct Validity}
+% \subsection{Construct Validity}
 
-Verdict accuracy on the golden dataset conflates two distinct capabilities: the ability to identify which function is vulnerable (a code comprehension task) and the ability to classify the vulnerability correctly (a security reasoning task). A system that finds the right function but misclassifies the vulnerability type receives the same zero score as one that analyses the wrong function entirely.
+% Verdict accuracy on the golden dataset conflates two distinct capabilities: the ability to identify which function is vulnerable (a code comprehension task) and the ability to classify the vulnerability correctly (a security reasoning task). A system that finds the right function but misclassifies the vulnerability type receives the same zero score as one that analyses the wrong function entirely.
 
-LLM-judged metrics are sensitive to prompt wording. The judge prompts used in this work (Section~\ref{subsec:eval-prompts}) were designed to elicit consistent scoring, but different formulations might produce different score distributions. The vulnerability label taxonomy, while comprehensive, may not capture all vulnerability types encountered in practice, and the LLM's label assignment introduces a subjective element into the Label Match Ratio metric.
+% LLM-judged metrics are sensitive to prompt wording. The judge prompts used in this work (Section~\ref{subsec:eval-prompts}) were designed to elicit consistent scoring, but different formulations might produce different score distributions. The vulnerability label taxonomy, while comprehensive, may not capture all vulnerability types encountered in practice, and the LLM's label assignment introduces a subjective element into the Label Match Ratio metric.
 
 
 \section{Summary}
@@ -1724,9 +1718,7 @@ This chapter evaluated the RAG-augmented auditing system through four experiment
 
     \item[RQ3 (Groundedness):] The full pipeline achieves faithfulness of 0.765 and context utilisation of 0.851 on the evaluation dataset, confirming that the LLM actively incorporates retrieved findings into its analysis. Reasoning quality (0.908) is the strongest metric, indicating well-structured analytical output.
 
-    \item[RQ4 (Component contributions):] BM25 fusion provides the largest single improvement over pure dense retrieval. Re-ranking is not beneficial in its current form. Chunked retrieval performs comparably to summary-based retrieval but does not surpass the hybrid+BM25 strategy.
-
-    \item[RQ5 (Real-world applicability):] Integration with Wake-AI shows no statistically significant improvement in detection count (22/47~$\to$~23/47). The value of RAG integration lies in improved reasoning quality and groundedness rather than raw detection volume.
+    \item[RQ4 (Real-world applicability):] Integration with Wake-AI shows no statistically significant improvement in detection count (22/47~$\to$~23/47). The value of RAG integration lies in improved reasoning quality and groundedness rather than raw detection volume.
 \end{description}
 
 The results indicate that RAG augmentation primarily improves the \emph{quality} of the LLM's reasoning---making it more grounded, transparent, and verifiable---rather than increasing the \emph{quantity} of detected vulnerabilities. For a professional audit workflow, this qualitative improvement is arguably more valuable than marginal detection gains: an auditor benefits more from a well-grounded analysis that can be verified against documented precedents than from an additional detection that may itself require extensive verification.
