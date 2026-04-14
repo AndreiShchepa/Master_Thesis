@@ -1310,7 +1310,7 @@ This chapter presented the design of a RAG-augmented smart contract auditing met
 \chapter{Evaluation}
 \label{ch:evaluation}
 
-This chapter evaluates the RAG-augmented auditing system proposed in Chapter~\ref{ch:methodology}. It begins with the research questions that guide the evaluation, followed by a description of the datasets and metrics used to assess both retrieval and detection quality. Then presents the experimental setup, reports the results in four experiment suites, and concludes with a discussion of threats to validity.
+This chapter evaluates the RAG-augmented auditing system proposed in Chapter~\ref{ch:methodology}. It begins with the research questions that guide the evaluation, followed by a description of the datasets and metrics used to assess both retrieval and detection quality. Then presents the experimental setup, reports the results in four experiment suites, and concludes with a following discussion.
 
 \begin{tcolorbox}[colback=gray!10, colframe=gray!40, boxrule=0.5pt]
 This thesis uses GPT-5.1 from OpenAI, accessed via a paid API. Because querying such models incurs non-trivial cost (\$1.25 per 1M input tokens, \$10 per 1M output tokens), the experimental setup was designed to balance thoroughness with cost efficiency.
@@ -1320,7 +1320,7 @@ This thesis uses GPT-5.1 from OpenAI, accessed via a paid API. Because querying 
 \section{Research Questions}
 \label{sec:research-questions}
 
-The evaluation is structured around five research questions:
+The evaluation is structured around four research questions:
 
 \begin{description}
     \item[RQ1: Retrieval effectiveness.] How effectively does the retrieval pipeline surface relevant historical findings for a given vulnerability query?
@@ -1333,14 +1333,8 @@ The evaluation is structured around five research questions:
     \item[RQ4: Real-world applicability.] Can the system discover real vulnerabilities from full smart contracts in a realistic audit scenario?
 \end{description}
 
-
 \section{Datasets}
 \label{sec:dataset}
-
-Three datasets are used, each targeting a different aspect of the system.
-
-\subsection{Knowledge Base}
-\label{subsec:kb-corpus}
 
 The knowledge base described in Section~\ref{sec:knowledge-base} contains 16{,}780 security audit findings ingested from the Solodit API, filtered to \texttt{HIGH} and \texttt{MEDIUM} severity. The preprocessing pipeline produced three types of embeddings:
 
@@ -1396,39 +1390,26 @@ There is no established benchmark for evaluating RAG-augmented smart contract vu
 
 The list~\ref{lst:example_case} shows a representative evaluation case. The cases range from straightforward single-function vulnerabilities to sophisticated multi-step attack patterns. The 12~safe cases were constructed as variants of vulnerable cases with the bug fixed, testing whether the system can distinguish patched code from unpatched.
 
-\subsection{Golden Dataset}
-\label{subsec:golden-dataset}
+\subsection{Benchmark Dataset}
+\label{subsec:benchmark-dataset}
 
-A curated dataset of 40~real-world vulnerability findings drawn from actual security audits serves as the most realistic evaluation benchmark. Unlike the RAG evaluation cases, which are synthetic, these are genuine findings from projects audited on platforms aggregated by Solodit. Each entry includes the complete Solidity source file, an expert-written issue description, and relevant metadata.
-
-All 40~golden findings have \texttt{expected\_verdict = VULNERABLE}. The dataset is used for two evaluation types:
+A curated dataset of 40~real-world vulnerability findings drawn from actual security audits serves as the most realistic evaluation benchmark. Unlike the RAG evaluation cases, which are synthetic, these are genuine findings from projects audited on platforms aggregated by Solodit. Each entry includes the complete Solidity source file, an expert-written issue description, and relevant metadata. All findings have \texttt{expected\_verdict = VULNERABLE}. The dataset is used for two evaluation types:
 
 \begin{itemize}
-    \item \textbf{Golden retrieval.} The LLM reviews the \emph{entire} smart contract (not an isolated function) and identifies suspected vulnerable functions with short descriptions. These descriptions then serve as retrieval queries. An LLM judge verifies whether the system-identified issue matches the known golden vulnerability. This simulates a realistic audit workflow where the auditor does not know in advance which function is vulnerable.
+    \item \textbf{Retrieval.} The LLM reviews the \emph{entire} smart contract (not an isolated function) and identifies suspected vulnerable functions with short descriptions. These descriptions then serve as retrieval queries. An LLM judge verifies whether the system-identified issue matches the known golden vulnerability. This simulates a realistic audit workflow where the auditor does not know in advance which function is vulnerable.
 
-    \item \textbf{Golden generation.} The full RAG pipeline is executed for each finding. Crucially, the finding itself is excluded from the retrieved context to prevent trivial self-matching. A separate baseline runs the LLM without any retrieval, enabling a direct comparison of RAG-augmented versus LLM-only detection.
+    \item \textbf{Generation.} The full RAG pipeline is executed for each finding. Crucially, the finding itself is excluded from the retrieved context to prevent trivial self-matching. A separate baseline runs the LLM without any retrieval, enabling a direct comparison of RAG-augmented versus LLM-only detection.
 \end{itemize}
-
 
 \section{Experimental Setup}
 \label{sec:experimental-setup}
 
-\subsection{Infrastructure}
-\label{subsec:infrastructure}
-
-All experiments run on a single machine with Apple Silicon (MPS backend for local models). PostgreSQL~17 with pgvector serves as both knowledge base and experiment store. The LLM (GPT-5.1, temperature~0) is accessed via the OpenAI API. The local models used throughout the experiments are:
-
-\begin{itemize}
-    \item \textbf{Text embedding:} nomic-ai/nomic-embed-text-v1.5 (768-dimensional, query prefix: \texttt{"search\_query: "}).
-    \item \textbf{Code embedding:} nomic-ai/CodeRankEmbed (768-dimensional, query prefix: \texttt{"Represent this query for searching relevant code: "}).
-    \item \textbf{Cross-encoder re-ranker:} cross-encoder/ms-marco-MiniLM-L-6-v2 (22M parameters).
-\end{itemize}
-
+All experiments run on a single machine with Apple Silicon (MPS backend for local models). PostgreSQL~17 with pgvector serves as both a knowledge base and an experiment store. The LLM (GPT-5.1, temperature~0.2) is accessed via the OpenAI API. The local models used throughout the experiments are:
 
 \subsection{Query Strategies}
 \label{subsec:query-strategies}
 
-Five retrieval strategies are evaluated, each varying the query construction, embedding space, or retrieval mechanism. The dense vector search and re-ranking components described in Section~\ref{sec:retrieval} form the backbone; the strategies differ in how the query is formulated and what additional retrieval mechanisms are combined.
+Five retrieval strategies are evaluated, each varying the query construction, the embedding space, or the retrieval mechanism. The dense vector search and re-ranking components described in Section~\ref{sec:retrieval} form the backbone; the strategies differ in how the query is formulated and what additional retrieval mechanisms are combined.
 
 \begin{table}[!ht]
 \centering
@@ -1437,7 +1418,7 @@ Five retrieval strategies are evaluated, each varying the query construction, em
 \toprule
 \textbf{Strategy} & \textbf{Query source} & \textbf{What it tests} \\
 \midrule
-\texttt{description} & Issue description & Semantic similarity from natural-language description \\
+\texttt{description} & Description & Semantic similarity from natural-language description \\
 \texttt{code} & Solidity code & Structural code pattern similarity \\
 \texttt{description\_label} & Description + label & Category-enriched semantic search \\
 \texttt{hybrid\_bm25} & Description & Dense vector + keyword fusion via RRF \\
@@ -1450,9 +1431,7 @@ Five retrieval strategies are evaluated, each varying the query construction, em
 
 Table~\ref{tab:query-strategies} summarizes the five strategies. The first three use the dense vector search pipeline directly, varying only the query input. The remaining two introduce additional retrieval mechanisms:
 
-\paragraph{Hybrid BM25.} This strategy combines dense vector retrieval with BM25 keyword search. BM25 compensates for a known weakness of dense retrieval: semantic embedding models may miss findings that use the exact Solidity identifier mentioned in the query. For example, a query about \texttt{transferFrom} reentrancy should retrieve findings mentioning \texttt{transferFrom} by name, even if their embeddings emphasise different semantic aspects.
-
-The BM25 index is built over all finding summaries using the BM25Okapi variant. Tokenisation preserves domain-specific identifiers (\texttt{delegatecall}, \texttt{msg.sender}, \texttt{ERC20}) by splitting on non-alphanumeric characters and retaining multi-character tokens. The two ranked lists (dense and BM25) are merged using Reciprocal Rank Fusion (RRF):
+\paragraph{Hybrid BM25.} This strategy combines dense vector retrieval with BM25 keyword search. BM25 compensates for a known weakness of dense retrieval: semantic embedding models may miss findings that use the exact Solidity identifier mentioned in the query. For example, a query about \texttt{transferFrom} reentrancy should retrieve findings mentioning \texttt{transferFrom} by name, even if their embeddings emphasize different semantic aspects. The two ranked lists (dense and BM25) are merged using Reciprocal Rank Fusion (RRF):
 
 \begin{equation}
     \text{RRF}(d) = \sum_{i=1}^{L} \frac{1}{k_{\text{rrf}} + r_i(d)},
@@ -1461,26 +1440,24 @@ The BM25 index is built over all finding summaries using the BM25Okapi variant. 
 
 where $L$ is the number of ranked lists, $r_i(d)$ is the rank of document~$d$ in list~$i$ (1-indexed), and $k_{\text{rrf}} = 60$ (the default from the original paper). Documents not appearing in a given list are omitted from the corresponding term. Both sources contribute 50 candidates each before fusion.
 
-\paragraph{Chunked retrieval.} Instead of matching against a single summary embedding per finding, this strategy matches against overlapping 512-character windows of the raw finding content. If any chunk of a finding matches the query, the entire finding is returned with the maximum chunk similarity as its score. This approach can surface findings where the relevant detail appears in a specific paragraph rather than being captured by the summary.
-
+\paragraph{Chunked retrieval.} Instead of matching against a single summary embedding per finding, this strategy matches against overlapping 512-character windows of the raw finding content. If any chunk of a finding matches the query, the entire finding is returned with the maximum chunk similarity to its score. This approach can surface findings where the relevant detail appears in a specific paragraph rather than being captured by the summary.
 
 \subsection{Evaluation Prompts}
 \label{subsec:eval-prompts}
 
-Several metrics rely on an LLM judge (GPT-5.1, temperature~0) to assess retrieval relevance and generation quality. The use of LLM-based evaluation has been shown to correlate well with human judgement for text quality assessment tasks~\cite{zheng2023judging}. Two judge prompts are used for retrieval evaluation:
+Several metrics rely on an LLM judge to assess retrieval relevance and generation quality. The use of LLM-based evaluation has been shown to correlate well with human judgment for text quality assessment tasks~\cite{zheng2023judging}. Two judge prompts are used for retrieval evaluation:
 
-\begin{tcolorbox}[colback=gray!5, colframe=black!60, fonttitle=\bfseries, title=Prompt 1: Context Relevance (Holistic)]
-You are a senior smart contract security auditor evaluating whether retrieved past audit findings are relevant to a vulnerability being analysed. A finding is relevant when it describes the same or closely related vulnerability pattern, targets a similar Solidity construct, shares the same root cause or exploitation mechanism, or provides a directly applicable mitigation.
+\begin{tcolorbox}[colback=gray!5, colframe=black!60, fonttitle=\bfseries, title=Prompt 1: Context Relevance]
+You are a senior smart contract security auditor evaluating whether retrieved past audit findings are relevant to a vulnerability being analyzed. A finding is relevant when it describes the same or closely related vulnerability pattern, targets a similar Solidity construct, shares the same root cause or exploitation mechanism, or provides a directly applicable mitigation.
 \end{tcolorbox}
 
-The holistic judge receives the complete set of retrieved findings and scores overall relevance on a 0--1 scale, additionally providing structured feedback on coverage (\texttt{full}/\texttt{partial}/\texttt{none}) and specificity (\texttt{high}/\texttt{medium}/\texttt{low}).
+The holistic judge receives the complete set of retrieved findings and scores overall relevance on a scale 0--1, additionally providing structured feedback on coverage (\texttt{full}/\texttt{partial}/\texttt{none}) and specificity (\texttt{high}/\texttt{medium}/\texttt{low}).
 
-\begin{tcolorbox}[colback=gray!5, colframe=black!60, fonttitle=\bfseries, title=Prompt 2: Context Precision (Per-Finding)]
+\begin{tcolorbox}[colback=gray!5, colframe=black!60, fonttitle=\bfseries, title=Prompt 2: Context Precision]
 Decide whether the FINDING is relevant to the QUERY vulnerability. RELEVANT (verdict=1) if: same vulnerability class, same root cause, similar construct, would help an auditor. NOT RELEVANT (verdict=0) if: different vulnerability type, unrelated contract pattern, tangentially related.
 \end{tcolorbox}
 
-The per-finding judge evaluates each retrieved finding independently for binary relevance. This requires $k$~LLM calls per evaluation case but provides fine-grained diagnostics, identifying which specific findings in the retrieved set are useful and which are noise.
-
+The per-finding judge independently evaluates each retrieved finding for binary relevance. This requires $k$~LLM calls per evaluation case but provides fine-grained diagnostics, identifying which specific findings in the retrieved set are useful and which are noise.
 
 \section{Metrics}
 \label{sec:metrics}
