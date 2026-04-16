@@ -1006,7 +1006,7 @@ As shown in Figure~\ref{fig:printer}, the printer outputs the exact storage slot
 \label{sec:wake-ai}
 
 \begin{tcolorbox}[colback=gray!10, colframe=gray!40, boxrule=0.5pt]
-While writing this thesis, Wake-AI is a part of wake-private, because it is in consistent development, so some details can not be disclosed here.
+While writing this thesis, Wake-AI is a part of wake-private, because it is in consistent development, so some details can not be disclosed here. TODO
 \end{tcolorbox}
 
 As LLM capabilities have matured, their integration into development and security workflows has become increasingly practical. Building on the trends surveyed in Chapter~\ref{ch:llm}, Wake extends its static analysis infrastructure with an AI-powered auditing module called Wake-AI. This module orchestrates LLM-based reasoning through a structured, multi-stage workflow that leverages Wake's internal model to ground the AI's analysis in concrete program facts.
@@ -1712,16 +1712,16 @@ This outcome is consistent with the findings from Suite~3. RAG does not change \
 This chapter evaluated the RAG-augmented auditing system through four experiment suites, addressing the five research questions:
 
 \begin{description}
-    \item[RQ1 (Retrieval effectiveness):] The hybrid+BM25 strategy achieves the best retrieval quality (context precision 0.568, context relevance 0.805), confirming that combining dense semantic search with keyword matching captures both conceptual and terminological similarity. Cross-encoder re-ranking does not consistently improve results, likely due to domain mismatch between the re-ranker's training data and smart contract security.
+    \item[RQ1 (Retrieval effectiveness):] The hybrid+BM25 strategy achieves the best retrieval quality (context precision 0.568, context relevance 0.805), confirming that combining dense semantic search with keyword matching captures both conceptual and terminological similarity. Cross-encoder re-ranking does not consistently improve results.
 
-    \item[RQ2 (RAG vs.\ LLM-only):] RAG improves faithfulness by 28~percentage points (0.641~$\to$~0.821), demonstrating that retrieved context grounds the LLM's analysis in documented evidence. Verdict accuracy on whole-contract review is low for both modes, reflecting the inherent difficulty of the task rather than a limitation of the RAG approach.
+    \item[RQ2 (RAG vs.\ LLM-only):] RAG improves faithfulness by 24~percent, demonstrating that the retrieved context grounds the LLM's analysis in documented evidence. Verdict accuracy on whole-contract review is low for both modes, reflecting the inherent difficulty of the task rather than a limitation of the RAG approach.
 
-    \item[RQ3 (Groundedness):] The full pipeline achieves faithfulness of 0.765 and context utilisation of 0.851 on the evaluation dataset, confirming that the LLM actively incorporates retrieved findings into its analysis. Reasoning quality (0.908) is the strongest metric, indicating well-structured analytical output.
+    \item[RQ3 (Groundedness):] The full pipeline achieves faithfulness of 0.765 and context utilization of 0.851 on the evaluation dataset, confirming that the LLM actively incorporates retrieved findings into its analysis. Reasoning quality (0.908) is the strongest metric, indicating a well-structured analytical output.
 
-    \item[RQ4 (Real-world applicability):] Integration with Wake-AI shows no statistically significant improvement in detection count (22/47~$\to$~23/47). The value of RAG integration lies in improved reasoning quality and groundedness rather than raw detection volume.
+    \item[RQ4 (Real-world applicability):] Integration with Wake-AI shows no improvement in detection count. The value of RAG integration lies in improved reasoning quality and groundedness rather than raw detection volume.
 \end{description}
 
-The results indicate that RAG augmentation primarily improves the \emph{quality} of the LLM's reasoning---making it more grounded, transparent, and verifiable---rather than increasing the \emph{quantity} of detected vulnerabilities. For a professional audit workflow, this qualitative improvement is arguably more valuable than marginal detection gains: an auditor benefits more from a well-grounded analysis that can be verified against documented precedents than from an additional detection that may itself require extensive verification.
+The results indicate that RAG integration primarily improves the quality of the LLM's reasoning, making it more grounded, transparent, and verifiable, rather than find more vulnerabilities.
 
 \chapter{Conclusion}
 \label{ch:conclusion}
