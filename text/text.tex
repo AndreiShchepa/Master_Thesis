@@ -42,7 +42,7 @@ To understand Ethereum's role as a programmable state-transition system, it is u
 \begin{figure}[!htbp]
     \centering
     \includegraphics[width=0.7\linewidth]{images/block_eth.png}
-    \caption{Structure of an Ethereum blockchain node. Adapted from~\cite{blockchain_diagram_eth}.}
+    \caption[Ethereum blockchain node.]{Structure of an Ethereum blockchain node. Adapted from~\cite{blockchain_diagram_eth}.}
     \label{fig:block_eth}
 \end{figure}
 
@@ -66,7 +66,7 @@ Proof-of-Work (PoW) is the oldest and most widely adopted consensus mechanism in
 \begin{figure}[!ht]
     \centering
     \includegraphics[width=0.9\linewidth]{images/PoW.jpg}
-    \caption{Proof of Work mechanism flow. Adapted from~\cite{pow_ledger}.}
+    \caption[Proof of Work mechanism.]{Proof of Work mechanism flow. Adapted from~\cite{pow_ledger}.}
     \label{fig:pow}
 \end{figure}
 
@@ -252,7 +252,7 @@ contract Attacker {
     }
 }
 \end{minted}
-\caption{Attacker contract exploiting the reentrancy vulnerability in Listing~\ref{lst:vulnerable-vault}.}
+\caption[Exploit of the reentrancy vulnerability.]{Attacker contract exploiting the reentrancy vulnerability in Listing~\ref{lst:vulnerable-vault}.}
 \label{lst:attacker-reentrancy}
 \end{listing}
 
@@ -276,7 +276,7 @@ contract Distributor {
     }
 }
 \end{minted}
-\caption{Distributor contract vulnerable to DoS via a reverting recipient.}
+\caption[DoS contract vulnerability.]{Distributor contract vulnerable to DoS via a reverting recipient.}
 \label{lst:dos-distributor}
 \end{listing}
 
@@ -289,7 +289,7 @@ Ethereum transactions are broadcast to a public mempool before they are included
 \begin{figure}[!ht]
     \centering
     \includegraphics[width=0.8\linewidth]{images/front-running.jpg}
-    \caption{Mempool-based front-running. Adapted from~\cite{phemex2023frontrunning}.}
+    \caption[Mempool-based front-running.]{Mempool-based front-running. Adapted from~\cite{phemex2023frontrunning}.}
     \label{fig:front-running}
 \end{figure}
 
@@ -370,7 +370,7 @@ function withdraw(uint _amount) public {
 \begin{figure}[!ht]
     \centering
     \includegraphics[width=13cm, height=6cm]{images/cfg_ddg.pdf}
-    \caption{Comparison between Control Flow and Data Dependency graphs.}
+    \caption[CFG vs. DDG.]{Comparison between Control Flow and Data Dependency graphs.}
     \label{fig:cfg_ddg_diagram}
 \end{figure}
 
@@ -419,7 +419,7 @@ However, formal verification faces significant practical challenges. The techniq
 \begin{figure}[!ht]
     \centering
     \includegraphics[width=11cm, height=8cm]{images/fv_strategies_tradeoff.pdf}
-    \caption{Trade-off between automation and expressiveness across the three principal formal verification strategies.}
+    \caption[Formal verification strategies.]{Trade-off between automation and expressiveness across the three principal formal verification strategies.}
     \label{fig:fv_strategies_tradeoff}
 \end{figure}
 
@@ -448,7 +448,7 @@ function increment(uint256 a) public pure returns (uint256) {
     return b;
 }
 \end{minted}
-\caption{Simple increment function with an overflow-checking assertion.}
+\caption[Simple increment function.]{Simple increment function with an overflow-checking assertion.}
 \label{lst:increment-overflow}
 \end{listing}
 
@@ -509,7 +509,7 @@ This chapter has surveyed the foundational techniques for program analysis. Stat
 \textbf{Typical cost} & Low & Medium & High \\
 \hline
 \end{tabular}}
-\caption{Comparison of static analysis, dynamic analysis, and formal verification.}
+\caption[Code analysis comparison.]{Comparison of static analysis, dynamic analysis, and formal verification.}
 \label{tab:analysis-comparison}
 \end{table}
 
@@ -612,7 +612,7 @@ An embedding maps each token index to a fixed-dimensional dense vector in a cont
 \begin{figure}[!ht]
     \centering
     \includegraphics[width=9cm, height=7cm]{images/word_embeddings_analogy.pdf}
-    \caption{Word embedding analogy: $\text{king} - \text{man} + \text{woman} \approx \text{queen}$.}
+    \caption[Word embedding analogy.]{Word embedding analogy: $\text{king} - \text{man} + \text{woman} \approx \text{queen}$.}
     \label{fig:word_embeddings}
 \end{figure}
 
@@ -630,7 +630,7 @@ These embedding vectors are also the representations to which the positional enc
 \begin{figure}[!ht]
     \centering
     \includegraphics[width=0.6\linewidth]{images/transformer.png}
-    \caption{The original encoder--decoder transformer architecture. Adapted from~\cite{vaswani2023attentionneed}.}
+    \caption[Transformer architecture.]{The original encoder--decoder transformer architecture. Adapted from~\cite{vaswani2023attentionneed}.}
     \label{fig:transformer}
 \end{figure}
 
@@ -691,7 +691,7 @@ Self-attention is \emph{permutation-equivariant}: if the input tokens are shuffl
 \begin{figure}[!ht]
     \centering
     \includegraphics[width=0.9\linewidth]{images/pos_encode_example.png}
-    \caption{Positional encoding matrix for a four-token sequence with $d = 4$. Adapted from~\cite{mehreen2024positional}.}
+    \caption[Positional encoding matrix.]{Positional encoding matrix for a four-token sequence with $d = 4$. Adapted from~\cite{mehreen2024positional}.}
     \label{fig:pe_example}
 \end{figure}
 
@@ -744,7 +744,7 @@ where $\mathbf{B} \in \mathbb{R}^{d \times r}$ and $\mathbf{A} \in \mathbb{R}^{r
 \begin{figure}[!ht]
     \centering
     \includegraphics[width=0.7\linewidth]{images/lora.pdf}
-    \caption{LoRA injects a trainable low-rank path 
+    \caption[LoRA matrices explanation.]{LoRA injects a trainable low-rank path 
     $\mathbf{B}\mathbf{A}$ alongside the frozen pre-trained weight 
     matrix $\mathbf{W}_0$. Only the small matrices $\mathbf{A}$ and 
     $\mathbf{B}$ are updated during fine-tuning.}
@@ -771,7 +771,7 @@ Reinforcement Learning from Human Feedback (RLHF) optimizes the model's outputs 
 \begin{figure}[!ht]
     \centering
     \includegraphics[width=9cm, height=6cm]{images/rlhf.pdf}
-    \caption{Reinforcement Learning from Human Feedback pipeline.}
+    \caption[Reinforcement Learning from Human Feedback.]{Reinforcement Learning from Human Feedback pipeline.}
     \label{fig:rlhf_diagram}
 \end{figure}
 
@@ -917,7 +917,7 @@ LSP / IDE integration         & Yes     & No      & No \\
 Deployment support            & Yes     & No      & Yes \\
 \hline
 \end{tabular}}
-\caption{Comparison of security and development frameworks.}
+\caption[Comparison of frameworks.]{Comparison of security and development frameworks.}
 \label{tab:framework-comparison}
 \end{table}
 
@@ -987,14 +987,14 @@ contract Vault {
     }
 }
 \end{minted}
-\caption{\texttt{Vault} contract that guards access with a \texttt{private} password.}
+\caption[Ethernaut code example.]{\texttt{Vault} contract that guards access with a \texttt{private} password.}
 \label{lst:vault-08}
 \end{listing}
 
 \begin{figure}[!ht]
     \centering
     \includegraphics[width=0.9\linewidth]{images/print_storage.jpg}
-    \caption{Output of \texttt{wake print storage-layout} for the \texttt{Vault} contract.}
+    \caption[Printer output.]{Output of \texttt{wake print storage-layout} for the \texttt{Vault} contract.}
     \label{fig:printer}
 \end{figure}
 
@@ -1072,7 +1072,7 @@ The proposed system extends Wake-AI (Section~\ref{sec:wake-ai}) with a retrieval
 \begin{figure}[!ht]
     \centering
     \includegraphics[width=13cm, height=5cm]{images/architecture.pdf}
-    \caption{Architecture of the proposed RAG-augmented smart contract auditing system.}
+    \caption[Proposed solution architecture.]{Architecture of the proposed RAG-augmented smart contract auditing system.}
     \label{fig:architecture}
 \end{figure}
 
@@ -1175,7 +1175,7 @@ Overflow/Underflow & 368 \\
 Configuration & 346 \\
 \bottomrule
 \end{tabular}
-\caption{Top-10 vulnerability label distribution in the knowledge base (16{,}780 findings).}
+\caption[Vulnerability labels.]{Top-10 vulnerability label distribution in the knowledge base (16{,}780 findings).}
 \label{tab:label-dist}
 \end{table}
 
@@ -1210,8 +1210,7 @@ Four PostgreSQL functions encapsulate the similarity search logic. The text and 
 Each finding is embedded independently along two modalities, reflecting the dual nature of audit findings: they contain both natural-language vulnerability summary and Solidity code snippets.
 
 \subsubsection*{Text Embeddings}
-
-The textual summary is embedded using \textbf{nomic-embed-text-v1.5}~\cite{nussbaum2024nomic}, a 768-dimensional model. It uses task-specific prefixes: documents are prefixed with \texttt{"search\_document: "} during indexing, and queries with \texttt{"search\_query: "} during retrieval. All embeddings are L2-normalized, converting cosine similarity into inner product for efficient pgvector search.
+The textual summary is embedded using \textbf{nomic-embed-text-v1.5}~\cite{nussbaum2024nomic}, a 768-dimensional model. It uses task-specific prefixes: documents are prefixed with \texttt{search\_document:} during indexing and queries with \texttt{search\_query:} during retrieval. All embeddings are L2-normalized, converting cosine similarity into inner product for efficient \textit{pgvector} search.
 
 \subsubsection*{Code Embeddings}
 
@@ -1384,7 +1383,7 @@ There is no established benchmark for evaluating RAG-augmented smart contract vu
     is the actual owner of tokenId."
 }
 \end{minted}
-\caption{An evaluation case for an access control vulnerability in a token splitting function.}
+\caption[The evaluation case.]{The evaluation case for an access control vulnerability in a token splitting function.}
 \label{lst:example_case}
 \end{listing}
 
@@ -1425,7 +1424,7 @@ Five retrieval strategies are evaluated, each varying the query construction, th
 \texttt{chunked} & Description & Fine-grained matching against raw content windows \\
 \bottomrule
 \end{tabular}
-\caption{Retrieval query strategies evaluated in the experiments (all use 768-dimensional embeddings, $k{=}5$).}
+\caption[Retrieval query strategies.]{Retrieval query strategies evaluated in the experiments (all use 768-dimensional embeddings, $k{=}5$).}
 \label{tab:query-strategies}
 \end{table}
 
@@ -1469,28 +1468,28 @@ The per-finding judge independently evaluates each retrieved finding for binary 
 When evaluation cases include ground-truth relevant finding identifiers, the following standard information retrieval metrics are computed:
 
 \begin{itemize}
-    \item \textbf{Context Precision.} Fraction of retrieved findings that belong to the ground-truth relevant set:
+    \item \textbf{Context Precision}. Fraction of retrieved findings that belong to the ground-truth relevant set:
     \begin{equation}
         \text{Precision} = \frac{|\text{retrieved} \cap \text{relevant}|}{|\text{retrieved}|}
     \end{equation}
 
-    \item \textbf{Context Recall.} Fraction of ground-truth relevant findings that were retrieved:
+    \item \textbf{Context Recall}. Fraction of ground-truth relevant findings that were retrieved:
     \begin{equation}
         \text{Recall} = \frac{|\text{retrieved} \cap \text{relevant}|}{|\text{relevant}|}
     \end{equation}
 
-    \item \textbf{MAP@$k$ (Mean Average Precision).} Rewards relevant items appearing at earlier rank positions:
+    \item \textbf{Mean Average Precision (MAP@$k$)}. Rewards relevant items appearing at earlier rank positions:
     \begin{equation}
         \text{AP@}k = \frac{1}{\min(|\text{relevant}|, k)} \sum_{i=1}^{k} \text{Precision@}i \cdot \text{rel}(i)
     \end{equation}
     where $\text{rel}(i) = 1$ if the $i$-th result is relevant, 0 otherwise.
 
-    \item \textbf{Recall@$k$.} Recall computed at a specific cutoff position:
+    \item \textbf{Recall@$k$}. Recall computed at a specific cutoff position:
     \begin{equation}
         \text{Recall@}k = \frac{|\text{relevant} \cap \text{retrieved}_{1:k}|}{|\text{relevant}|}
     \end{equation}
 
-    \item \textbf{Label Match Ratio.} Fraction of retrieved findings whose vulnerability label matches the query label:
+    \item \textbf{Label Match Ratio}. Fraction of retrieved findings whose vulnerability label matches the query label:
     \begin{equation}
         \text{LabelMatch} = \frac{|\{r \in \text{retrieved} : \text{label}(r) = \text{label}(q)\}|}{|\text{retrieved}|}
     \end{equation}
@@ -1500,19 +1499,19 @@ When evaluation cases include ground-truth relevant finding identifiers, the fol
 These metrics do not require ground-truth annotations and can evaluate retrieval quality on any query:
 
 \begin{itemize}
-    \item \textbf{Context Relevance (holistic).} The LLM judge evaluates the entire retrieved set, scoring overall relevance on a 0--1 scale with structured coverage and specificity feedback.
+    \item \textbf{Context Relevance}. The LLM judge evaluates the entire retrieved set, scoring overall relevance on a 0--1 scale with structured coverage and specificity feedback.
 
-    \item \textbf{Context Precision (per-finding).} Each retrieved finding is independently evaluated for binary relevance. The metric is the fraction of individually relevant findings.
+    \item \textbf{Context Precision}. Each retrieved finding is independently evaluated for binary relevance. The metric is the fraction of individually relevant findings.
 
-    \item \textbf{Hit Rate@$k$.} Binary indicator: did the target finding appear in the top-$k$ results?
+    \item \textbf{Hit Rate@$k$}. Binary indicator: did the target finding appear in the top-$k$ results?
 
-    \item \textbf{MRR (Mean Reciprocal Rank).} Averaged over all queries $Q$: $\text{MRR} = \frac{1}{|Q|}\sum_{q \in Q} \frac{1}{\text{rank}(q)}$, where $\text{rank}(q)$ is the position of the target finding.
+    \item \textbf{Mean Reciprocal Rank (MRR)}. Averaged over all queries $Q$: $\text{MRR} = \frac{1}{|Q|}\sum_{q \in Q} \frac{1}{\text{rank}(q)}$, where $\text{rank}(q)$ is the position of the target finding.
 
-    \item \textbf{NDCG@$k$.} For a single relevant item: $\frac{1}{\log_2(\text{rank} + 1)}$.
+    \item \textbf{NDCG@$k$}. For a single relevant item: $\frac{1}{\log_2(\text{rank} + 1)}$.
 
-    \item \textbf{Label Hit Rate.} Fraction of queries where at least one retrieved finding shares the target's vulnerability label.
+    \item \textbf{Label Hit Rate}. Fraction of queries where at least one retrieved finding shares the target's vulnerability label.
 
-    \item \textbf{LLM Match Rate.} Fraction of golden vulnerabilities independently identified by the LLM during whole-contract review, before retrieval is performed.
+    \item \textbf{LLM Match Rate}. Fraction of golden vulnerabilities independently identified by the LLM during whole-contract review, before retrieval is performed.
 \end{itemize}
 
 
@@ -1520,15 +1519,15 @@ These metrics do not require ground-truth annotations and can evaluate retrieval
 \label{subsec:generation-metrics}
 
 \begin{itemize}
-    \item \textbf{Verdict Accuracy} (deterministic). Binary match between the predicted verdict and the expected verdict. No LLM judge is required.
+    \item \textbf{Verdict Accuracy}. Binary match between the predicted verdict and the expected verdict.
 
-    \item \textbf{Faithfulness} (LLM-judged). The judge counts factual claims in the generated analysis and determines how many are supported by the retrieved context, producing a groundedness ratio on a 0--1 scale.
+    \item \textbf{Faithfulness} (LLM-judged). Evaluate the ratio of factual claims in the generated analysis and determine how many are supported by the retrieved context, producing a groundedness ratio on a scale of 0--1.
 
-    \item \textbf{Reasoning Quality} (LLM-judged). Evaluates how well the analysis references past findings, draws accurate parallels between historical and current code, and supports its verdict with evidence. Scored 0--1 with an evidence usage assessment (\texttt{strong}/\texttt{adequate}/\texttt{weak}/\texttt{none}).
+    \item \textbf{Reasoning} (LLM-judged). Evaluate how well the analysis references past findings, draws accurate parallels between historical and current code, and supports its verdict with evidence. Scored 0--1 with an evaluation of evidence usage (\texttt{strong}/\texttt{adequate}/\texttt{weak}/\texttt{none}).
 
-    \item \textbf{Context Utilisation} (LLM-judged). Evaluates whether the analysis explicitly cites retrieved findings, draws parallels between past and current code, and logically derives the verdict from the provided evidence.
+    \item \textbf{Context Utilization} (LLM-judged). Evaluate whether the analysis explicitly cites the retrieved findings, draws parallels between past and current code, and logically derives the verdict from the provided evidence.
 
-    \item \textbf{Answer Correctness} (LLM-judged). Compares the generated analysis against a reference answer on three criteria: same verdict, same root cause identified, and technically accurate explanation. Available only when reference answers exist.
+    \item \textbf{Answer Correctness} (LLM-judged). Compare the generated analysis with a reference answer according to three criteria: same verdict, same identified root cause, and technically accurate explanation. Available only when reference answers exist.
 \end{itemize}
 
 \section{Experiments and Results}
@@ -1640,7 +1639,7 @@ LLM-only & 0.455 & 0.641 & 0.762   & 0.493 \\
 RAG-augmented & 0.450 & 0.881 & 0.825 & 0.612 \\
 \bottomrule
 \end{tabular*}
-\caption{Generation quality on the benchmark dataset excluding context utilization.}
+\caption[Generation quality.]{Generation quality on the benchmark dataset excluding context utilization.}
 \label{tab:golden-generation-results}
 \end{table}
 
@@ -1677,7 +1676,7 @@ virtuals          & 4/6  & 4/6  \\
 \textbf{Total}    & \textbf{22/47} & \textbf{22/47} \\
 \bottomrule
 \end{tabular}
-\caption{High-severity vulnerability detection across eight protocols.}
+\caption[High-severity vulnerability detection.]{High-severity vulnerability detection across eight protocols.}
 \label{tab:rag_wake_ai}
 \end{table}
 
@@ -1712,25 +1711,25 @@ This outcome is consistent with the findings from Suite~3. RAG does not change \
 This chapter evaluated the RAG-augmented auditing system through four experiment suites, addressing the five research questions:
 
 \begin{description}
-    \item[RQ1 (Retrieval effectiveness):] The hybrid+BM25 strategy achieves the best retrieval quality (context precision 0.568, context relevance 0.805), confirming that combining dense semantic search with keyword matching captures both conceptual and terminological similarity. Cross-encoder re-ranking does not consistently improve results.
+    \item[RQ1 (Retrieval effectiveness):] The hybrid+BM25 strategy achieves the best retrieval quality (context precision 0.608, context relevance 0.895), confirming that combining dense semantic search with keyword matching captures both conceptual and terminological similarity. Cross-encoder re-ranking does not consistently improve results.
 
-    \item[RQ2 (RAG vs.\ LLM-only):] RAG improves faithfulness by 24~percent, demonstrating that the retrieved context grounds the LLM's analysis in documented evidence. Verdict accuracy on whole-contract review is low for both modes, reflecting the inherent difficulty of the task rather than a limitation of the RAG approach.
+    \item[RQ2 (RAG vs.\ LLM-only):] RAG boosts faithfulness by 24\% and reasoning quality by 8\%, showing that retrieved context anchors the LLM's analysis in documented evidence and helps it structure its arguments more coherently. The accuracy on whole-contract review is comparable for both modes, reflecting the inherent difficulty of the task rather than the limitation of the RAG approach.
 
     \item[RQ3 (Groundedness):] The full pipeline achieves faithfulness of 0.765 and context utilization of 0.851 on the evaluation dataset, confirming that the LLM actively incorporates retrieved findings into its analysis. Reasoning quality (0.908) is the strongest metric, indicating a well-structured analytical output.
 
     \item[RQ4 (Real-world applicability):] Integration with Wake-AI shows no improvement in detection count. The value of RAG integration lies in improved reasoning quality and groundedness rather than raw detection volume.
 \end{description}
 
-The results indicate that RAG integration primarily improves the quality of the LLM's reasoning, making it more grounded, transparent, and verifiable, rather than find more vulnerabilities.
+The results indicate that RAG integration primarily improves the quality of the LLM's reasoning, making it more grounded, transparent, and verifiable, rather than finding more vulnerabilities.
 
 \chapter{Conclusion}
 \label{ch:conclusion}
 
-In this thesis, we proposed a RAG-augmented system for LLM-based smart contract security auditing, integrated into the Wake framework through the MCP. The system addresses the knowledge cutoff limitation of large language models by grounding their reasoning in a continuously updated knowledge base of historical audit findings. Differently from prior work that relies on fine-tuning domain-specific models or prompt-only approaches, we proposed a retrieval-augmented architecture that separates knowledge acquisition from reasoning, allowing the knowledge base to grow independently without retraining the underlying model.
+In this thesis, we proposed a RAG-augmented system for LLM-based smart contract security auditing, integrated into the Wake framework through the MCP. The system addresses the knowledge cutoff limitation of large language models by grounding their reasoning in a continuously updated knowledge base of historical audit findings.
 
-The presented solution comprises several concrete contributions. A domain-specific knowledge base was constructed from 16,780 real-world audit findings, preprocessed through LLM-based summarization and embedded along two modalities — text summaries and extracted Solidity code blocks. A retrieval pipeline was designed and evaluated across five query strategies, with the hybrid dense vector plus BM25 keyword fusion achieving the best performance. The retrieval capability was integrated into Wake-AI's auditing workflow via MCP, using a proactive strategy that queries the knowledge base after each function analysis even before a vulnerability is suspected.
+The presented solution comprises several concrete contributions. A domain-specific knowledge base was built from preprocessed real-world audit findings. A retrieval pipeline was designed and evaluated across five query strategies, with the hybrid fusion of dense embeddings and BM25 keyword matching achieving the best performance. The retrieval capability was integrated into the Wake-AI workflow through MCP, using a proactive strategy for suspected functions.
 
-As seen in the results, the RAG augmentation primarily improves the quality of the LLM's reasoning rather than the raw quantity of detected vulnerabilities. The most significant finding is that RAG improves faithfulness by 28 percentage points compared to the LLM-only baseline, demonstrating that retrieved historical findings effectively ground the model's analysis in documented evidence and reduce hallucinated claims. The retrieval pipeline achieves a Hit Rate@5 of 0.900 on real-world findings, and the LLM actively incorporates retrieved context into well-structured analyses, as confirmed by high reasoning quality and context utilization scores. A key finding is that hybrid retrieval combining dense vectors with BM25 keyword matching consistently outperforms pure dense retrieval, while cross-encoder re-ranking does not transfer well from its web search training domain.
+As seen in the results, the RAG augmentation primarily improves the quality of the LLM's reasoning rather than the raw quantity of detected vulnerabilities. The most significant finding is that RAG improves faithfulness by 24 percent compared to the LLM-only baseline, demonstrating that retrieved historical findings effectively ground the model's analysis in documented evidence and reduce hallucinated claims. The retrieval pipeline achieves a Hit Rate@5 of 0.900 on real-world findings, and the LLM actively incorporates the retrieved context into well-structured analysis, as confirmed by high-quality reasoning and context utilization scores. A key finding is that hybrid retrieval combining dense vectors with BM25 keyword matching consistently outperforms pure dense retrieval, while cross-encoder re-ranking does not transfer well from its web search training domain.
 
-However, several aspects remain open for future work. The knowledge base currently draws from a single open-source; expanding it to include private audit databases and bug bounty reports would increase coverage and diversity. Training a domain-specific cross-encoder on smart contract audit data would likely improve re-ranking over the current general-purpose model. Tighter integration with Wake's static analysis infrastructure could enable IR-guided retrieval, where queries are enriched with control flow and data dependency information rather than relying solely on natural-language descriptions. Finally, a standardized evaluation benchmark for RAG-augmented smart contract auditing would enable more rigorous cross-system comparison.
+However, several aspects remain open for future work. The knowledge base currently draws from a single open-source; expanding it to include private audit databases and bug bounty reports would increase coverage and diversity. Tighter integration with Wake's static analysis infrastructure could enable IR-guided retrieval, where queries are enriched with control flow and data dependency information rather than relying solely on natural-language descriptions. Finally, a standardized evaluation benchmark for RAG-augmented smart contract auditing would enable more rigorous cross-system comparison.
 
