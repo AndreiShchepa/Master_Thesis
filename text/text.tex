@@ -1455,6 +1455,7 @@ Decide whether the FINDING is relevant to the QUERY vulnerability. RELEVANT (ver
 
 The per-finding judge independently evaluates each retrieved finding for binary relevance. This requires $k$~LLM calls per evaluation case but provides fine-grained diagnostics, identifying which specific findings in the retrieved set are useful and which are noise.
 
+
 \section{Metrics}
 \label{sec:metrics}
 
@@ -1462,53 +1463,37 @@ The per-finding judge independently evaluates each retrieved finding for binary 
 \label{subsec:retrieval-metrics}
 
 \subsubsection*{Deterministic Metrics}
-When evaluation cases include ground-truth relevant finding identifiers, the following standard information retrieval metrics are computed:
+These metrics compare the findings retrieved against ground-truth identifiers or labels from the evaluation cases. They do not involve an LLM judge.
 
 \begin{itemize}
-    \item \textbf{Context Precision.} Fraction of retrieved findings that belong to the ground-truth relevant set:
-    \begin{equation}
-        \text{Precision} = \frac{|\text{retrieved} \cap \text{relevant}|}{|\text{retrieved}|}
-    \end{equation}
-
-    \item \textbf{Context Recall.} Fraction of ground-truth relevant findings that were retrieved:
-    \begin{equation}
-        \text{Recall} = \frac{|\text{retrieved} \cap \text{relevant}|}{|\text{relevant}|}
-    \end{equation}
-
-    \item \textbf{Mean Average Precision (MAP@$k$).} Rewards relevant items appearing at earlier rank positions:
-    \begin{equation}
-        \text{AP@}k = \frac{1}{\min(|\text{relevant}|, k)} \sum_{i=1}^{k} \text{Precision@}i \cdot \text{rel}(i)
-    \end{equation}
-    where $\text{rel}(i) = 1$ if the $i$-th result is relevant, and $0$ otherwise.
-
-    \item \textbf{Recall@$k$.} Recall calculated at a specific cutoff position:
-    \begin{equation}
-        \text{Recall@}k = \frac{|\text{relevant} \cap \text{retrieved}_{1:k}|}{|\text{relevant}|}
-    \end{equation}
-
-    \item \textbf{Label Match Ratio.} Fraction of retrieved findings whose vulnerability label matches the query label:
+    \item \textbf{Label Match Ratio}. Fraction of retrieved findings whose vulnerability label matches the query label:
     \begin{equation}
         \text{LabelMatch} = \frac{|\{r \in \text{retrieved} : \text{label}(r) = \text{label}(q)\}|}{|\text{retrieved}|}
     \end{equation}
+
+    \item \textbf{Hit Rate@$k$}. Binary indicator: did the target finding appear in the top-$k$ results?
+
+    \item \textbf{Mean Reciprocal Rank (MRR)}. Averaged over all queries~$Q$:
+    \begin{equation}
+        \text{MRR} = \frac{1}{|Q|}\sum_{q \in Q} \frac{1}{\text{rank}(q)},
+    \end{equation}
+    where $\text{rank}(q)$ is the position of the target finding in the retrieved list.
+
+    \item \textbf{Normalized Discounted Cumulative Gain (NDCG@$k$)}. For a single relevant item:
+    \begin{equation}
+        \text{NDCG@}k = \frac{1}{\log_2(\text{rank} + 1)}.
+    \end{equation}
+
+    \item \textbf{Label Hit Rate}. Fraction of queries where at least one retrieved finding shares the target's vulnerability label.
 \end{itemize}
 
 \subsubsection*{LLM-Judged Metrics}
-These metrics do not require ground-truth annotations and can evaluate retrieval quality on any query:
+These metrics rely on an LLM acting as a judge to rate the semantic relevance of the retrieved findings. They do not require labeled relevant-finding identifiers and can therefore be applied to any query.
 
 \begin{itemize}
-    \item \textbf{Context Relevance.} The LLM judge evaluates the entire retrieved set, scoring overall relevance on a 0--1 scale with structured coverage and specificity feedback.
+    \item \textbf{Context Relevance}. The LLM judge evaluates the entire retrieved set, scoring overall relevance on a 0--1 scale with structured feedback on coverage (\texttt{full}/\texttt{partial}/\texttt{none}) and specificity (\texttt{high}/\texttt{medium}/\texttt{low}).
 
-    \item \textbf{Context Precision.} Each retrieved finding is independently evaluated for binary relevance. The metric is the fraction of individually relevant findings.
-
-    \item \textbf{Hit Rate@$k$.} Binary indicator: did the target finding appear in the top-$k$ results?
-
-    \item \textbf{Mean Reciprocal Rank (MRR).} Averaged over all queries $Q$: $\text{MRR} = \frac{1}{|Q|}\sum_{q \in Q} \frac{1}{\text{rank}(q)}$, where $\text{rank}(q)$ is the position of the target finding.
-
-    \item \textbf{NDCG@$k$.} For a single relevant item: $\frac{1}{\log_2(\text{rank} + 1)}$.
-
-    \item \textbf{Label Hit Rate.} Fraction of queries where at least one retrieved finding shares the target's vulnerability label.
-
-    \item \textbf{LLM Match Rate.} Fraction of golden vulnerabilities independently identified by the LLM during whole-contract review, before retrieval is performed.
+    \item \textbf{Context Precision}. Each retrieved finding is independently evaluated by the LLM judge for binary relevance. The metric is the fraction of individually relevant findings.
 \end{itemize}
 
 
@@ -1516,7 +1501,7 @@ These metrics do not require ground-truth annotations and can evaluate retrieval
 \label{subsec:generation-metrics}
 
 \begin{itemize}
-    \item \textbf{Verdict Accuracy.} Binary match between the predicted verdict and the expected verdict.
+    \item \textbf{Verdict Accuracy}. Binary match between the predicted verdict (parsed from the model's output) and the expected verdict. Computed deterministically.
 
     \item \textbf{Faithfulness} (LLM-judged). Measures the ratio of factual claims in the generated analysis that are supported by the retrieved context, producing a groundedness ratio on a scale of 0--1.
 
