@@ -53,7 +53,7 @@ To understand Ethereum's role as a programmable state-transition system, it is u
     \label{fig:block_eth}
 \end{figure}
 
-As illustrated in Figure~\ref{fig:block_eth}, a blockchain block links to its predecessor and successor by storing the cryptographic hash of the previous block's header within its own header, forming an immutable and ordered chain. Beyond this backward pointer, the block header contains four key fields: the \emph{previous block hash}, a \emph{timestamp} recording when the block was produced, a \emph{nonce} --- a 4-byte field adjusted during the consensus process and the \emph{Merkle root}, a single hash that compactly summarizes all transactions contained in the block~\cite{blockchain_diagram_eth}.
+As illustrated in Figure~\ref{fig:block_eth}, a blockchain block links to its predecessor and successor by storing the cryptographic hash of the previous block's header within its own header, forming an immutable and ordered chain. Beyond this backward pointer, the block header contains four key fields: the \emph{previous block hash}, a \emph{timestamp} recording when the block was produced, a \emph{nonce} --- a 4-byte field adjusted during the consensus process, and the \emph{Merkle root}, a single hash that compactly summarizes all transactions contained in the block~\cite{blockchain_diagram_eth}.
 
 A \emph{transaction} is the fundamental unit of state change in a blockchain: a cryptographically signed instruction issued by a participant that records the transfer of value or data between addresses. Every user in the network possesses a key pair: a private key, which must be kept confidential, and a corresponding public key that serves as the user's verifiable identity. When a user wishes to issue a transaction, the process follows two phases. In the signing phase, the sender encrypts the transaction data with their private key, producing a digital signature that is broadcast alongside the original payload. In the verification phase, any recipient or node can validate the signature using the sender's public key, confirming both the authenticity of the sender and that the data has not been tampered with in transit. The algorithm most widely adopted for this purpose in blockchain systems is the Elliptic Curve Digital Signature Algorithm\footnote{\url{https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm}} (ECDSA). Each signed transaction is broadcast to the network, validated by the nodes and permanently written in a block, after which it becomes immutable.
 
@@ -68,7 +68,7 @@ This design enables inclusion proofs of size $O(\log_2 n)$, where the number of 
 Once the block structure is established, the network must agree on which block to append next. This process is governed by the consensus mechanism, the design of which depends on the blockchain trust model. Two dominant consensus families have emerged across different deployment models.
 
 \subsubsection*{Proof of Work}
-Proof-of-Work (PoW) is the oldest and most widely adopted consensus mechanism in blockchain networks, first introduced by Nakamoto as the backbone of Bitcoin. Its underlying principle is direct: nodes in a peer-to-peer network, commonly referred to as \emph{miners}, compete to solve a computationally intensive cryptographic puzzle. This puzzle requires finding a nonce value $x$ such that the hash of the block header $y = f(x)$ satisfies a predefined difficulty target --- typically that the resulting hash begins with a certain number of leading zeros. The first miner to find a valid solution broadcasts it to the network, and upon verification by other nodes, the new block is appended to the chain. The successful miner is rewarded with newly minted cryptocurrency, which incentivizes continued participation~\cite{nakamoto2008, sabry2023}.
+Proof-of-Work (PoW) is the oldest and most widely adopted consensus mechanism in blockchain networks, first introduced by Nakamoto as the backbone of Bitcoin. Its underlying principle is direct: nodes in a peer-to-peer network, commonly referred to as \emph{miners}, compete to solve a computationally intensive cryptographic puzzle. This puzzle requires finding a nonce value $x$ such that the hash of the block header $y = f(x)$ satisfies a predefined difficulty target~--- typically the resulting hash begins with a certain number of leading zeros. The first miner to find a valid solution broadcasts it to the network, and upon verification by other nodes, the new block is appended to the chain. The successful miner is rewarded with newly minted cryptocurrency, which incentivizes continued participation~\cite{nakamoto2008, sabry2023}.
 
 \begin{figure}[!ht]
     \centering
@@ -79,14 +79,14 @@ Proof-of-Work (PoW) is the oldest and most widely adopted consensus mechanism in
 
 Figure~\ref{fig:pow} illustrates this process concretely: a puzzle is broadcast to three competing miners ($x_1$, $x_2$, $x_3$), each of whom independently computes a candidate solution. Only the submission from $x_2$ satisfies the difficulty condition, while those of $x_1$ and $x_3$ are rejected --- demonstrating the inherently competitive and probabilistic nature of block production under PoW.
 
-Despite its security guaranties, PoW carries a significant drawback: the competitive puzzle-solving process demands enormous and continuously growing computational power. As the chain lengthens, information from past blocks feeds into each new cryptographic puzzle, making successive puzzles progressively harder and driving miners toward specialized hardware, from ordinary CPUs in Bitcoin's early days to purpose-built Application-Specific Integrated Circuits (ASICs) that cannot be repurposed once obsolete~\cite{SCHINCKUS2021111682}.
+Despite its security guarantees, PoW carries a significant drawback: the competitive puzzle-solving process demands enormous and continuously growing computational power. As the chain lengthens, information from past blocks feeds into each new cryptographic puzzle, making successive puzzles progressively harder and driving miners toward specialized hardware, from ordinary CPUs in Bitcoin's early days to purpose-built Application-Specific Integrated Circuits (ASICs) that cannot be repurposed once obsolete~\cite{SCHINCKUS2021111682}.
 
 \subsubsection*{Proof of Stake}
-Proof-of-Stake (PoS) emerged as a direct response to the energy and scalability limitations of PoW. Instead of competing through computational power, validators lock up (\emph{stake}) --- a quantity of the network's native cryptocurrency as collateral, and the probability of being selected to propose the next block is proportional to the size of that stake~\cite{nguyen2019pos}. This design replaces electricity with economic commitment as the primary security mechanism, yielding several distinctive properties:
+Proof-of-Stake (PoS) emerged as a direct response to the energy and scalability limitations of PoW. Instead of competing through computational power, validators lock up a quantity of the network's native cryptocurrency as collateral (the \emph{stake}), and the probability of being selected to propose the next block is proportional to the size of that stake~\cite{nguyen2019pos}. This design replaces electricity with economic commitment as the primary security mechanism, yielding several distinctive properties:
 \begin{itemize}
     \item \textbf{Stake-weighted selection}. A validator's chance of proposing a block grows with the amount of cryptocurrency they have staked, aligning influence with economic exposure to the network.
     \item \textbf{Fee-based rewards}. Unlike PoW miners, who receive newly minted coins as block rewards, PoS validators are primarily compensated through transaction fees collected from the blocks they validate.
-    \item \textbf{Energy efficiency at the cost of maturity}. PoS eliminates the need for specialized mining hardware and its associated electricity consumption, though the mechanism has a shorter track record and its long-term security guaranties are still being studied.
+    \item \textbf{Energy efficiency at the cost of maturity}. PoS eliminates the need for specialized mining hardware and its associated electricity consumption, though the mechanism has a shorter track record and its long-term security guarantees are still being studied.
 \end{itemize}
 
 The most prominent real-world transition to PoS occurred on Ethereum. Under its original PoW design, the annual electricity consumption of the network was approximately 113~terawatt-hours, despite processing only about 15~transactions per second. On 15~September 2022, the Ethereum development community completed \emph{The Merge}~\cite{mit_merge}, a long-planned switch to PoS that proceeded without major disruption to the live network and reduced energy consumption by over 99\%\footnote{\url{https://en.wikipedia.org/wiki/Proof_of_stake}}.
@@ -164,7 +164,7 @@ Solidity is Ethereum's dominant high-level, statically typed, contract-oriented 
     \item \textbf{Failure semantics}: (\texttt{require}, \texttt{revert}, \texttt{assert}) determine how safely the contract handles unexpected states.
 \end{itemize}
 
-A common drawback of Solidity development is that subtle semantic errors can produce severe vulnerabilities. For example, performing an external call before updating the internal state or careless use of \texttt{delegatecall()}, may execute foreign code in the caller's storage context\footnote{\url{https://docs.soliditylang.org}}.
+A common drawback of Solidity development is that subtle semantic errors can produce severe vulnerabilities. For example, performing an external call before updating the internal state or careless use of \texttt{delegatecall()} may execute foreign code in the caller's storage context\footnote{\url{https://docs.soliditylang.org}}.
 
 \newpage
 
@@ -316,7 +316,7 @@ The vulnerabilities outlined above share recognizable structural patterns, makin
 \chapter{Code Analysis}
 \label{ch:code-analysis}
 
-The security analysis of software systems relies on a diverse set of analytical techniques that have evolved over decades of programming-language research. This chapter surveys the foundational methods for code analysis and establishes the background necessary to compare different approaches to vulnerability detection. The discussion is organized around three complementary paradigms: static analysis, which reasons about program behavior without execution; dynamic analysis, which observes actual runtime behavior; and formal verification, which provides mathematical guaranties about program correctness.
+The security analysis of software systems relies on a diverse set of analytical techniques that have evolved over decades of programming-language research. This chapter surveys the foundational methods for code analysis and establishes the background necessary to compare different approaches to vulnerability detection. The discussion is organized around three complementary paradigms: static analysis, which reasons about program behavior without execution; dynamic analysis, which observes actual runtime behavior; and formal verification, which provides mathematical guarantees about program correctness.
 
 \section{Static Analysis}
 \label{sec:static-analysis}
@@ -1060,7 +1060,7 @@ Some of these limitations are intrinsic to the nature of LLMs and cannot be full
 \chapter{Proposed Methodology}
 \label{ch:methodology}
 
-The preceding chapters established the theoretical foundations for understanding the methodology proposed in this work. This chapter synthesizes these foundations into a concrete approach to enhance LLM-based smart contract auditing with retrieval-augmented generation. It begins with the design goals that motivate the system, formalizes the RAG pipeline, details the knowledge base construction and retrieval mechanism, and describes the integration with the Wake framework.
+The preceding chapters established the theoretical foundations for understanding the methodology proposed in this work. This chapter synthesizes these foundations into a concrete approach to enhance LLM-based smart-contract auditing with retrieval-augmented generation. It begins with the design goals that motivate the system, formalizes the RAG pipeline, details the knowledge base construction and retrieval mechanism and describes the integration with the Wake framework.
 
 \section{Design Goals}
 \label{sec:design-goals}
@@ -1072,7 +1072,7 @@ The design of the RAG-augmented auditing system is guided by three goals, each m
 
     \item \textbf{Token efficiency.} LLM context windows are finite and costly. Rather than concatenating entire codebases or knowledge bases into the prompt, the system retrieves a small, highly relevant subset of documents and injects only the most informative content. This keeps inference fast, reduces cost, and avoids the noise degradation that occurs when irrelevant material is included~\cite{lewis2021retrieval}.
 
-    \item \textbf{Audit usefulness.} The system must produce structured reports that include a verdict (vulnerable or safe), a confidence level, and a detailed reasoning trace that references specific past findings. This aligns with industry audit report conventions and allows auditors to use the output as a starting point for deeper investigation rather than a final answer.
+    \item \textbf{Audit usefulness.} The system must produce structured reports that include a verdict (vulnerable or safe), a confidence level, and a detailed reasoning trace that references specific past findings. This aligns with industry audit report conventions and allows auditors to use the output as a starting point for a deeper investigation rather than a final answer.
 \end{enumerate}
 
 \section{System Architecture Overview}
@@ -1087,19 +1087,18 @@ The proposed system extends Wake-AI (Section~\ref{sec:wake-ai}) with a retrieval
     \label{fig:architecture}
 \end{figure}
 
-Figure~\ref{fig:architecture} shows the two loosely coupled subsystems that compose the architecture. The \emph{offline} knowledge acquisition pipeline periodically fetches newly disclosed vulnerability reports, processes them into structured entries, and stores their vector embeddings in a database. Because this pipeline operates independently, the knowledge base grows continuously without requiring changes to the analysis component. This design exploits a core advantage of retrieval-augmented generation: awareness of newly discovered vulnerabilities is achieved simply by updating the knowledge base, without retraining the underlying LLM or manually injecting ad-hoc context into prompts.
+Figure~\ref{fig:architecture} shows the two loosely coupled subsystems that compose the architecture. The \emph{offline} knowledge acquisition pipeline periodically fetches newly disclosed vulnerability reports, processes them into structured entries and stores their vector embeddings in a database. Because this pipeline operates independently, the knowledge base grows continuously without requiring changes to the analysis component. This design exploits a core advantage of retrieval-augmented generation: awareness of newly discovered vulnerabilities is achieved by updating the knowledge base, without retraining the underlying LLM or manually injecting ad-hoc context into prompts.
 
 The \emph{online} analysis pipeline is Wake-AI's existing multi-stage auditing workflow, enhanced by a retrieval module at the discovery step. When the LLM encounters a code pattern that requires evaluation, it issues an MCP tool call to the knowledge base, which returns the most semantically similar historical vulnerability reports. These reports are injected into the LLM's context, grounding its reasoning in documented, real-world findings.
 
 This separation preserves Wake-AI's existing interface and workflow: the retrieval capability can be enabled or disabled without modifying the core analysis logic. The remainder of this chapter describes each component of the architecture in detail, beginning with the formal RAG framework that underpins the retrieval mechanism.
 
-
 \section{Retrieval-Augmented Generation}
 \label{sec:rag}
 
-Retrieval-Augmented Generation (RAG) addresses two fundamental limitations of standalone language models: the inability to access information beyond the training data cutoff, and the tendency to hallucinate when answering questions that require specialized knowledge~\cite{lewis2021retrieval}. Rather than encoding all knowledge in model weights, RAG augments the generator with a retrieval component that fetches relevant documents from an external corpus at inference time. This separation has a practical consequence: the knowledge base can be updated, extended, or replaced without retraining the model.
+Retrieval-Augmented Generation (RAG) addresses two fundamental limitations of standalone language models: the inability to access information beyond the training-data cutoff and the tendency to hallucinate when answering questions that require specialized knowledge~\cite{lewis2021retrieval}. Rather than encoding all knowledge in model weights, RAG augments the generator with a retrieval component that fetches relevant documents from an external corpus at inference time. This separation has a practical consequence: the knowledge base can be updated, extended, or replaced without retraining the model.
 
-In the context of smart contract auditing, RAG enables the system to leverage continuously growing databases of historical audit findings --- precisely the kind of specialized, evolving knowledge that language models struggle to maintain through pre-training alone.
+In the context of smart-contract auditing, RAG enables the system to leverage continuously growing databases of historical audit findings --- precisely the kind of specialized, evolving knowledge that language models struggle to maintain through pre-training alone.
 
 \subsection{Formal Framework}
 \label{subsec:rag-formal}
@@ -1113,16 +1112,16 @@ A RAG system comprises two components. The \emph{retriever} $p_\eta$ produces a 
 
 where $\eta$ denotes the retriever parameters --- in practice, the weights of an embedding model that maps both queries and passages into a shared vector space, so that relevance reduces to vector similarity.
 
-The \emph{generator} $p_\theta$ produces each output token $y_i$ conditioned on the input~$x$, a retrieved passage~$z$, and all previously generated tokens $y_{1:i-1}$:
+The \emph{generator} $p_\theta$ produces each output token $y_i$ conditioned on the input~$x$, a retrieved passage~$z$ and all previously generated tokens $y_{1:i-1}$:
 
 \begin{equation}
     p_\theta(y_i \mid x, z, y_{1:i-1}),
     \label{eq:generator}
 \end{equation}
 
-where $\theta$ denotes the generator parameters. In this work, the generator is a frontier LLM accessed through an API, and the retrieved passages are historical audit findings with similar vulnerability patterns.
+where $\theta$ denotes the generator parameters. In this work, the generator is a frontier LLM accessed through an API and the retrieved passages are historical audit findings with similar vulnerability patterns.
 
-The probability of the full output sequence is marginalized over the retrieved top passages $k$:
+The probability of the full output sequence is marginalized over the top-$k$ retrieved passages:
 
 \begin{equation}
     p(y \mid x) \;\approx\; \sum_{z \in \text{top-}k}
@@ -1133,16 +1132,15 @@ The probability of the full output sequence is marginalized over the retrieved t
 
 This formulation makes explicit the three design decisions that shape any RAG system: \emph{what} to store in the knowledge base (the corpus over which $z$ ranges), \emph{how} to retrieve (the retriever $p_\eta$ and the value of $k$), and \emph{how} to present the retrieved context to the generator (the prompt structure that conditions $p_\theta$). The following sections address each of these decisions in turn.
 
-
 \section{Knowledge Base}
 \label{sec:knowledge-base}
 
-The effectiveness of a RAG system depends on two factors: the quality and coverage of its knowledge base, and the correctness with which the retrieved documents are utilized during generation. A knowledge base that is noisy, incomplete, or poorly structured degrades retrieval precision regardless of how sophisticated the retrieval mechanism is~\cite{manning2008irbook}.
+The effectiveness of a RAG system depends on two factors: the quality and coverage of its knowledge base, and the correctness with which the retrieved documents are utilized during generation. A knowledge base that is noisy, incomplete or poorly structured degrades retrieval precision regardless of how sophisticated the retrieval mechanism is~\cite{manning2008irbook}.
 
 \subsection{Data Source}
 \label{subsec:solodit}
 
-The knowledge base is constructed from Solodit\footnote{\url{https://solodit.cyfrin.io}}, a comprehensive aggregator of smart contract audit findings maintained by Cyfrin. Solodit indexes the findings of the major audit firms and competitive audit platforms, including Trail of Bits, OpenZeppelin, Spearbit, Code4rena, and Sherlock, among others. Each finding includes a title, detailed markdown content (with vulnerability description, proof of concept, recommended mitigation, and inline Solidity code), a severity classification, source metadata, and community-contributed tags.
+The knowledge base is constructed from Solodit\footnote{\url{https://solodit.cyfrin.io}}, a comprehensive aggregator of smart-contract audit findings maintained by Cyfrin. Solodit indexes the findings of the major audit firms and competitive audit platforms, including Trail of Bits, OpenZeppelin, Spearbit, Code4rena, and Sherlock, among others. Each finding includes a title, detailed markdown content (with vulnerability description, proof of concept, recommended mitigation, and inline Solidity code), a severity classification, source metadata and community-contributed tags.
 
 Solodit was selected as the primary data source for three reasons. First, it aggregates findings across multiple audit firms, providing broader coverage than any single firm's reports. Second, each finding is a self-contained unit with structured metadata, which makes it suitable for embedding and retrieval without extensive reformatting. Third, its REST API enables incremental ingestion: the pipeline fetches findings sorted by recency, stopping upon encountering an already-ingested entry. This ensures that the knowledge base grows monotonically without duplication, keeping it up to date with recently disclosed vulnerabilities.
 
@@ -1151,22 +1149,18 @@ Ingestion is limited to findings classified as \texttt{MEDIUM}, \texttt{HIGH}, o
 \subsection{Data Preprocessing}
 \label{subsec:preprocessing}
 
-The raw audit findings vary widely in format, length, and writing style. Directly embedding unprocessed text leads to noisy vector representations where formatting artifacts such as markdown headers, code fences, HTML entities could dominate the embedding signal over the actual vulnerability semantics. The preprocessing pipeline therefore normalizes each finding into a uniform structure optimized for embedding.
+The raw audit findings vary widely in format, length and writing style. Direct embedding of unprocessed text leads to noisy vector representations in which formatting artifacts such as markdown headers, code fences, or HTML entities could dominate the embedding signal over the actual vulnerability semantics. The preprocessing pipeline therefore normalizes each finding into a uniform structure optimized for embedding.
 
 \subsubsection*{Code Block Extraction}
-
-Fenced code blocks are extracted using regular expression matching and stored separately in a dedicated JSONB column. This separation serves two purposes: it enables code-specific embedding using a specialized model, and it allows the textual summary to focus on the vulnerability description without code noise.
+Fenced code blocks are extracted using regular-expression matching and stored separately in a dedicated JSONB column. This separation serves two purposes: it enables code-specific embedding using a specialized model, and it allows the textual summary to focus on the vulnerability description without code noise.
 
 The extracted code blocks are normalized for embedding by flattening each block into a single line (replacing newlines and tabs with spaces, collapsing duplicate whitespace) and truncating to 5{,}000 characters. A single finding may yield multiple code blocks, each embedded independently. This explains why the number of code embeddings exceeds the number of findings in the knowledge base.
 
 \subsubsection*{Summary Generation}
-
-Each finding undergoes an LLM-based summarization (GPT-5.1, temperature~0) to produce three outputs: (i)~a human-readable summary of 5--10 sentences that capture the vulnerability description, (ii)~a dense, keyword-rich summary optimized for semantic search that includes the vulnerability type, affected components, attack vectors, and impact, and (iii)~a vulnerability label selected from a predefined taxonomy. The keyword-rich summary serves as the primary text for embedding, as it concentrates the most retrieval-relevant information into a compact representation.
+Each finding undergoes an LLM-based summarization (GPT-5.1, temperature~0) that produces three outputs: (i)~a human-readable summary of 5--10 sentences covering the vulnerability description, (ii)~a dense, keyword-rich summary optimized for semantic search that includes the vulnerability type, affected components, attack vectors and impact, and (iii)~a vulnerability label selected from a predefined taxonomy. The keyword-rich summary serves as the primary text for embedding, because it concentrates the most retrieval-relevant information into a compact representation.
 
 \subsubsection*{Label Assignment}
-\label{subsubsec:labeling}
-
-The LLM assigns to each finding a vulnerability label from a predefined taxonomy of 20~categories, covering common smart contract vulnerability classes such as Access Control, Reentrancy, Logic Error, Fund Loss, and Denial of Service.
+The LLM assigns to each finding a vulnerability label drawn from a predefined taxonomy of 20~categories, covering common smart-contract vulnerability classes such as Access Control, Reentrancy, Logic Error, Fund Loss, and Denial of Service.
 
 \begin{table}[!ht]
 \centering
@@ -1180,7 +1174,7 @@ Access control & 2{,}720 \\
 Denial of service & 1{,}304 \\
 Data validation & 1{,}221 \\
 Front-running & 635 \\
-Arithmetics & 483 \\
+Arithmetic & 483 \\
 Standards violation & 407 \\
 Overflow/Underflow & 368 \\
 Configuration & 346 \\
@@ -1190,15 +1184,14 @@ Configuration & 346 \\
 \label{tab:label-dist}
 \end{table}
 
-Table~\ref{tab:label-dist} shows the distribution of vulnerability labels across the knowledge base. The distribution exhibits significant class imbalance: Logic Error alone accounts for 27\% of all findings, followed by Fund Loss (17\%) and Access Control (16\%). Together, the top three categories comprise 60\% of the corpus. This imbalance reflects the real-world prevalence of these vulnerability types in smart contract audits and has implications for retrieval: queries about common categories will match a larger pool of candidates, while queries about rarer categories (e.g., Overflow/Underflow at 2\%) may surface fewer but potentially more precise results.
-
+Table~\ref{tab:label-dist} shows the distribution of vulnerability labels across the knowledge base. The distribution exhibits a significant class imbalance: Logic Error alone accounts for 27\% of all findings, followed by Fund Loss (17\%) and Access Control (16\%). Together, the top three categories comprise 60\% of the corpus. This imbalance reflects the real-world prevalence of these vulnerability types in smart-contract audits and has implications for retrieval: queries about common categories will match a larger pool of candidates, while queries about rarer categories (e.g., Overflow/Underflow at 2\%) may surface fewer but potentially more precise results.
 
 \subsection{Database Schema}
 \label{subsec:db-schema}
 
-Storing and querying vector embeddings at scale requires infrastructure that supports an efficient approximate nearest-neighbor (ANN) search. Purpose-built vector databases such as Pinecone\footnote{\url{https://www.pinecone.io/}} or Milvus\footnote{\url{https://milvus.io/}} are designed specifically for this task: they offer managed indexing, automatic sharding, and optimized distance computations out of the box. However, these systems operate as standalone services, adding operational complexity for this thesis.
+Storing and querying vector embeddings at scale requires infrastructure that supports an efficient approximate nearest-neighbor (ANN) search. Purpose-built vector databases such as Pinecone\footnote{\url{https://www.pinecone.io/}} or Milvus\footnote{\url{https://milvus.io/}} are designed specifically for this task: they offer managed indexing, automatic sharding and optimized distance computations out of the box. However, these systems operate as standalone services, adding unwarranted operational overhead to the scope of this thesis.
 
-An alternative approach is to extend a general-purpose relational database with vector capabilities. The \textit{pgvector} extension~\cite{pgvector2024} adds native vector column types and distance operators to PostgreSQL, enabling the storage of embedding indexes, and similarity search within the same transactional database that already holds structured metadata. For this project, the key advantage is co-location: a single query can filter by relational attributes (e.g., embedding model, content mode, vulnerability label) and rank by vector similarity in one pass, without cross-service joins.
+An alternative approach is to extend a general-purpose relational database with vector capabilities. The \texttt{pgvector} extension~\cite{pgvector2024} adds native vector column types and distance operators to PostgreSQL, allowing for the storage of embedding indexes and similarity search within the same transactional database that already holds structured metadata. For this project, the key advantage is co-location: a single query can filter by relational attributes (e.g., embedding model, content mode, vulnerability label) and rank by vector similarity in one pass, without cross-service joins.
 
 \begin{figure}[!ht]
     \centering
@@ -1207,28 +1200,26 @@ An alternative approach is to extend a general-purpose relational database with 
     \label{fig:erd}
 \end{figure}
 
-The schema, illustrated in the entity-relationship diagram in Figure~\ref{fig:erd}, comprises six tables organized into two logical groups. The \emph{knowledge base} group consists of three tables: \texttt{findings} stores the core entries with their metadata, preprocessed content, and code blocks; \texttt{finding\_embeddings} stores vector embeddings linked to findings via a foreign key, supporting multiple embedding models and content modes (text or code) through dedicated columns; and \texttt{finding\_chunks} stores token-level chunks of findings for the chunked retrieval strategy. The \emph{evaluation} group contains: \texttt{evaluation\_cases}, which holds structured test inputs with ground-truth labels and reference answers; \texttt{experiments}, which records each evaluation run together with a frozen configuration snapshot and git commit hash for reproducibility; and the last \texttt{evaluation\_results} table, which links individual metric scores back to their experiment and case.
+The schema, illustrated in the entity-relationship diagram in Figure~\ref{fig:erd}, comprises six tables organized into two logical groups. The \emph{knowledge base} group consists of three tables: \texttt{findings} stores the core entries with their metadata, preprocessed content, and code blocks; \texttt{finding\_embeddings} stores vector embeddings linked to findings via a foreign key, supporting multiple embedding models and content modes (text or code) through dedicated columns; and \texttt{finding\_chunks} stores token-level chunks of findings for the chunked retrieval strategy. The \emph{evaluation} group contains \texttt{evaluation\_cases}, which holds structured test inputs with ground-truth labels and reference answers; \texttt{experiments}, which records each evaluation run together with a frozen configuration snapshot and Git commit hash for reproducibility; and \texttt{evaluation\_results}, which links individual metric scores back to their experiment and case.
 
 \paragraph{HNSW indexes.}
-The exact nearest-neighbor search over vectors requires computing the distance to every row in the table --- a linear scan that becomes prohibitively slow as the dataset grows. The approximate nearest-neighbor indexes trade a small amount of recall for dramatically lower query latency. Among the available ANN algorithms, Hierarchical Navigable Small World (HNSW) graphs~\cite{malkov2018} offer a strong balance between recall, speed, and incremental insertability. HNSW constructs a multi-layer graph in which each layer is a navigable small-world network: the top layers contain few, widely connected nodes for coarse navigation, while the bottom layer connects all nodes for fine-grained search. A query traverses the graph greedily from the top layer downward, narrowing the candidate set at each level.
+The exact nearest-neighbor search over vectors requires computing the distance to every row in the table --- a linear scan that becomes prohibitively slow as the dataset grows. The approximate nearest-neighbor indexes trade a small amount of recall for dramatically lower query latency. Among the available ANN algorithms, Hierarchical Navigable Small World (HNSW) graphs~\cite{malkov2018} offer a strong balance between recall, speed and incremental insertability. HNSW constructs a multi-layer graph in which each layer is a navigable small-world network: the upper layers are sparsely populated with long-range edges that enable coarse navigation, while the bottom layer connects all nodes for fine-grained search. A query traverses the graph greedily from the top layer downward, narrowing the candidate set at each level.
 
 \paragraph{Search functions.}
-Four PostgreSQL functions encapsulate the similarity search logic. The text and code search functions each accept a query vector, a result count~$k$, a similarity threshold, and an optional label filter. The similarity is computed as $1 - d_{\cos}$ using pgvector's \texttt{<=>} operator. The functions join the embedding and finding tables, filter by model and mode, apply the threshold, and return ranked results with full finding metadata. Encapsulating this logic in database functions keeps the search semantics version-controlled alongside the schema and avoids duplicating filtering logic across application code.
+Four PostgreSQL functions encapsulate the similarity-search logic. The text and code search functions each accept a query vector, a result count~$k$, a similarity threshold, and an optional label filter. The similarity is computed as $1 - d_{\cos}$ using pgvector's \texttt{<=>} operator. The functions join the embedding and finding tables, filter by model and mode, apply the threshold, and return ranked results with full finding metadata. Encapsulating this logic in database functions keeps the search semantics version-controlled alongside the schema and avoids duplicating filtering logic across application code.
 
 \subsection{Embeddings}
 \label{subsec:indexing-embeddings}
 
-Each finding is embedded independently along two modalities, reflecting the dual nature of audit findings: they contain both natural-language vulnerability summary and Solidity code snippets.
+Each finding is embedded independently along two modalities, reflecting the dual nature of audit findings: they contain both natural-language vulnerability summaries and Solidity code snippets.
 
 \subsubsection*{Text Embeddings}
-The textual summary is embedded using \textbf{nomic-embed-text-v1.5}~\cite{nussbaum2024nomic}, a 768-dimensional model. It uses task-specific prefixes: documents are prefixed with \texttt{search\_document:} during indexing and queries with \texttt{search\_query:} during retrieval. All embeddings are L2-normalized, converting cosine similarity into inner product for efficient \textit{pgvector} search.
+The textual summary is embedded using \textbf{nomic-embed-text-v1.5}~\cite{nussbaum2024nomic}, a 768-dimensional model. It uses task-specific prefixes: documents are prefixed with \texttt{search\_document:} during indexing, and queries with \texttt{search\_query:} during retrieval. All embeddings are L2-normalized\footnote{\url{https://en.wikipedia.org/wiki/Normalization_(machine_learning)}}, converting cosine similarity into an inner product for efficient \texttt{pgvector} search.
 
 \subsubsection*{Code Embeddings}
-
 Code blocks are embedded using \textbf{CodeRankEmbed}~\cite{suresh2025rank}, a 768-dimensional model trained specifically for code search. It uses the prefix \texttt{"Represent this query for searching relevant code: "} for query embedding. Code embeddings enable retrieval where the query is a Solidity code snippet, directly matching structural code patterns across findings.
 
-This dual-modality approach allows the retrieval pipeline to match queries against both the semantic description and the actual code of historical findings. The choice between text and code retrieval or a combination of both. This evaluation of configurations is explored in Chapter~\ref{ch:evaluation}.
-
+This dual-modality approach allows the retrieval pipeline to match queries against both the semantic description and the actual code of historical findings. The choice between text retrieval, code retrieval, or a combination of both depends on the query type and corpus characteristics; these configurations are empirically evaluated in Chapter~\ref{ch:evaluation}.
 
 \section{Retrieval Pipeline}
 \label{sec:retrieval}
@@ -1241,9 +1232,9 @@ The retrieval pipeline transforms a query into a ranked list of the $k$ most rel
 For dense retrieval, the query is embedded using the appropriate model and compared against stored embeddings using cosine similarity computed inside PostgreSQL. Depending on the search mode, the system invokes the corresponding database function:
 
 \begin{itemize}
-    \item \textbf{Text search} retrieves findings by comparing against text embeddings generated from preprocessed summaries.
-    \item \textbf{Code search} retrieves findings by comparing against code embeddings generated from extracted code blocks.
-    \item \textbf{Hybrid search} (text + code) performs both searches independently, then merges results by finding identifier, keeping the higher similarity score when a finding appears in both result sets.
+    \item \textbf{Text search} retrieves findings by comparing them with text embeddings generated from preprocessed summaries.
+    \item \textbf{Code search} retrieves findings by comparing them with code embeddings generated from extracted code blocks.
+    \item \textbf{Hybrid search} (text + code) performs both searches independently, then merges the results on the finding identifier, keeping the higher similarity score when a finding appears in both result sets.
 \end{itemize}
 
 The hybrid mode exploits the complementary nature of the two modalities: text embeddings capture vulnerability semantics (e.g., ``reentrancy in token transfer''), while code embeddings capture structural patterns (e.g., an external call followed by a state update).
@@ -1251,81 +1242,77 @@ The hybrid mode exploits the complementary nature of the two modalities: text em
 \subsection{Re-ranking}
 \label{subsec:reranking}
 
-[TODO describe formaula]
-
-Initial dense retrieval optimizes for recall: it casts a wide net using embedding similarity, which is fast but may rank marginally relevant findings above highly relevant ones. The fundamental limitation is that bi-encoder models embed the query and each document \emph{independently},so the similarity score cannot capture fine-grained token-level interactions between them. A cross-encoder~\cite{nogueira2019passage} overcomes this by processing the query and document as a single concatenated input:
+Initial dense retrieval optimizes for recall: it casts a wide net using embedding similarity, which is fast but may rank marginally relevant findings above highly relevant ones. The fundamental limitation is that bi-encoder models embed the query and each document \emph{independently}, so the similarity score cannot capture fine-grained token-level interactions between them. A cross-encoder~\cite{nogueira2019passage} overcomes this by processing the query and the document as a single concatenated input and producing a joint relevance score, as defined in Equation~\ref{eq:cross-encoder}:
 %
 \begin{equation}
     s(q, d) = \sigma\,\bigl(W^\top \mathbf{h}_{\texttt{[CLS]}}(q \oplus d)\bigr),
     \label{eq:cross-encoder}
 \end{equation}
 %
-where $q \oplus d$ denotes the concatenation of the query and document tokens, $\mathbf{h}_{\texttt{[CLS]}}$ is the final hidden state of the \texttt{[CLS]} token, and $\sigma$ is the sigmoid function. Because attention flows across both inputs jointly, the model can detect relevance signals that depend on the specific \emph{combination} of query and document content. The cost is quadratic in sequence length, making cross-encoders impractical for first-stage retrieval over the full corpus but well-suited for re-scoring a small candidate set.
+where $q \oplus d$ denotes the concatenation of the query and document tokens, $\mathbf{h}_{\texttt{[CLS]}}$ is the final hidden state of the \texttt{[CLS]} token, $W$ is a learned projection and $\sigma$ is the sigmoid function. Because attention flows across both inputs jointly, the model can detect relevance signals that depend on the specific \emph{combination} of query and document content. The cost is quadratic in sequence length, which makes cross-encoders impractical for first-stage retrieval over the full corpus but well-suited for re-scoring a small candidate set.
 
-The system implements re-ranking through a cross-encoder model. Each candidate's content (truncated to 4{,}096 characters) is paired with the query and scored via Equation~\ref{eq:cross-encoder} in a single batch. Candidates are re-sorted by descending score and the top~$k$ are retained. For ablation purposes, re-ranking can be disabled entirely, in which case the retriever's original ranking is preserved and simply truncated to~$k$.
+The system implements re-ranking through a cross-encoder model. Each candidate's content (truncated to 4{,}096 characters) is paired with the query and scored via Equation~\ref{eq:cross-encoder} in a single batch. Candidates are re-sorted by descending score, and the top~$k$ are retained. For ablation purposes, re-ranking can be disabled entirely, in which case the retriever's original ranking is preserved and simply truncated to~$k$.
 
 The specific re-ranker models and their comparative performance are evaluated in Chapter~\ref{ch:evaluation}.
-
 
 \section{Model Context Protocol Integration}
 \label{sec:mcp-integration}
 
-The Model Context Protocol (MCP) is an open standard for connecting AI models with external tools and data sources. It defines a structured interface through which an LLM-based agent can discover available tools, invoke them with typed inputs, and receive structured outputs. Wake-AI already uses MCP to expose its static analysis capabilities (IR queries, CFG traversal, detector invocation) to the LLM agent.
+The Model Context Protocol (MCP) is an open standard for connecting AI models with external tools and data sources. It defines a structured interface through which an LLM-based agent can discover available tools, invoke them with typed inputs and receive structured outputs. Wake-AI already uses MCP to expose its static-analysis capabilities (IR queries, CFG traversal, detector invocation) to the LLM agent.
 
 \subsection{RAG Tools}
 \label{subsec:mcp-wake}
 
-The RAG system extends Wake-AI's MCP surface with two additional tools for knowledge base interaction:
+The RAG system extends Wake-AI's MCP surface with two additional tools for knowledge-base interaction:
 
 \begin{itemize}
-    \item \textbf{Search tool.} Accepts a natural-language description of a suspected vulnerability (and optional parameters: result count~$k$, similarity threshold, label filter, search mode) and returns a ranked list of similar historical findings with full metadata including title, summary, label, severity, code blocks, and similarity score.
+    \item \textbf{Search} tool. Accepts a natural-language description of a suspected vulnerability (and optional parameters: result count~$k$, similarity threshold, label filter, search mode) and returns a ranked list of similar historical findings with full metadata including title, summary, label, severity, code blocks, and similarity score.
 
-    \item \textbf{Retrieve details tool.} Given a finding identifier, returns the complete finding content, enabling the agent to request full details after an initial search returned only summaries.
+    \item \textbf{Retrieve details} tool. Given a finding identifier, returns the complete finding content, enabling the agent to request full details after an initial search returned only summaries.
 \end{itemize}
 
-This design allows the LLM agent to iteratively refine its retrieval: it might first search broadly for ``reentrancy in ERC-20 transfer'', inspect the returned summaries, then retrieve full details for the most promising matches. The iterative retrieval pattern is more token-efficient than pre-loading all potentially relevant documents into the prompt.
+This design allows the LLM agent to iteratively refine its retrieval: it might first search broadly for ``reentrancy in ERC-20 transfer'', inspect the returned summaries, and then retrieve full details for the most promising matches. The iterative retrieval pattern is more token-efficient than pre-loading all potentially relevant documents into the prompt.
 
 \subsection{Proactive RAG}
 \label{subsec:proactive-rag}
 
-A distinctive feature of the integration is the \emph{proactive} retrieval strategy embedded in the discovery prompt. Rather than waiting for the LLM to encounter a suspected vulnerability before querying the knowledge base, the prompt instructs the model to search proactively after analysing each non-trivial function.
+A distinctive feature of the integration is the \emph{proactive} retrieval strategy embedded in the discovery prompt. Rather than waiting until a suspected vulnerability is identified before querying the knowledge base, the prompt instructs the model to issue a retrieval call after analyzing each non-trivial function.
 
-The discovery prompt structures the audit as a systematic, function-by-function analysis. The LLM first lists all functions in the target contract, then analyses each one against a security checklist covering input validation, access control, front-running, denial of service, state change ordering, and other common vulnerability classes. After completing this checklist for each function, the following instruction triggers a knowledge base query:
+The discovery prompt structures the audit as a systematic, function-by-function analysis. The LLM first lists all functions in the target contract, then analyzes each one against a security checklist covering input validation, access control, front-running, denial of service, state-change ordering and other common vulnerability classes. After completing this checklist for each function, the following instruction triggers a knowledge-base query:
 
 \begin{tcolorbox}[colback=gray!5, colframe=black!60, fonttitle=\bfseries, title=Prompt: Proactive RAG Instruction]
-After analyzing each non-trivial function (more than \textasciitilde5 lines of logic, performs state changes, sends ETH, makes external calls, or handles signatures/proofs), also call \texttt{get\_similar\_issues} with a description of \textbf{what the function does, its key behaviors and possible issue} --- even if you haven't found a vulnerability yet. Skip trivial getters, pure math helpers, and simple event emitters.
+After analyzing each non-trivial function (more than \textasciitilde5 lines of logic, performs state changes, sends ETH, makes external calls, or handles signatures/proofs), also call \texttt{get\_similar\_issues} with a description of \textbf{what the function does, its key behaviors and possible issue} --- even if you haven't found a vulnerability yet. Skip trivial getters, pure math helpers and simple event emitters.
 \end{tcolorbox}
 
-The proactive strategy is motivated by a key observation: an auditor may not recognise a vulnerability pattern from code inspection alone, but a semantically similar historical finding could reveal the risk. By searching the knowledge base \emph{before} forming a verdict, the LLM gains access to documented precedents that might otherwise be missed. The knowledge base returns the top results using hybrid retrieval (dense vector search combined with BM25 keyword matching), providing the LLM with historical findings that share both semantic similarity and specific technical terminology with the function under review.
+The proactive strategy is motivated by the following observation: an auditor may not recognize a vulnerability pattern from code inspection alone, yet a semantically similar historical finding could reveal the risk. By searching the knowledge base \emph{before} forming a verdict, the LLM gains access to documented precedents that might otherwise be missed. The knowledge base returns the top results using hybrid retrieval (dense vector search combined with BM25 keyword matching), providing the LLM with historical findings that share both semantic similarity and specific technical terminology with the function under review.
 
 \subsection{Security Considerations}
 \label{subsec:mcp-security}
 
 \begin{itemize}
-    \item \textbf{Read-only surface.} All MCP tools are strictly read-only: they query the knowledge base but cannot modify it.
+    \item \textbf{Read-only surface}. All MCP tools are strictly read-only: they query the knowledge base but cannot modify it.
 
-    \item \textbf{Input sanitisation.} Query strings are used as embedding inputs and BM25 tokenisation inputs. Neither pathway evaluates queries as code or SQL. The pgvector search functions use parameterised queries, preventing SQL injection.
+    \item \textbf{Input sanitization}. Query strings are used as embedding inputs and BM25 tokenization inputs. Neither pathway evaluates queries as code or SQL. The pgvector search functions use parameterized queries, preventing SQL injection.
 
-    \item \textbf{Empty results.} The system returns an explicit ``no relevant findings found'' message rather than an empty response, preventing the LLM from hallucinating findings when retrieval yields no matches.
+    \item \textbf{Empty results}. The system returns an explicit ``no relevant findings found'' message rather than an empty response, preventing the LLM from hallucinating findings when retrieval yields no matches.
 
-    \item \textbf{Deterministic logging.} All MCP tool invocations, inputs, and outputs are logged with timestamps for post-hoc auditing and reproducibility.
+    \item \textbf{Deterministic logging}. All MCP tool invocations, inputs, and outputs are logged with timestamps for post-hoc auditing and reproducibility.
 \end{itemize}
 
-\bigskip
+Having specified the components of the proposed methodology, the remaining question is whether these design decisions translate into measurable improvements in retrieval quality and audit outcomes. Chapter~\ref{ch:evaluation} addresses this question through a systematic empirical evaluation of the knowledge base, retrieval pipeline and end-to-end auditing workflow.
 
-This chapter presented the design of a RAG-augmented smart contract auditing methodology driven by three goals: groundedness, token efficiency, and audit usefulness. The system constructs a knowledge base from historical audit findings sourced from Solodit, embeds them along two modalities (text and code), and stores the resulting vectors in PostgreSQL with pgvector. At analysis time, a dense vector retrieval pipeline surfaces the most relevant historical findings, with an optional cross-encoder re-ranking stage to improve precision. The retrieval capability is integrated into Wake-AI's auditing workflow through the Model Context Protocol, using a proactive retrieval strategy that queries the knowledge base after each function analysis---even before a vulnerability is suspected.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%=========================================================================%
+%=========================================================================%
+%=========================================================================%
 
 \chapter{Evaluation}
 \label{ch:evaluation}
 
-This chapter evaluates the RAG-augmented auditing system proposed in Chapter~\ref{ch:methodology}. It begins with the research questions that guide the evaluation, followed by a description of the datasets and metrics used to assess both retrieval and detection quality. Then presents the experimental setup, reports the results in four experiment suites, and concludes with a following discussion.
+This chapter evaluates the RAG-augmented auditing system proposed in Chapter~\ref{ch:methodology}. It begins with the research questions that guide the evaluation, followed by a description of the datasets and metrics used to assess both retrieval and detection quality. It then presents the experimental setup, reports the results in four experiment suites, and concludes with a discussion.
 
 \begin{tcolorbox}[colback=gray!10, colframe=gray!40, boxrule=0.5pt]
 This thesis uses GPT-5.1 from OpenAI, accessed via a paid API. Because querying such models incurs non-trivial cost (\$1.25 per 1M input tokens, \$10 per 1M output tokens), the experimental setup was designed to balance thoroughness with cost efficiency.
 \end{tcolorbox}
-
 
 \section{Research Questions}
 \label{sec:research-questions}
@@ -1338,7 +1325,6 @@ The evaluation is structured around four research questions:
     \item[RQ2: RAG vs.\ LLM-only detection.] Does augmenting the LLM with retrieved findings improve its ability to correctly classify vulnerabilities compared to using the LLM alone?
 
     \item[RQ3: Groundedness.] Are the LLM's explanations faithful to the retrieved evidence?
-    % This question evaluates whether RAG reduces hallucinated vulnerability reports by measuring faithfulness and context utilization scores.
 
     \item[RQ4: Real-world applicability.] Can the system discover real vulnerabilities from full smart contracts in a realistic audit scenario?
 \end{description}
@@ -1366,7 +1352,7 @@ There is no established benchmark for evaluating RAG-augmented smart contract vu
     \item \textbf{Issue description} --- a natural-language description of the suspected vulnerability;
     \item \textbf{Label} --- the vulnerability category from the predefined taxonomy;
     \item \textbf{Expected verdict} --- ground-truth classification: \texttt{VULNERABLE} (28 cases) or \texttt{SAFE} (12 cases);
-    \item \textbf{Reference answer} --- an expert-written explanation for answer correctness evaluation;
+    \item \textbf{Reference answer} --- an expert-written explanation used for answer correctness evaluation.
 \end{itemize}
 
 \begin{listing}[!ht]
@@ -1382,15 +1368,15 @@ There is no established benchmark for evaluating RAG-augmented smart contract vu
         _mint(msg.sender, newTokenId);
     }",
   "issue_description": "The split function calls
-    _requireOwned(tokenId) to check the token exists but never 
-    compares the returned owner to msg.sender. Any caller can pass 
-    another user's tokenId, split off a fraction of their locked 
-    value into a new NFT minted to the attacker, effectively 
+    _requireOwned(tokenId) to check the token exists but never
+    compares the returned owner to msg.sender. Any caller can pass
+    another user's tokenId, split off a fraction of their locked
+    value into a new NFT minted to the attacker, effectively
     stealing vested tokens.",
   "label": "Access control",
   "expected_verdict": "VULNERABLE",
   "reference_answer": "Missing ownership check -- _requireOwned
-    verifies existence but the function never validates msg.sender 
+    verifies existence but the function never validates msg.sender
     is the actual owner of tokenId."
 }
 \end{minted}
@@ -1398,15 +1384,15 @@ There is no established benchmark for evaluating RAG-augmented smart contract vu
 \label{lst:example_case}
 \end{listing}
 
-The list~\ref{lst:example_case} shows a representative evaluation case. The cases range from straightforward single-function vulnerabilities to sophisticated multi-step attack patterns. The 12~safe cases were constructed as variants of vulnerable cases with the bug fixed, testing whether the system can distinguish patched code from unpatched.
+Listing~\ref{lst:example_case} shows a representative evaluation case. The cases range from straightforward single-function vulnerabilities to sophisticated multi-step attack patterns. The 12~safe cases were constructed as variants of vulnerable cases with the bug fixed, testing whether the system can distinguish patched code from unpatched code.
 
 \subsection{Benchmark Dataset}
 \label{subsec:benchmark-dataset}
 
-A curated dataset of 40~real-world vulnerability findings drawn from actual security audits serves as the most realistic evaluation benchmark. Unlike the RAG evaluation cases, which are synthetic, these are genuine findings from projects audited on platforms aggregated by Solodit. Each entry includes the complete Solidity source file, an expert-written issue description, and relevant metadata. All findings have \texttt{expected\_verdict = VULNERABLE}. The dataset is used for two evaluation types:
+A golden dataset of 40~real-world vulnerability findings drawn from actual security audits serves as the most realistic evaluation benchmark. Unlike the RAG evaluation cases, which are synthetic, these are genuine findings from projects audited on platforms aggregated by Solodit. Each entry includes the complete Solidity source file, an expert-written issue description, and relevant metadata. The dataset is used for two evaluation types:
 
 \begin{itemize}
-    \item \textbf{Retrieval.} The LLM reviews the \emph{entire} smart contract (not an isolated function) and identifies suspected vulnerable functions with short descriptions. These descriptions then serve as retrieval queries. An LLM judge verifies whether the system-identified issue matches the known golden vulnerability. This simulates a realistic audit workflow where the auditor does not know in advance which function is vulnerable.
+    \item \textbf{Retrieval.} The LLM reviews the \emph{entire} smart contract (not an isolated function) and identifies suspected vulnerable functions with short descriptions. These descriptions then serve as retrieval queries. An LLM judge verifies whether the system-identified issue matches the known golden vulnerability. This simulates a realistic audit workflow in which the auditor does not know in advance which function is vulnerable.
 
     \item \textbf{Generation.} The full RAG pipeline is executed for each finding. Crucially, the finding itself is excluded from the retrieved context to prevent trivial self-matching. A separate baseline runs the LLM without any retrieval, enabling a direct comparison of RAG-augmented versus LLM-only detection.
 \end{itemize}
@@ -1414,7 +1400,7 @@ A curated dataset of 40~real-world vulnerability findings drawn from actual secu
 \section{Experimental Setup}
 \label{sec:experimental-setup}
 
-All experiments run on a single machine with Apple Silicon (MPS backend for local models). PostgreSQL~17 with pgvector serves as both a knowledge base and an experiment store. The LLM (GPT-5.1, temperature~0.2) is accessed via the OpenAI API. The local models used throughout the experiments are:
+All experiments run on a single machine with Apple Silicon (MPS backend for local models). PostgreSQL~17 with pgvector serves as both the knowledge base and the experiment store. The LLM (GPT-5.1, temperature~0.2) is accessed via the OpenAI API.
 
 \subsection{Query Strategies}
 \label{subsec:query-strategies}
@@ -1448,9 +1434,9 @@ Table~\ref{tab:query-strategies} summarizes the five strategies. The first three
     \label{eq:rrf}
 \end{equation}
 
-where $L$ is the number of ranked lists, $r_i(d)$ is the rank of document~$d$ in list~$i$ (1-indexed), and $k_{\text{rrf}} = 60$ (the default from the original paper). Documents not appearing in a given list are omitted from the corresponding term. Both sources contribute 50 candidates each before fusion.
+where $L$ is the number of ranked lists, $r_i(d)$ is the rank of the document~$d$ in the list~$i$ (1-indexed) and $k_{\text{rrf}} = 60$ (the default from the original paper). Documents not appearing in a given list are omitted from the corresponding term. Both sources contribute 50 candidates each before fusion.
 
-\paragraph{Chunked retrieval.} Instead of matching against a single summary embedding per finding, this strategy matches against overlapping 512-character windows of the raw finding content. If any chunk of a finding matches the query, the entire finding is returned with the maximum chunk similarity to its score. This approach can surface findings where the relevant detail appears in a specific paragraph rather than being captured by the summary.
+\paragraph{Chunked retrieval.} Instead of matching against a single summary embedding per finding, this strategy matches against overlapping 512-character windows of the raw finding content. If any chunk of a finding matches the query, the entire finding is returned, with the maximum chunk similarity used as its score. This approach can surface findings in which the relevant detail appears in a specific paragraph rather than being captured by the summary.
 
 \subsection{Evaluation Prompts}
 \label{subsec:eval-prompts}
@@ -1461,7 +1447,7 @@ Several metrics rely on an LLM judge to assess retrieval relevance and generatio
 You are a senior smart contract security auditor evaluating whether retrieved past audit findings are relevant to a vulnerability being analyzed. A finding is relevant when it describes the same or closely related vulnerability pattern, targets a similar Solidity construct, shares the same root cause or exploitation mechanism, or provides a directly applicable mitigation.
 \end{tcolorbox}
 
-The holistic judge receives the complete set of retrieved findings and scores overall relevance on a scale 0--1, additionally providing structured feedback on coverage (\texttt{full}/\texttt{partial}/\texttt{none}) and specificity (\texttt{high}/\texttt{medium}/\texttt{low}).
+Prompt~1 is used by the holistic judge, which receives the complete set of retrieved findings and scores overall relevance on a scale of 0--1, additionally providing structured feedback on coverage (\texttt{full}/\texttt{partial}/\texttt{none}) and specificity (\texttt{high}/\texttt{medium}/\texttt{low}).
 
 \begin{tcolorbox}[colback=gray!5, colframe=black!60, fonttitle=\bfseries, title=Prompt 2: Context Precision]
 Decide whether the FINDING is relevant to the QUERY vulnerability. RELEVANT (verdict=1) if: same vulnerability class, same root cause, similar construct, would help an auditor. NOT RELEVANT (verdict=0) if: different vulnerability type, unrelated contract pattern, tangentially related.
@@ -1479,28 +1465,28 @@ The per-finding judge independently evaluates each retrieved finding for binary 
 When evaluation cases include ground-truth relevant finding identifiers, the following standard information retrieval metrics are computed:
 
 \begin{itemize}
-    \item \textbf{Context Precision}. Fraction of retrieved findings that belong to the ground-truth relevant set:
+    \item \textbf{Context Precision.} Fraction of retrieved findings that belong to the ground-truth relevant set:
     \begin{equation}
         \text{Precision} = \frac{|\text{retrieved} \cap \text{relevant}|}{|\text{retrieved}|}
     \end{equation}
 
-    \item \textbf{Context Recall}. Fraction of ground-truth relevant findings that were retrieved:
+    \item \textbf{Context Recall.} Fraction of ground-truth relevant findings that were retrieved:
     \begin{equation}
         \text{Recall} = \frac{|\text{retrieved} \cap \text{relevant}|}{|\text{relevant}|}
     \end{equation}
 
-    \item \textbf{Mean Average Precision (MAP@$k$)}. Rewards relevant items appearing at earlier rank positions:
+    \item \textbf{Mean Average Precision (MAP@$k$).} Rewards relevant items appearing at earlier rank positions:
     \begin{equation}
         \text{AP@}k = \frac{1}{\min(|\text{relevant}|, k)} \sum_{i=1}^{k} \text{Precision@}i \cdot \text{rel}(i)
     \end{equation}
-    where $\text{rel}(i) = 1$ if the $i$-th result is relevant, 0 otherwise.
+    where $\text{rel}(i) = 1$ if the $i$-th result is relevant, and $0$ otherwise.
 
-    \item \textbf{Recall@$k$}. Recall computed at a specific cutoff position:
+    \item \textbf{Recall@$k$.} Recall calculated at a specific cutoff position:
     \begin{equation}
         \text{Recall@}k = \frac{|\text{relevant} \cap \text{retrieved}_{1:k}|}{|\text{relevant}|}
     \end{equation}
 
-    \item \textbf{Label Match Ratio}. Fraction of retrieved findings whose vulnerability label matches the query label:
+    \item \textbf{Label Match Ratio.} Fraction of retrieved findings whose vulnerability label matches the query label:
     \begin{equation}
         \text{LabelMatch} = \frac{|\{r \in \text{retrieved} : \text{label}(r) = \text{label}(q)\}|}{|\text{retrieved}|}
     \end{equation}
@@ -1510,19 +1496,19 @@ When evaluation cases include ground-truth relevant finding identifiers, the fol
 These metrics do not require ground-truth annotations and can evaluate retrieval quality on any query:
 
 \begin{itemize}
-    \item \textbf{Context Relevance}. The LLM judge evaluates the entire retrieved set, scoring overall relevance on a 0--1 scale with structured coverage and specificity feedback.
+    \item \textbf{Context Relevance.} The LLM judge evaluates the entire retrieved set, scoring overall relevance on a 0--1 scale with structured coverage and specificity feedback.
 
-    \item \textbf{Context Precision}. Each retrieved finding is independently evaluated for binary relevance. The metric is the fraction of individually relevant findings.
+    \item \textbf{Context Precision.} Each retrieved finding is independently evaluated for binary relevance. The metric is the fraction of individually relevant findings.
 
-    \item \textbf{Hit Rate@$k$}. Binary indicator: did the target finding appear in the top-$k$ results?
+    \item \textbf{Hit Rate@$k$.} Binary indicator: did the target finding appear in the top-$k$ results?
 
-    \item \textbf{Mean Reciprocal Rank (MRR)}. Averaged over all queries $Q$: $\text{MRR} = \frac{1}{|Q|}\sum_{q \in Q} \frac{1}{\text{rank}(q)}$, where $\text{rank}(q)$ is the position of the target finding.
+    \item \textbf{Mean Reciprocal Rank (MRR).} Averaged over all queries $Q$: $\text{MRR} = \frac{1}{|Q|}\sum_{q \in Q} \frac{1}{\text{rank}(q)}$, where $\text{rank}(q)$ is the position of the target finding.
 
-    \item \textbf{NDCG@$k$}. For a single relevant item: $\frac{1}{\log_2(\text{rank} + 1)}$.
+    \item \textbf{NDCG@$k$.} For a single relevant item: $\frac{1}{\log_2(\text{rank} + 1)}$.
 
-    \item \textbf{Label Hit Rate}. Fraction of queries where at least one retrieved finding shares the target's vulnerability label.
+    \item \textbf{Label Hit Rate.} Fraction of queries where at least one retrieved finding shares the target's vulnerability label.
 
-    \item \textbf{LLM Match Rate}. Fraction of golden vulnerabilities independently identified by the LLM during whole-contract review, before retrieval is performed.
+    \item \textbf{LLM Match Rate.} Fraction of golden vulnerabilities independently identified by the LLM during whole-contract review, before retrieval is performed.
 \end{itemize}
 
 
@@ -1530,26 +1516,26 @@ These metrics do not require ground-truth annotations and can evaluate retrieval
 \label{subsec:generation-metrics}
 
 \begin{itemize}
-    \item \textbf{Verdict Accuracy}. Binary match between the predicted verdict and the expected verdict.
+    \item \textbf{Verdict Accuracy.} Binary match between the predicted verdict and the expected verdict.
 
-    \item \textbf{Faithfulness} (LLM-judged). Evaluate the ratio of factual claims in the generated analysis and determine how many are supported by the retrieved context, producing a groundedness ratio on a scale of 0--1.
+    \item \textbf{Faithfulness} (LLM-judged). Measures the ratio of factual claims in the generated analysis that are supported by the retrieved context, producing a groundedness ratio on a scale of 0--1.
 
-    \item \textbf{Reasoning} (LLM-judged). Evaluate how well the analysis references past findings, draws accurate parallels between historical and current code, and supports its verdict with evidence. Scored 0--1 with an evaluation of evidence usage (\texttt{strong}/\texttt{adequate}/\texttt{weak}/\texttt{none}).
+    \item \textbf{Reasoning} (LLM-judged). Assesses how well the analysis references past findings, draws accurate parallels between historical and current code, and supports its verdict with evidence. Scored 0--1, together with a categorical rating of evidence usage (\texttt{strong}/\texttt{adequate}/\texttt{weak}/\texttt{none}).
 
-    \item \textbf{Context Utilization} (LLM-judged). Evaluate whether the analysis explicitly cites the retrieved findings, draws parallels between past and current code, and logically derives the verdict from the provided evidence.
+    \item \textbf{Context Utilization} (LLM-judged). Assesses whether the analysis explicitly cites the retrieved findings, draws parallels between past and current code, and logically derives the verdict from the provided evidence.
 
-    \item \textbf{Answer Correctness} (LLM-judged). Compare the generated analysis with a reference answer according to three criteria: same verdict, same identified root cause, and technically accurate explanation. Available only when reference answers exist.
+    \item \textbf{Answer Correctness} (LLM-judged). Compares the generated analysis with a reference answer according to three criteria: same verdict, same identified root cause, and technically accurate explanation. Available only when reference answers exist.
 \end{itemize}
 
 \section{Experiments and Results}
 \label{sec:experiments}
 
-This section presents four experiment suites, each addressing one of the research questions defined in Section~\ref{sec:research-questions}. The results are reported with an analysis of their implications for system design.
+This section presents four experiment suites, each addressing one of the research questions defined in Section~\ref{sec:research-questions}. The results are presented alongside an analysis of their implications for system design.
 
 \subsection{Suite 1: Retrieval Quality}
 \label{subsec:suite1}
 
-This experiment addresses \textbf{RQ1} (retrieval effectiveness) by comparing the five query strategies described in Section~\ref{subsec:query-strategies}, both  in isolation and augmented with re-ranking.
+This experiment addresses \textbf{RQ1} (retrieval effectiveness) by comparing the five query strategies described in Section~\ref{subsec:query-strategies}, both in isolation and augmented with re-ranking.
 
 \paragraph{Setup.} All 5~strategies are evaluated on 40~evaluation cases with $k{=}5$. Each strategy is run twice: without re-ranking (\texttt{no-rr}) and with cross-encoder re-ranking (\texttt{rr}).
 
@@ -1566,29 +1552,29 @@ This experiment addresses \textbf{RQ1} (retrieval effectiveness) by comparing th
 \midrule
 description       & 0.505 & 0.455 & 0.728 & 0.689 & 0.409 & 0.459 \\
 code              & 0.309 & 0.214 & 0.433 & 0.493 & 0.282 & 0.341 \\
-description+label & \textbf{0.632} & 0.585 & 0.722 & 0.689 & 0.468 & 0.554 \\
-hybrid+BM25       & 0.586 & 0.582 & \textbf{0.895} & 0.787 & 0.588 & \textbf{0.608} \\
+description\_label & \textbf{0.632} & 0.585 & 0.722 & 0.689 & 0.468 & 0.554 \\
+hybrid\_bm25       & 0.586 & 0.582 & \textbf{0.895} & 0.787 & 0.588 & \textbf{0.608} \\
 chunked           & 0.423 & 0.423 & 0.797 & 0.797 & 0.459 & 0.459 \\
 \bottomrule
 \end{tabular}}
-\caption{Retrieval quality.}
+\caption[Retrieval quality.]{Retrieval quality across the five query strategies, with and without cross-encoder re-ranking.}
 \label{tab:retrieval-results}
 \end{table}
 
-Table~\ref{tab:retrieval-results} reveals several patterns. The \texttt{hybrid+BM25} strategy achieves the highest context relevance (0.895) and context precision (0.608), confirming that combining dense semantic search with keyword-based BM25 retrieval captures both conceptual similarity and exact terminology matches. The \texttt{description+label} strategy achieves the highest label match ratio (0.632), indicating that appending the vulnerability category to the query helps the embedding model focus on the correct vulnerability class.
+Table~\ref{tab:retrieval-results} reveals several patterns. The \texttt{hybrid\_BM25} strategy achieves the highest context relevance (0.895) and context precision (0.608), confirming that combining dense semantic search with keyword-based BM25 retrieval captures both conceptual similarity and exact terminology matches. The \texttt{description\_label} strategy achieves the highest label match ratio (0.632), indicating that adding the vulnerability category to the query helps the embedding model focus on the correct vulnerability class.
 
 The \texttt{code} strategy consistently underperforms, with a context relevance of only 0.433. This suggests that vulnerability descriptions carry richer semantic information than code snippets alone.
 
-A notable finding is that cross-encoder re-ranking does not consistently improve results. For the best-performing strategy (\texttt{hybrid+BM25}), re-ranking reduces context relevance from 0.895 to 0.787 and tiny improved context precision from 0.588 to 0.608. It is difficult to determine the certain reason, but the model may deprioritize domain-specific relevance signals that the dense retriever captures well.
+A notable finding is that cross-encoder re-ranking does not consistently improve results. For the best-performing strategy (\texttt{hybrid\_BM25}), re-ranking reduces context relevance from 0.895 to 0.787 and only marginally improves context precision from 0.588 to 0.608. The exact cause is difficult to determine, but the model may deprioritize domain-specific relevance signals that the dense retriever captures well.
 
-The \texttt{chunked} strategy is unaffected by re-ranking (identical scores), suggesting its candidate set is already well-ordered.
+The \texttt{chunked} strategy is unaffected by re-ranking (identical scores), suggesting that its candidate set is already well-ordered.
 
 \subsection{Suite 2: Generation Quality}
 \label{subsec:suite2}
 
-This experiment addresses \textbf{RQ3} (groundedness) by running the retrieve, generate, and evaluate parts on the RAG evaluation dataset.
+This experiment addresses \textbf{RQ3} (groundedness) by running the retrieval, generation and evaluation stages on the RAG evaluation dataset.
 
-\paragraph{Setup.} 40~evaluation cases, \texttt{hybrid+BM25} query strategy, no re-ranking.
+\paragraph{Setup.} 40~evaluation cases, \texttt{hybrid\_BM25} query strategy, no re-ranking.
 
 \begin{table}[!ht]
 \centering
@@ -1603,22 +1589,22 @@ This experiment addresses \textbf{RQ3} (groundedness) by running the retrieve, g
 0.864 & 0.765 & 0.908 & 0.851 & 0.855 \\
 \bottomrule
 \end{tabular*}
-\caption{End-to-end generation quality.}
+\caption[End-to-end generation quality.]{End-to-end generation quality on the RAG evaluation dataset.}
 \label{tab:pipeline-generation-results}
 \end{table}
 
-Table~\ref{tab:pipeline-generation-results} shows a strong overall performance on the evaluation dataset. Reasoning quality is the highest-scoring metric (0.908), indicating that the LLM produces a well-structured analysis with clear logical chains from evidence to verdict. The verdict accuracy reaches 0.864, which means that the system correctly classifies nearly 9~out of 10 cases when given the vulnerable function and issue description directly.
+Table~\ref{tab:pipeline-generation-results} shows a strong overall performance on the evaluation dataset. Reasoning quality is the highest-scoring metric (0.908), indicating that the LLM produces a well-structured analysis with clear logical chains from evidence to verdict. Verdict accuracy reaches 0.864, meaning that the system correctly classifies nearly 9~out of 10 cases when given the vulnerable function and the description of the issue directly.
 
-The context utilization (0.851) demonstrates that the LLM actively refers to the retrieved findings in its analysis rather than ignoring the provided context. Faithfulness is the lowest metric (0.765), indicating that approximately one quarter of the LLM's claims extend beyond what the retrieved evidence directly supports. This is expected behavior for a reasoning model: the LLM draws inferences and applies general knowledge alongside the retrieved context, which is desirable for audit analysis, but reduces the strict faithfulness score.
+Context utilization (0.851) demonstrates that the LLM actively refers to the retrieved findings in its analysis rather than ignoring the provided context. Faithfulness is the lowest metric (0.765), indicating that approximately one quarter of the LLM's claims extend beyond what the retrieved evidence directly supports. This is expected behavior for a reasoning model: the LLM draws inferences and applies general knowledge alongside the retrieved context, which is desirable for audit analysis, but reduces the strict faithfulness score.
 
-The answer correctness (0.855) confirms that the generated analysis aligns well with the expert-written reference answers, identifying the same root causes and arriving at the same conclusions.
+Answer correctness (0.855) confirms that the generated analysis aligns well with the expert-written reference answers, identifying the same root causes and arriving at the same conclusions.
 
 \subsection{Suite 3: RAG vs.\ LLM-Only}
 \label{subsec:suite3}
 
 This experiment directly addresses \textbf{RQ2} (RAG vs.\ LLM-only detection) using the dataset of 40~real-world audit findings. It represents the most challenging and realistic evaluation setting.
 
-\paragraph{Setup.} 40~real-world findings, full contract review, hybrid+BM25 retrieval with $k{=}5$.
+\paragraph{Setup.} 40~real-world findings, complete contract review, hybrid\_BM25 retrieval with $k{=}5$.
 
 \begin{table}[!ht]
 \centering
@@ -1627,14 +1613,14 @@ This experiment directly addresses \textbf{RQ2} (RAG vs.\ LLM-only detection) us
 \toprule
 \textbf{Metric} & \textbf{Hit Rate@5} & \textbf{MRR} & \textbf{NDCG@5} & \textbf{Label Hit Rate} \\
 \midrule
-hybrid+BM25 & 0.900 & 0.781 & 0.811 & 0.825 \\
+hybrid\_bm25 & 0.900 & 0.781 & 0.811 & 0.825 \\
 \bottomrule
 \end{tabular*}
-\caption{Benchmark retrieval results.}
+\caption[Benchmark retrieval results.]{Benchmark retrieval results on 40~real-world audit findings.}
 \label{tab:golden-retrieval-results}
 \end{table}
 
-Table~\ref{tab:golden-retrieval-results} shows that the retrieval pipeline performs well on the benchmark dataset. A Hit Rate@5 of 0.900 means that the system retrieves a finding matching the target vulnerability in its top-5 results for 36~out of 40~cases. The MRR of 0.781 indicates that the correct finding is typically ranked first or second. The label hit rate (0.825) confirms that the retrieved findings share the correct vulnerability category in the majority cases, providing the LLM with contextually appropriate historical precedents.
+Table~\ref{tab:golden-retrieval-results} shows that the retrieval pipeline performs well on the benchmark dataset. A Hit Rate@5 of 0.900 means that the system retrieves a finding matching the target vulnerability in its top-5 results for 36~out of 40~cases. The MRR of 0.781 indicates that the correct finding is typically ranked first or second. The label hit rate (0.825) confirms that the retrieved findings share the correct vulnerability category in the majority of cases, providing the LLM with contextually appropriate historical precedents.
 
 \begin{table}[!ht]
 \centering
@@ -1647,16 +1633,16 @@ Table~\ref{tab:golden-retrieval-results} shows that the retrieval pipeline perfo
 \textbf{Mode} & \textbf{Accuracy} & \textbf{Faithful.} & \textbf{Reasoning} & \textbf{Ans.\ Corr.} \\
 \midrule
 LLM-only & 0.455 & 0.641 & 0.762   & 0.493 \\
-RAG-augmented & 0.450 & 0.881 & 0.825 & 0.612 \\
+RAG-augmented & 0.450 & 0.881 & 0.845 & 0.612 \\
 \bottomrule
 \end{tabular*}
-\caption[Generation quality.]{Generation quality on the benchmark dataset excluding context utilization.}
+\caption[Generation quality on the benchmark dataset.]{Generation quality on the benchmark dataset, excluding context utilization.}
 \label{tab:golden-generation-results}
 \end{table}
 
-Table~\ref{tab:golden-generation-results} presents the central comparison of this thesis. The most significant finding is that RAG improves faithfulness by 24 percentage points (0.641~$\to$~0.881). When provided with retrieved historical findings, the LLM anchors its analysis in documented precedents rather than generating plausible but unsupported assertions. Reasoning quality improves moderately (0.762 vs.\ 0.825), suggesting that the retrieved context helps the model structure its analysis more coherently. Answer correctness shows a meaningful gain (0.493~$\to$~0.612), indicating that more grounded reasoning translates into more accurate final judgements.
+Table~\ref{tab:golden-generation-results} presents the central comparison of this thesis. The most significant finding is that RAG improves faithfulness by 24\% (0.641~$\to$~0.881). When provided with retrieved historical findings, the LLM anchors its analysis in documented precedents rather than generating plausible but unsupported assertions. Reasoning quality improves moderately (0.762~$\to$~0.845), suggesting that the retrieved context helps the model structure its analysis more coherently. Answer correctness shows a meaningful gain (0.493~$\to$~0.612), indicating that more grounded reasoning translates into more accurate final judgments.
 
-Accuracy is nearly identical between the two modes (0.455 vs.\ 0.450). This must be interpreted in the context of the difficulty of the task. Unlike Suite~2, where the system receives an isolated vulnerable function with a description of the suspected vulnerability, this suite requires whole-contract review: the LLM must first identify which function is vulnerable, then determine the specific vulnerability type. All 40~cases are real vulnerabilities that required expert human auditors to discover in professional engagements. 
+Accuracy is nearly identical between the two modes (0.455 vs.\ 0.450). This must be interpreted in the context of the difficulty of the task. Unlike Suite~2, where the system receives an isolated vulnerable function together with a description of the suspected vulnerability, this suite requires the whole contract review: the LLM must first identify which function is vulnerable and then determine the specific vulnerability type. All 40~cases are real vulnerabilities that expert auditors discovered in professional engagements.
 
 The comparable accuracy between modes suggests that RAG's contribution on this dataset lies not in finding more vulnerabilities, but in producing more faithful and better-reasoned analysis of the ones it does examine.
 
@@ -1684,17 +1670,16 @@ phi               & 4/7  & 4/7  \\
 traitforge        & 2/6  & 2/6  \\
 virtuals          & 4/6  & 4/6  \\
 \midrule
-\textbf{Total}    & \textbf{22/47} & \textbf{22/47} \\
+\textbf{Total}    & \textbf{22/37} & \textbf{22/37} \\
 \bottomrule
 \end{tabular}
 \caption[High-severity vulnerability detection.]{High-severity vulnerability detection across eight protocols.}
 \label{tab:rag_wake_ai}
 \end{table}
 
-Table~\ref{tab:rag_wake_ai} shows that the RAG-augmented system detects the same number of high-severity vulnerabilities as the baseline: 22 out of 47 across all eight protocols. The results are identical per protocol, with no single case in which the RAG changed the detection outcome. 
+Table~\ref{tab:rag_wake_ai} shows that the RAG-augmented system detects the same 22 out of 37 high-severity vulnerabilities as the baseline in all eight protocols. The per-protocol results are identical, with no case in which RAG changed the detection outcome.
 
-This outcome is consistent with the findings from Suite~3. RAG does not change \emph{what} the system detects, rather it changes is \emph{how} the system reasons about its findings. In a professional audit setting, where an auditor must verify, interpret, and build upon the system's output, this improvement in reasoning quality is valuable even when the detection count remains unchanged.
-
+This outcome is consistent with the findings from Suite~3. RAG does not change \emph{what} the system detects; rather, it changes \emph{how} the system reasons about its findings. In a professional audit setting, where an auditor must verify, interpret, and build upon the system's output, this improvement in reasoning quality is valuable even when the detection count remains unchanged.
 
 % \section{Threats to Validity}
 % \label{sec:threats}
@@ -1715,16 +1700,15 @@ This outcome is consistent with the findings from Suite~3. RAG does not change \
 
 % LLM-judged metrics are sensitive to prompt wording. The judge prompts used in this work (Section~\ref{subsec:eval-prompts}) were designed to elicit consistent scoring, but different formulations might produce different score distributions. The vulnerability label taxonomy, while comprehensive, may not capture all vulnerability types encountered in practice, and the LLM's label assignment introduces a subjective element into the Label Match Ratio metric.
 
-
 \section{Summary}
 \label{sec:eval-summary}
 
-This chapter evaluated the RAG-augmented auditing system through four experiment suites, addressing the five research questions:
+This chapter evaluated the RAG-augmented auditing system through four experiment suites, addressing the four research questions:
 
 \begin{description}
-    \item[RQ1 (Retrieval effectiveness):] The hybrid+BM25 strategy achieves the best retrieval quality (context precision 0.608, context relevance 0.895), confirming that combining dense semantic search with keyword matching captures both conceptual and terminological similarity. Cross-encoder re-ranking does not consistently improve results.
+    \item[RQ1 (Retrieval effectiveness):] The \emph{hybrid\_BM25} strategy achieves the best retrieval quality (context precision 0.608, context relevance 0.895), confirming that combining dense semantic search with keyword matching captures both conceptual and terminological similarity. Cross-encoder re-ranking does not consistently improve results.
 
-    \item[RQ2 (RAG vs.\ LLM-only):] RAG boosts faithfulness by 24\% and reasoning quality by 8\%, showing that retrieved context anchors the LLM's analysis in documented evidence and helps it structure its arguments more coherently. The accuracy on whole-contract review is comparable for both modes, reflecting the inherent difficulty of the task rather than the limitation of the RAG approach.
+    \item[RQ2 (RAG vs.\ LLM-only):] RAG boosts faithfulness by 24\% and reasoning quality by approximately 8.3\%, showing that the retrieved context anchors the LLM's analysis in documented evidence and helps it structure its arguments more coherently. The accuracy in the review of the contract is comparable for both modes, reflecting the inherent difficulty of the task rather than the limitation of the RAG approach.
 
     \item[RQ3 (Groundedness):] The full pipeline achieves faithfulness of 0.765 and context utilization of 0.851 on the evaluation dataset, confirming that the LLM actively incorporates retrieved findings into its analysis. Reasoning quality (0.908) is the strongest metric, indicating a well-structured analytical output.
 
