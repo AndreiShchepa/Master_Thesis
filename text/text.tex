@@ -79,7 +79,7 @@ Proof-of-Work (PoW) is the oldest and most widely adopted consensus mechanism in
 
 Figure~\ref{fig:pow} illustrates this process concretely: a puzzle is broadcast to three competing miners ($x_1$, $x_2$, $x_3$), each of whom independently computes a candidate solution. Only the submission from $x_2$ satisfies the difficulty condition, while those of $x_1$ and $x_3$ are rejected --- demonstrating the inherently competitive and probabilistic nature of block production under PoW.
 
-Despite its security guarantees, PoW carries a significant drawback: the competitive puzzle-solving process demands enormous and continuously growing computational power. As the chain lengthens, information from past blocks feeds into each new cryptographic puzzle, making successive puzzles progressively harder and driving miners toward specialized hardware, from ordinary CPUs in Bitcoin's early days to purpose-built Application-Specific Integrated Circuits (ASICs) that cannot be repurposed once obsolete~\cite{SCHINCKUS2021111682}.
+Despite its security guarantees, PoW carries a significant drawback: the competitive puzzle-solving process demands enormous and continuously growing computational power. The network periodically adjusts puzzle difficulty in response to total hash rate, and the long-term arms race has driven miners toward specialized hardware, from ordinary CPUs in Bitcoin's early days to purpose-built Application-Specific Integrated Circuits (ASICs) that cannot be repurposed once obsolete~\cite{SCHINCKUS2021111682}.
 
 \subsubsection*{Proof of Stake}
 Proof-of-Stake (PoS) emerged as a direct response to the energy and scalability limitations of PoW. Instead of competing through computational power, validators lock up a quantity of the network's native cryptocurrency as collateral (the \emph{stake}), and the probability of being selected to propose the next block is proportional to the size of that stake~\cite{nguyen2019pos}. This design replaces electricity with economic commitment as the primary security mechanism, yielding several distinctive properties:
@@ -122,7 +122,7 @@ The internal structure of the EVM is depicted in Figure~\ref{fig:evm}. The main 
 \begin{itemize}
     \item \textbf{Program Counter (PC)} --- the component that tracks the instruction currently being executed.
     \item \textbf{EVM code} --- an immutable component that holds the bytecode of the smart contract being executed.
-    \item \textbf{Account Storage} --- the part of the persistent blockchain state in which the data of smart contracts are stored permanently. Two types of accounts exist in the Ethereum environment: (i)~\emph{Externally Owned Accounts} (EOA), owned by any external entity and most often referred to as user accounts; and (ii)~\emph{Smart Contract Accounts}, owned by a smart contract and typically controlled by an EOA that interacts with the deployed contract~\cite{Buterin2013}.
+    \item \textbf{Account Storage} --- the part of the persistent blockchain state in which the data of smart contracts are stored permanently. Two types of accounts exist in the Ethereum environment: (i)~\emph{Externally Owned Accounts} (EOA), controlled by any external entity and most often referred to as user accounts; and (ii)~\emph{Smart Contract Accounts}, owned by a smart contract and typically controlled by an EOA that interacts with the deployed contract~\cite{Buterin2013}.
 \end{itemize}
 
 \begin{figure}[!htbp]
@@ -1479,10 +1479,11 @@ These metrics compare the findings retrieved against ground-truth identifiers or
     \end{equation}
     where $\text{rank}(q)$ is the position of the target finding in the retrieved list.
 
-    \item \textbf{Normalized Discounted Cumulative Gain (NDCG@$k$)}. For a single relevant item:
+    \item \textbf{Normalized Discounted Cumulative Gain (NDCG@$k$)}. Defined as the ratio of the discounted cumulative gain to its ideal value:
     \begin{equation}
-        \text{NDCG@}k = \frac{1}{\log_2(\text{rank} + 1)}.
+        \text{NDCG@}k = \frac{\text{DCG@}k}{\text{IDCG@}k}, \qquad \text{DCG@}k = \sum_{i=1}^{k} \frac{\text{rel}_i}{\log_2(i + 1)},
     \end{equation}
+    where $\text{rel}_i \in \{0, 1\}$ denotes the binary relevance of the item at rank $i$, and $\text{IDCG@}k$ is the DCG of the optimal ranking.
 
     \item \textbf{Label Hit Rate}. Fraction of queries where at least one retrieved finding shares the target's vulnerability label.
 \end{itemize}
