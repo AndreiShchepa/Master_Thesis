@@ -1536,17 +1536,17 @@ This experiment addresses \textbf{RQ1} (retrieval effectiveness) by comparing th
 \textbf{Strategy} & no-rr & rr & no-rr & rr & no-rr & rr \\
 \midrule
 description       & 0.505 & 0.455 & 0.728 & 0.689 & 0.409 & 0.459 \\
-code              & 0.309 & 0.214 & 0.433 & 0.493 & 0.282 & 0.341 \\
-description\_label & \textbf{0.632} & 0.585 & 0.722 & 0.689 & 0.468 & 0.554 \\
-hybrid\_bm25       & 0.586 & 0.582 & \textbf{0.895} & 0.787 & 0.588 & \textbf{0.608} \\
-chunked           & 0.423 & 0.423 & 0.797 & 0.797 & 0.459 & 0.459 \\
+code              & 0.310 & 0.215 & 0.433 & 0.493 & 0.282 & 0.341 \\
+description\_label & \textbf{0.635} & 0.585 & 0.722 & 0.689 & 0.468 & 0.554 \\
+hybrid\_bm25       & 0.585 & 0.580 & \textbf{0.895} & 0.787 & 0.588 & \textbf{0.608} \\
+chunked           & 0.425 & 0.425 & 0.797 & 0.797 & 0.459 & 0.459 \\
 \bottomrule
 \end{tabular}}
 \caption[Retrieval quality.]{Retrieval quality across the five query strategies, with and without cross-encoder re-ranking.}
 \label{tab:retrieval-results}
 \end{table}
 
-Table~\ref{tab:retrieval-results} reveals several patterns. The \texttt{hybrid\_BM25} strategy achieves the highest context relevance (0.895) and context precision (0.608), confirming that combining dense semantic search with keyword-based BM25 retrieval captures both conceptual similarity and exact terminology matches. The \texttt{description\_label} strategy achieves the highest label match ratio (0.632), indicating that adding the vulnerability category to the query helps the embedding model focus on the correct vulnerability class.
+Table~\ref{tab:retrieval-results} reveals several patterns. The \texttt{hybrid\_BM25} strategy achieves the highest context relevance (0.895) and context precision (0.608), confirming that combining dense semantic search with keyword-based BM25 retrieval captures both conceptual similarity and exact terminology matches. The \texttt{description\_label} strategy achieves the highest label match ratio (0.635), indicating that adding the vulnerability category to the query helps the embedding model focus on the correct vulnerability class.
 
 The \texttt{code} strategy consistently underperforms, with a context relevance of only 0.433. This suggests that vulnerability descriptions carry richer semantic information than code snippets alone.
 
